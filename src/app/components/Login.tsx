@@ -17,6 +17,7 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    // If already authenticated, redirect to dashboard
     if (isAuthenticated) {
       router.push('/dashboard');
     }
@@ -28,15 +29,16 @@ export function Login() {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
-      if (success) {
-        router.push('/dashboard');
+      const loggedInUser = await login(email, password);
+      if (loggedInUser && loggedInUser.role) {
+        // Direct role-based redirect
+        router.push(`/dashboard/${loggedInUser.role}/overview`);
       } else {
         setError('Invalid email or password');
+        setIsLoading(false);
       }
     } catch (err) {
       setError('An error occurred. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -55,13 +57,16 @@ export function Login() {
     setIsLoading(true);
 
     try {
-      const success = await login(cred.email, cred.password);
-      if (success) {
-        router.push('/dashboard');
+      const loggedInUser = await login(cred.email, cred.password);
+      if (loggedInUser && loggedInUser.role) {
+        // Direct role-based redirect
+        router.push(`/dashboard/${loggedInUser.role}/overview`);
+      } else {
+        setError('Login failed');
+        setIsLoading(false);
       }
     } catch (err) {
       setError('Login failed');
-    } finally {
       setIsLoading(false);
     }
   };

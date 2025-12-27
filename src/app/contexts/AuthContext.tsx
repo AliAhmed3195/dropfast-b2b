@@ -2,20 +2,20 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-export type UserRole = 'admin' | 'supplier' | 'vendor' | 'customer';
+export type UserType = 'admin' | 'supplier' | 'vendor' | 'customer';
 
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: UserRole;
+  role: UserType;
   avatar?: string;
   company?: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -69,16 +69,16 @@ const MOCK_USERS: Record<string, { password: string; user: User }> = {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<User | null> => {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const userRecord = MOCK_USERS[email.toLowerCase()];
     if (userRecord && userRecord.password === password) {
       setUser(userRecord.user);
-      return true;
+      return userRecord.user; // Return user object with role
     }
-    return false;
+    return null; // Return null if login fails
   };
 
   const logout = () => {

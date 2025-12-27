@@ -26,7 +26,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { useAuth, UserRole } from '../contexts/AuthContext';
+import { useAuth, UserType } from '../contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { getRoute } from '../../lib/routeMap';
 
@@ -36,7 +36,7 @@ interface NavItem {
   view: string;
 }
 
-const navigationByRole: Record<UserRole, NavItem[]> = {
+const navigationByRole: Record<UserType, NavItem[]> = {
   admin: [
     { label: 'Overview', icon: LayoutDashboard, view: 'dashboard' },
     { label: 'Users', icon: Users, view: 'users' },
