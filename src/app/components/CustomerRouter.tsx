@@ -1,5 +1,7 @@
+'use client'
+
 import React, { useEffect } from 'react';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter, usePathname } from 'next/navigation';
 import { CustomerDashboard } from './CustomerDashboard';
 import { CustomerBrowse } from './CustomerBrowse';
 import { ShoppingCartComponent } from './ShoppingCart';
@@ -9,14 +11,20 @@ import { Wishlist } from './Wishlist';
 import { Settings } from './Settings';
 
 export function CustomerRouter() {
-  const { currentView, setView } = useNavigation();
+  const pathname = usePathname();
+  
+  // Extract view from pathname
+  const getViewFromPath = () => {
+    if (pathname?.includes('/browse')) return 'browse';
+    if (pathname?.includes('/orders')) return 'my-orders';
+    if (pathname?.includes('/wishlist')) return 'wishlist';
+    if (pathname?.includes('/cart')) return 'cart';
+    if (pathname?.includes('/checkout')) return 'checkout';
+    if (pathname?.includes('/settings')) return 'settings';
+    return 'browse'; // Default
+  };
 
-  // Default to browse for customers
-  useEffect(() => {
-    if (currentView === 'dashboard') {
-      setView('browse');
-    }
-  }, []);
+  const currentView = getViewFromPath();
 
   switch (currentView) {
     case 'cart':

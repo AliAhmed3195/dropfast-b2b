@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -25,7 +27,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter, usePathname } from 'next/navigation';
+import { getRoute } from '../../lib/routeMap';
 
 interface NavItem {
   label: string;
@@ -79,7 +82,8 @@ const navigationByRole: Record<UserRole, NavItem[]> = {
 
 export function Sidebar() {
   const { user } = useAuth();
-  const { currentView, setView } = useNavigation();
+  const router = useRouter();
+  const pathname = usePathname();
   const navigation = user?.role ? navigationByRole[user.role] : [];
   
   // Load collapsed state from localStorage
@@ -139,7 +143,11 @@ export function Sidebar() {
 
       <nav className={`${isCollapsed ? 'px-3' : 'px-6'} pb-6 space-y-1`}>
         {navigation.map((item, index) => {
-          const isActive = currentView === item.view;
+          const route = user?.role ? getRoute(user.role, item.view) : '';
+          // Check if current pathname matches the route or starts with it (for nested routes like inventory/products)
+          const isActive = pathname === route || 
+            (route && pathname?.startsWith(route + '/')) ||
+            (item.view === 'dashboard' && pathname?.includes(`/dashboard/${user?.role}/overview`));
           return (
             <motion.button
               key={item.label}
@@ -150,7 +158,11 @@ export function Sidebar() {
                 type: "spring",
                 stiffness: 100,
               }}
-              onClick={() => setView(item.view as any)}
+              onClick={() => {
+                if (route) {
+                  router.push(route);
+                }
+              }}
               whileHover={{ 
                 x: isCollapsed ? 0 : 2,
                 transition: { duration: 0.2 }

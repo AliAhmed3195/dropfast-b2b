@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react';
 import { motion } from 'motion/react';
 import { Zap, Shield, Heart, Star, Rocket, Award, TrendingUp, Users } from 'lucide-react';

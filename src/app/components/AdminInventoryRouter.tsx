@@ -1,22 +1,25 @@
+'use client'
+
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Package, Layers, Tag, ChevronRight } from 'lucide-react';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter, usePathname } from 'next/navigation';
 import { AdminInventoryProducts } from './AdminInventoryProducts';
 import { AdminInventoryCategories } from './AdminInventoryCategories';
 import { AdminInventoryTags } from './AdminInventoryTags';
 
 export function AdminInventoryRouter() {
-  const { currentView, setView } = useNavigation();
+  const router = useRouter();
+  const pathname = usePathname();
 
   // If we're on a sub-view, render that component
-  if (currentView === 'inventory-products') {
+  if (pathname?.includes('/inventory/products')) {
     return <AdminInventoryProducts />;
   }
-  if (currentView === 'inventory-categories') {
+  if (pathname?.includes('/inventory/categories')) {
     return <AdminInventoryCategories />;
   }
-  if (currentView === 'inventory-tags') {
+  if (pathname?.includes('/inventory/tags')) {
     return <AdminInventoryTags />;
   }
 
@@ -74,7 +77,15 @@ export function AdminInventoryRouter() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
-              onClick={() => setView(item.id as any)}
+              onClick={() => {
+                const routeMap: Record<string, string> = {
+                  'inventory-products': '/dashboard/admin/inventory/products',
+                  'inventory-categories': '/dashboard/admin/inventory/categories',
+                  'inventory-tags': '/dashboard/admin/inventory/tags',
+                };
+                const route = routeMap[item.id];
+                if (route) router.push(route);
+              }}
               className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-xl border-2 border-slate-200 dark:border-slate-800 p-6 hover:shadow-xl hover:border-purple-500 dark:hover:border-purple-500 transition-all group text-left"
             >
               {/* Icon and Title */}

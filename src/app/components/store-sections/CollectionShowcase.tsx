@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { Button } from '../ui/button';

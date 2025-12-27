@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import { StoreLandingPage } from './StoreLandingPage';
 import { ProductDetailPage } from './ProductDetailPage';

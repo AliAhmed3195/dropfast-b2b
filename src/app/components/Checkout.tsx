@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -17,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -41,7 +43,7 @@ interface CheckoutFormData {
 export function Checkout() {
   const { cart, getCartTotal, clearCart, addOrder } = useApp();
   const { user } = useAuth();
-  const { setView } = useNavigation();
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<CheckoutFormData>({
     fullName: user?.name || '',
@@ -157,7 +159,7 @@ export function Checkout() {
     clearCart();
     setIsProcessing(false);
     toast.success('Order placed successfully!');
-    setView('my-orders');
+    router.push('/dashboard/customer/orders');
   };
 
   const steps = [
@@ -170,7 +172,7 @@ export function Checkout() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <Button variant="ghost" onClick={() => setView('cart')} className="mb-2">
+        <Button variant="ghost" onClick={() => router.push('/dashboard/customer/cart')} className="mb-2">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Cart
         </Button>

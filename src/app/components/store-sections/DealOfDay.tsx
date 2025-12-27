@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useEffect, useState } from 'react';
 import { Clock, Star } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';

@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -23,7 +25,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter } from 'next/navigation';
+import { getRoute } from '../../lib/routeMap';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -81,7 +84,7 @@ const recentActivity = [
 export function VendorDashboard() {
   const { user } = useAuth();
   const { stores, getStoresByVendor, getOrdersByVendor } = useApp();
-  const { setView } = useNavigation();
+  const router = useRouter();
   const [timeRange, setTimeRange] = useState('7d');
 
   const myStores = user ? getStoresByVendor(user.id) : [];
@@ -164,7 +167,10 @@ export function VendorDashboard() {
                 Create your first store to start selling products. Our wizard will guide you through the process in just a few minutes.
               </p>
               <Button
-                onClick={() => setView('store-creation')}
+                onClick={() => {
+                  // Store creation is handled as modal in VendorStores
+                  router.push('/dashboard/vendor/stores');
+                }}
                 size="lg"
                 className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
               >
@@ -196,12 +202,12 @@ export function VendorDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => setView('stores')}>
+          <Button variant="outline" onClick={() => router.push('/dashboard/vendor/stores')}>
             <Store className="w-4 h-4 mr-2" />
             Manage Stores
           </Button>
           <Button 
-            onClick={() => setView('products')}
+            onClick={() => router.push('/dashboard/vendor/products')}
             className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -372,7 +378,7 @@ export function VendorDashboard() {
         <Card className="lg:col-span-2 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold">Top Selling Products</h3>
-            <Button variant="ghost" size="sm" onClick={() => setView('products')}>
+            <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/vendor/products')}>
               View All
             </Button>
           </div>
@@ -473,7 +479,10 @@ export function VendorDashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.9 + idx * 0.1 }}
-              onClick={() => setView(action.view as any)}
+              onClick={() => {
+                const route = user?.role ? getRoute(user.role, action.view) : '';
+                if (route) router.push(route);
+              }}
               className="group relative p-6 rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-lg transition-all"
             >
               <div className="relative z-10 flex flex-col items-center gap-3">

@@ -1,5 +1,7 @@
+'use client'
+
 import React from 'react';
-import { useNavigation } from '../contexts/NavigationContext';
+import { usePathname } from 'next/navigation';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminUsers } from './AdminUsers';
 import { SupplierManagement } from './SupplierManagement';
@@ -16,7 +18,26 @@ import { Reports } from './Reports';
 import { Settings } from './Settings';
 
 export function AdminRouter() {
-  const { currentView } = useNavigation();
+  const pathname = usePathname();
+  
+  // Extract view from pathname
+  const getViewFromPath = () => {
+    if (pathname?.includes('/users')) return 'users';
+    if (pathname?.includes('/vendors')) return 'vendor-management';
+    if (pathname?.includes('/suppliers')) return 'supplier-management';
+    if (pathname?.includes('/orders')) return 'orders';
+    if (pathname?.includes('/payouts')) return 'payouts';
+    if (pathname?.includes('/inventory')) return 'inventory';
+    if (pathname?.includes('/categories')) return 'categories';
+    if (pathname?.includes('/tags')) return 'tags';
+    if (pathname?.includes('/invoices')) return 'invoice-templates';
+    if (pathname?.includes('/analytics')) return 'analytics';
+    if (pathname?.includes('/reports')) return 'reports';
+    if (pathname?.includes('/settings')) return 'settings';
+    return 'dashboard';
+  };
+
+  const currentView = getViewFromPath();
 
   switch (currentView) {
     case 'users':
@@ -30,11 +51,8 @@ export function AdminRouter() {
     case 'payouts':
       return <AdminPayouts />;
     case 'inventory':
-      // Directly show product listing instead of intermediate page
-      return <AdminInventoryProducts />;
-    case 'inventory-products':
-    case 'inventory-categories':
-    case 'inventory-tags':
+      // Show inventory menu (AdminInventoryRouter)
+      // Sub-routes (products, categories, tags) are handled by separate route pages
       return <AdminInventoryRouter />;
     case 'categories':
       return <CategoryManagement />;

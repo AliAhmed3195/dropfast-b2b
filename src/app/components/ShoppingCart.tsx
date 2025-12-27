@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react';
 import { motion } from 'motion/react';
 import {
@@ -10,7 +12,7 @@ import {
   Package,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
@@ -18,7 +20,7 @@ import { toast } from 'sonner';
 
 export function ShoppingCartComponent() {
   const { cart, updateCartItem, removeFromCart, clearCart, getCartTotal } = useApp();
-  const { setView } = useNavigation();
+  const router = useRouter();
 
   const subtotal = getCartTotal();
   const shipping = cart.length > 0 ? 10 : 0;
@@ -41,13 +43,13 @@ export function ShoppingCartComponent() {
       toast.error('Your cart is empty');
       return;
     }
-    setView('checkout');
+    router.push('/dashboard/customer/checkout');
   };
 
   if (cart.length === 0) {
     return (
       <div className="space-y-6">
-        <Button variant="ghost" onClick={() => setView('browse')}>
+        <Button variant="ghost" onClick={() => router.push('/dashboard/customer/browse')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Shopping
         </Button>
@@ -61,7 +63,7 @@ export function ShoppingCartComponent() {
               Add some products to get started
             </p>
             <Button
-              onClick={() => setView('browse')}
+              onClick={() => router.push('/dashboard/customer/browse')}
               className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white"
             >
               Browse Products
@@ -77,7 +79,7 @@ export function ShoppingCartComponent() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <Button variant="ghost" onClick={() => setView('browse')} className="mb-2">
+          <Button variant="ghost" onClick={() => router.push('/dashboard/customer/browse')} className="mb-2">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Continue Shopping
           </Button>

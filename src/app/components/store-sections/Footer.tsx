@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react';
 import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from 'lucide-react';
 import { Input } from '../ui/input';

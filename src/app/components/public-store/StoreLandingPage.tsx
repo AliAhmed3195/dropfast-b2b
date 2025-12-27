@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react';
 import { motion } from 'motion/react';
 import { getSectionComponent } from '../store-sections';

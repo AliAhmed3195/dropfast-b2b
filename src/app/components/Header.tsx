@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react';
 import { motion } from 'motion/react';
 import {
@@ -13,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter } from 'next/navigation';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -27,7 +29,7 @@ import { Badge } from './ui/badge';
 export function Header() {
   const { user, logout } = useAuth();
   const { cart } = useApp();
-  const { setView } = useNavigation();
+  const router = useRouter();
   const [isDark, setIsDark] = React.useState(false);
 
   const toggleTheme = () => {
@@ -90,7 +92,7 @@ export function Header() {
                 variant="ghost" 
                 size="sm" 
                 className="relative h-11 w-11 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all group" 
-                onClick={() => setView('cart')}
+                onClick={() => router.push('/dashboard/customer/cart')}
               >
                 <ShoppingCart className="w-5 h-5 group-hover:scale-110 transition-transform" />
                 {cart.length > 0 && (

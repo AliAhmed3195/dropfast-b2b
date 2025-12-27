@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tag, Plus, Edit, Trash2, Search, ChevronLeft, X } from 'lucide-react';
@@ -7,7 +9,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter } from 'next/navigation';
 
 const mockTags = [
   { id: '1', name: 'Featured', color: 'purple', productCount: 45 },
@@ -32,7 +34,7 @@ const colorOptions = [
 ];
 
 export function AdminInventoryTags() {
-  const { setView } = useNavigation();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTag, setEditingTag] = useState<any>(null);
@@ -70,7 +72,7 @@ export function AdminInventoryTags() {
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <Button
           variant="ghost"
-          onClick={() => setView('inventory')}
+          onClick={() => router.push('/dashboard/admin/inventory')}
           className="mb-4 text-muted-foreground hover:text-foreground -ml-2"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />

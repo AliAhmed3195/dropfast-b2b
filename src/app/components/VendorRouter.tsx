@@ -1,5 +1,7 @@
+'use client'
+
 import React from 'react';
-import { useNavigation } from '../contexts/NavigationContext';
+import { usePathname } from 'next/navigation';
 import { VendorDashboard } from './VendorDashboard';
 import { VendorStores } from './VendorStores';
 import { StoreCreationWizard } from './StoreCreationWizard';
@@ -13,18 +15,27 @@ import { VendorCustomers } from './VendorCustomers';
 import { Settings } from './Settings';
 
 export function VendorRouter() {
-  const { currentView, setView } = useNavigation();
+  const pathname = usePathname();
+
+  // Extract view from pathname
+  const getViewFromPath = () => {
+    if (pathname?.includes('/stores')) return 'stores';
+    if (pathname?.includes('/inventory')) return 'inventory';
+    if (pathname?.includes('/products')) return 'products';
+    if (pathname?.includes('/orders')) return 'orders';
+    if (pathname?.includes('/invoices')) return 'invoices';
+    if (pathname?.includes('/templates')) return 'invoice-templates';
+    if (pathname?.includes('/account-details')) return 'account-details';
+    if (pathname?.includes('/customers')) return 'customers';
+    if (pathname?.includes('/settings')) return 'settings';
+    return 'dashboard';
+  };
+
+  const currentView = getViewFromPath();
 
   switch (currentView) {
     case 'stores':
       return <VendorStores />;
-    case 'store-creation':
-      return (
-        <StoreCreationWizard
-          onComplete={() => setView('stores')}
-          onCancel={() => setView('stores')}
-        />
-      );
     case 'inventory':
       return <VendorInventory />;
     case 'products':

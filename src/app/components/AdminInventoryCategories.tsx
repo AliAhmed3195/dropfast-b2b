@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, Plus, Edit, Trash2, Search, ChevronLeft, X, Package } from 'lucide-react';
@@ -8,7 +10,7 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter } from 'next/navigation';
 
 const mockCategories = [
   { id: '1', name: 'Electronics', description: 'Electronic devices and gadgets', productCount: 156, subcategories: ['Audio', 'Gaming', 'Wearables'] },
@@ -18,7 +20,7 @@ const mockCategories = [
 ];
 
 export function AdminInventoryCategories() {
-  const { setView } = useNavigation();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<any>(null);
@@ -33,7 +35,7 @@ export function AdminInventoryCategories() {
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <Button
           variant="ghost"
-          onClick={() => setView('inventory')}
+          onClick={() => router.push('/dashboard/admin/inventory')}
           className="mb-4 text-muted-foreground hover:text-foreground -ml-2"
         >
           <ChevronLeft className="w-4 h-4 mr-1" />

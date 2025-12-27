@@ -1,16 +1,26 @@
-import React, { useState } from 'react';
+'use client'
+
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
+import { useRouter } from 'next/navigation';
 import { Mail, Lock, Zap, TrendingUp, ShoppingBag, Package, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
 export function Login() {
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/dashboard');
+    }
+  }, [isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,7 +29,9 @@ export function Login() {
 
     try {
       const success = await login(email, password);
-      if (!success) {
+      if (success) {
+        router.push('/dashboard');
+      } else {
         setError('Invalid email or password');
       }
     } catch (err) {
@@ -43,7 +55,10 @@ export function Login() {
     setIsLoading(true);
 
     try {
-      await login(cred.email, cred.password);
+      const success = await login(cred.email, cred.password);
+      if (success) {
+        router.push('/dashboard');
+      }
     } catch (err) {
       setError('Login failed');
     } finally {

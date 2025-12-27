@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { User, Mail, Lock, Building2, FileText, Globe, DollarSign, MapPin, Phone, Calendar, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';

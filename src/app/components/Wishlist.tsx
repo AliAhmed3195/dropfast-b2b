@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -11,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -20,7 +22,7 @@ import { toast } from 'sonner';
 export function Wishlist() {
   const { products, cart, addToCart } = useApp();
   const { user } = useAuth();
-  const { setView } = useNavigation();
+  const router = useRouter();
   
   // In a real app, wishlist would be stored in state/database
   // For now, using localStorage
@@ -277,7 +279,7 @@ export function Wishlist() {
               Save products you love to buy them later
             </p>
             <Button
-              onClick={() => setView('browse')}
+              onClick={() => router.push('/dashboard/customer/browse')}
               className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white"
             >
               <ShoppingCart className="w-4 h-4 mr-2" />

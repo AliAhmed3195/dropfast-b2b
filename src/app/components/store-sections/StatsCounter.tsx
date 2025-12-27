@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useEffect, useState } from 'react';
 import { Users, Package, Headphones, Heart, TrendingUp, Award } from 'lucide-react';
 import { motion } from 'motion/react';
