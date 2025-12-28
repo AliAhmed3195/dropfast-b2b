@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   TrendingUp,
@@ -10,6 +10,7 @@ import {
   Calendar,
   ArrowUp,
   ArrowDown,
+  Loader2,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import {
@@ -33,92 +34,93 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-
-// Mock data for sales trend (last 30 days)
-const salesTrendData = [
-  { date: 'Dec 1', revenue: 850 },
-  { date: 'Dec 2', revenue: 920 },
-  { date: 'Dec 3', revenue: 780 },
-  { date: 'Dec 4', revenue: 1100 },
-  { date: 'Dec 5', revenue: 1250 },
-  { date: 'Dec 6', revenue: 950 },
-  { date: 'Dec 7', revenue: 1350 },
-  { date: 'Dec 8', revenue: 1200 },
-  { date: 'Dec 9', revenue: 1450 },
-  { date: 'Dec 10', revenue: 1300 },
-  { date: 'Dec 11', revenue: 1550 },
-  { date: 'Dec 12', revenue: 1400 },
-  { date: 'Dec 13', revenue: 1650 },
-  { date: 'Dec 14', revenue: 1500 },
-  { date: 'Dec 15', revenue: 1750 },
-  { date: 'Dec 16', revenue: 1600 },
-  { date: 'Dec 17', revenue: 1850 },
-  { date: 'Dec 18', revenue: 1700 },
-  { date: 'Dec 19', revenue: 1950 },
-  { date: 'Dec 20', revenue: 1800 },
-  { date: 'Dec 21', revenue: 2050 },
-  { date: 'Dec 22', revenue: 1900 },
-  { date: 'Dec 23', revenue: 2150 },
-  { date: 'Dec 24', revenue: 2000 },
-];
-
-// Mock data for order volume trend
-const orderVolumeTrendData = [
-  { date: 'Dec 1', orders: 12 },
-  { date: 'Dec 2', orders: 15 },
-  { date: 'Dec 3', orders: 11 },
-  { date: 'Dec 4', orders: 18 },
-  { date: 'Dec 5', orders: 21 },
-  { date: 'Dec 6', orders: 16 },
-  { date: 'Dec 7', orders: 23 },
-  { date: 'Dec 8', orders: 19 },
-  { date: 'Dec 9', orders: 25 },
-  { date: 'Dec 10', orders: 22 },
-  { date: 'Dec 11', orders: 27 },
-  { date: 'Dec 12', orders: 24 },
-  { date: 'Dec 13', orders: 29 },
-  { date: 'Dec 14', orders: 26 },
-  { date: 'Dec 15', orders: 31 },
-  { date: 'Dec 16', orders: 28 },
-  { date: 'Dec 17', orders: 33 },
-  { date: 'Dec 18', orders: 30 },
-  { date: 'Dec 19', orders: 35 },
-  { date: 'Dec 20', orders: 32 },
-  { date: 'Dec 21', orders: 37 },
-  { date: 'Dec 22', orders: 34 },
-  { date: 'Dec 23', orders: 39 },
-  { date: 'Dec 24', orders: 36 },
-];
-
-// Mock data for top 5 products
-const topProductsData = [
-  { id: 1, name: 'Wireless Headphones', orders: 156, revenue: 12480 },
-  { id: 2, name: 'Smart Watch', orders: 98, revenue: 19600 },
-  { id: 3, name: 'USB-C Cable', orders: 234, revenue: 3042 },
-  { id: 4, name: 'Portable SSD', orders: 89, revenue: 11570 },
-  { id: 5, name: 'Phone Case', orders: 187, revenue: 3740 },
-];
-
-// Mock data for product status distribution
-const productStatusData = [
-  { name: 'Active', value: 189, color: '#10b981' },
-  { name: 'Low Stock', value: 34, color: '#f59e0b' },
-  { name: 'Out of Stock', value: 24, color: '#ef4444' },
-];
+import { useAuth } from '../contexts/AuthContext';
+import { showToast } from '../../lib/toast';
 
 export function SupplierAnalytics() {
+  const { user } = useAuth();
   const [dateRange, setDateRange] = useState('30');
+  const [loading, setLoading] = useState(true);
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const fetchingRef = useRef(false);
 
-  const stats = {
-    totalRevenue: 42350,
-    revenueChange: 15.3,
-    avgOrderValue: 178.5,
-    avgChange: 7.2,
-    totalOrders: 764,
-    ordersChange: 12.8,
-    totalProducts: 247,
-    activeProducts: 189,
+  // Fetch analytics data
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchAnalytics = async () => {
+      try {
+        const response = await fetch(`/api/supplier/analytics?supplierId=${user.id}&dateRange=${dateRange}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setAnalyticsData(data);
+        } else {
+          showToast.error(data.error || 'Failed to fetch analytics');
+        }
+      } catch (error) {
+        console.error('Fetch analytics error:', error);
+        showToast.error('Failed to fetch analytics');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchAnalytics();
+  }, [user?.id, dateRange]);
+
+  const stats = analyticsData?.stats ? {
+    totalRevenue: analyticsData.stats.totalRevenue || 0,
+    revenueChange: 0, // Can be calculated if needed
+    avgOrderValue: analyticsData.stats.avgOrderValue || 0,
+    avgChange: 0, // Can be calculated if needed
+    totalOrders: analyticsData.stats.totalOrders || 0,
+    ordersChange: 0, // Can be calculated if needed
+    totalProducts: 0, // Not in analytics API
+    activeProducts: 0, // Not in analytics API
+  } : {
+    totalRevenue: 0,
+    revenueChange: 0,
+    avgOrderValue: 0,
+    avgChange: 0,
+    totalOrders: 0,
+    ordersChange: 0,
+    totalProducts: 0,
+    activeProducts: 0,
   };
+
+  const salesTrendData = analyticsData?.salesTrend || [];
+  const orderVolumeTrendData = analyticsData?.orderVolumeTrend || [];
+  const topProductsData = analyticsData?.topProducts || [];
+  const orderStatusData = analyticsData?.orderStatus || [];
+  
+  // Format order status for pie chart
+  const productStatusData = orderStatusData.map((item: any) => {
+    const colorMap: Record<string, string> = {
+      pending: '#f59e0b',
+      processing: '#3b82f6',
+      shipped: '#8b5cf6',
+      delivered: '#10b981',
+      cancelled: '#ef4444',
+    };
+    return {
+      name: item.status.charAt(0).toUpperCase() + item.status.slice(1),
+      value: item.count,
+      color: colorMap[item.status] || '#6b7280',
+    };
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -297,47 +299,55 @@ export function SupplierAnalytics() {
               Top 5 Best Selling Products
             </h4>
             <div className="space-y-3">
-              {topProductsData.map((product, index) => (
-                <motion.div
-                  key={product.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
-                      {index + 1}
+              {topProductsData.length > 0 ? (
+                topProductsData.map((product: any, index: number) => (
+                  <motion.div
+                    key={product.name || index}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{product.name}</p>
+                        <p className="text-xs text-muted-foreground">{product.orders} orders</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-sm">{product.name}</p>
-                      <p className="text-xs text-muted-foreground">{product.orders} orders</p>
+                    <div className="text-right">
+                      <p className="font-bold text-purple-600">${product.revenue.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">revenue</p>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-purple-600">${product.revenue.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">revenue</p>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No product data available</p>
+                </div>
+              )}
             </div>
           </Card>
 
-          {/* Product Status Distribution */}
+          {/* Order Status Distribution */}
           <Card className="p-6">
-            <h4 className="font-semibold mb-4">Product Status Distribution</h4>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={productStatusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
+            <h4 className="font-semibold mb-4">Order Status Distribution</h4>
+            {productStatusData.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie
+                      data={productStatusData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
                   {productStatusData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
@@ -355,6 +365,12 @@ export function SupplierAnalytics() {
                 </div>
               ))}
             </div>
+              </>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No order status data available</p>
+              </div>
+            )}
           </Card>
         </div>
       </div>

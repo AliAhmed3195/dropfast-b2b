@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   Package,
@@ -14,6 +14,7 @@ import {
   Edit,
   Trash2,
   Eye,
+  Loader2,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -36,102 +37,75 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-
-const performanceData = [
-  { month: 'Jan', orders: 156, revenue: 23400 },
-  { month: 'Feb', orders: 178, revenue: 28900 },
-  { month: 'Mar', orders: 165, revenue: 25600 },
-  { month: 'Apr', orders: 203, revenue: 34200 },
-  { month: 'May', orders: 189, revenue: 31800 },
-  { month: 'Jun', orders: 234, revenue: 42100 },
-];
-
-const products = [
-  {
-    id: 1,
-    name: 'Wireless Bluetooth Headphones',
-    sku: 'WBH-2024-001',
-    category: 'Electronics',
-    stock: 245,
-    price: 79.99,
-    status: 'active',
-    orders: 156,
-  },
-  {
-    id: 2,
-    name: 'Smart Watch Pro',
-    sku: 'SWP-2024-002',
-    category: 'Wearables',
-    stock: 89,
-    price: 199.99,
-    status: 'active',
-    orders: 98,
-  },
-  {
-    id: 3,
-    name: 'USB-C Fast Charger',
-    sku: 'UFC-2024-003',
-    category: 'Accessories',
-    stock: 12,
-    price: 29.99,
-    status: 'low-stock',
-    orders: 234,
-  },
-  {
-    id: 4,
-    name: 'Laptop Stand Adjustable',
-    sku: 'LSA-2024-004',
-    category: 'Office',
-    stock: 0,
-    price: 45.99,
-    status: 'out-of-stock',
-    orders: 67,
-  },
-  {
-    id: 5,
-    name: 'Portable SSD 1TB',
-    sku: 'PSS-2024-005',
-    category: 'Storage',
-    stock: 156,
-    price: 129.99,
-    status: 'active',
-    orders: 89,
-  },
-];
+import { useAuth } from '../contexts/AuthContext';
+import { showToast } from '../../lib/toast';
 
 export function SupplierDashboard() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const fetchingRef = useRef(false);
 
-  const stats = [
+  // Fetch dashboard data
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchDashboard = async () => {
+      try {
+        const response = await fetch(`/api/supplier/dashboard?supplierId=${user.id}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setDashboardData(data);
+        } else {
+          showToast.error(data.error || 'Failed to fetch dashboard data');
+        }
+      } catch (error) {
+        console.error('Fetch dashboard error:', error);
+        showToast.error('Failed to fetch dashboard data');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchDashboard();
+  }, [user?.id]);
+
+  const stats = dashboardData?.stats ? [
     {
       title: 'Total Products',
-      value: '247',
-      change: '+12',
+      value: dashboardData.stats.totalProducts?.toString() || '0',
+      change: '',
       icon: Package,
       color: 'from-blue-500 to-cyan-500',
     },
     {
       title: 'Total Orders',
-      value: '1,125',
-      change: '+18.2%',
+      value: dashboardData.stats.totalOrders?.toString() || '0',
+      change: '',
       icon: TrendingUp,
       color: 'from-green-500 to-emerald-500',
     },
     {
       title: 'Low Stock Items',
-      value: '8',
-      change: 'Urgent',
+      value: dashboardData.stats.lowStockProducts?.toString() || '0',
+      change: dashboardData.stats.lowStockProducts > 0 ? 'Urgent' : '',
       icon: AlertTriangle,
       color: 'from-orange-500 to-red-500',
     },
     {
       title: 'Pending Orders',
-      value: '23',
-      change: 'Today',
+      value: dashboardData.stats.pendingOrders?.toString() || '0',
+      change: '',
       icon: Clock,
       color: 'from-purple-500 to-pink-500',
     },
-  ];
+  ] : [];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -146,10 +120,21 @@ export function SupplierDashboard() {
     }
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.sku.toLowerCase().includes(searchQuery.toLowerCase())
+  const products = dashboardData?.products || [];
+  const performanceData = dashboardData?.revenueTrend || [];
+
+  const filteredProducts = products.filter((product: any) =>
+    product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.sku?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -209,14 +194,16 @@ export function SupplierDashboard() {
                   >
                     <stat.icon className="w-7 h-7 text-white" />
                   </div>
-                  <motion.span 
-                    className="text-xs font-bold px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 shadow-sm"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: index * 0.1 + 0.2 }}
-                  >
-                    +{stat.change}
-                  </motion.span>
+                  {stat.change && (
+                    <motion.span 
+                      className="text-xs font-bold px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 shadow-sm"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: index * 0.1 + 0.2 }}
+                    >
+                      {stat.change}
+                    </motion.span>
+                  )}
                 </div>
                 <h3 className="text-sm text-muted-foreground mb-2 font-semibold uppercase tracking-wide">{stat.title}</h3>
                 <motion.p 
@@ -245,31 +232,37 @@ export function SupplierDashboard() {
             <h3 className="text-xl font-bold">Performance Overview</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-8 font-medium">Orders and revenue trends</p>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={performanceData}>
-              <defs>
-                <linearGradient id="ordersGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#06b6d4" stopOpacity={1} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} />
-              <XAxis dataKey="month" stroke="#94a3b8" style={{ fontSize: '12px', fontWeight: 600 }} />
-              <YAxis stroke="#94a3b8" style={{ fontSize: '12px', fontWeight: 600 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)',
-                  backdropFilter: 'blur(10px)',
-                  padding: '12px',
-                }}
-                labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
-              />
-              <Bar dataKey="orders" fill="url(#ordersGradient)" radius={[12, 12, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {performanceData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={performanceData}>
+                <defs>
+                  <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#06b6d4" stopOpacity={1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.3} />
+                <XAxis dataKey="month" stroke="#94a3b8" style={{ fontSize: '12px', fontWeight: 600 }} />
+                <YAxis stroke="#94a3b8" style={{ fontSize: '12px', fontWeight: 600 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)',
+                    backdropFilter: 'blur(10px)',
+                    padding: '12px',
+                  }}
+                  labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
+                />
+                <Bar dataKey="revenue" fill="url(#revenueGradient)" radius={[12, 12, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <p>No revenue data available</p>
+            </div>
+          )}
         </Card>
       </motion.div>
 

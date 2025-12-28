@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   Wallet,
@@ -16,6 +16,7 @@ import {
   User,
   MapPin,
   Hash,
+  Loader2,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -29,22 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from './ui/utils';
 
-// Mock Stripe Connect account status
-const mockStripeAccount = {
-  isConnected: false,
-  accountId: null,
-  kycStatus: 'pending', // pending, verified, rejected
-  onboardingComplete: false,
-  detailsSubmitted: false,
-  chargesEnabled: false,
-  payoutsEnabled: false,
-};
-
 export function SupplierPayoutSetup() {
-  const [stripeAccount, setStripeAccount] = useState(mockStripeAccount);
+  const { user } = useAuth();
+  const [stripeAccount, setStripeAccount] = useState<any>(null);
+  const [payouts, setPayouts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [onboardingUrl, setOnboardingUrl] = useState('');
   const [showBankForm, setShowBankForm] = useState(false);
@@ -59,66 +54,101 @@ export function SupplierPayoutSetup() {
     country: 'US',
   });
 
+  // Fetch payout data
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchPayouts = async () => {
+      try {
+        const response = await fetch(`/api/supplier/payouts?supplierId=${user.id}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setStripeAccount(data.stripeAccount);
+          setPayouts(data.payouts || []);
+        } else {
+          showToast.error(data.error || 'Failed to fetch payout data');
+        }
+      } catch (error) {
+        console.error('Fetch payouts error:', error);
+        showToast.error('Failed to fetch payout data');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchPayouts();
+  }, [user?.id]);
+
   const handleGenerateOnboardingLink = async () => {
     setIsGeneratingLink(true);
     
-    // Simulate API call to create Stripe Connect account and onboarding link
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Mock onboarding URL (in production, this comes from Stripe API)
-    const mockUrl = `https://connect.stripe.com/express/oauth/authorize?client_id=ca_xxx&state=supplier_${Date.now()}`;
-    
-    setOnboardingUrl(mockUrl);
-    setIsGeneratingLink(false);
-    
-    toast.success('Onboarding link generated!', {
-      description: 'Click the link to complete your Stripe verification.',
-    });
+    try {
+      // TODO: Call API to generate Stripe onboarding link
+      showToast.info('Generating onboarding link...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Mock onboarding URL (in production, this comes from Stripe API)
+      const mockUrl = `https://connect.stripe.com/express/oauth/authorize?client_id=ca_xxx&state=supplier_${Date.now()}`;
+      
+      setOnboardingUrl(mockUrl);
+      showToast.success('Onboarding link generated! Click the link to complete your Stripe verification.');
+    } catch (error) {
+      showToast.error('Failed to generate onboarding link');
+    } finally {
+      setIsGeneratingLink(false);
+    }
   };
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(onboardingUrl);
-    toast.success('Link copied to clipboard!');
+    showToast.success('Link copied to clipboard!');
   };
 
   const handleOpenOnboarding = () => {
     // In production, this would open the actual Stripe onboarding
     window.open(onboardingUrl, '_blank');
-    toast.info('Opening Stripe onboarding...', {
-      description: 'Complete the verification process to receive payouts.',
-    });
-    
-    // Simulate successful onboarding after some time (for demo)
-    setTimeout(() => {
-      setStripeAccount({
-        isConnected: true,
-        accountId: 'acct_' + Math.random().toString(36).substr(2, 9),
-        kycStatus: 'verified',
-        onboardingComplete: true,
-        detailsSubmitted: true,
-        chargesEnabled: true,
-        payoutsEnabled: true,
-      });
-      toast.success('Stripe account connected successfully!', {
-        description: 'You can now receive payouts from the admin.',
-      });
-    }, 5000);
+    showToast.info('Opening Stripe onboarding... Complete the verification process to receive payouts.');
   };
 
   const handleRefreshStatus = async () => {
-    toast.info('Refreshing account status...');
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    toast.success('Status updated!');
+    showToast.info('Refreshing account status...');
+    fetchingRef.current = false;
+    setLoading(true);
+    
+    try {
+      const response = await fetch(`/api/supplier/payouts?supplierId=${user?.id}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setStripeAccount(data.stripeAccount);
+        setPayouts(data.payouts || []);
+        showToast.success('Status updated!');
+      } else {
+        showToast.error(data.error || 'Failed to refresh status');
+      }
+    } catch (error) {
+      showToast.error('Failed to refresh status');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSaveBankDetails = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.info('Saving bank details...');
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    toast.success('Bank details saved successfully!', {
-      description: 'Your information is encrypted and secure.',
-    });
-    setShowBankForm(false);
+    showToast.info('Saving bank details...');
+    try {
+      // TODO: Call API to save bank details
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      showToast.success('Bank details saved successfully! Your information is encrypted and secure.');
+      setShowBankForm(false);
+    } catch (error) {
+      showToast.error('Failed to save bank details');
+    }
   };
 
   const getKycStatusColor = (status: string) => {
@@ -133,6 +163,22 @@ export function SupplierPayoutSetup() {
         return 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (!stripeAccount) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <p className="text-muted-foreground">Loading account information...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -491,25 +537,37 @@ export function SupplierPayoutSetup() {
             <Card className="p-6">
               <h4 className="font-bold mb-4">Recent Payouts</h4>
               <div className="space-y-3">
-                {[
-                  { amount: 1250.00, date: 'Dec 20, 2024', status: 'paid' },
-                  { amount: 890.50, date: 'Dec 13, 2024', status: 'paid' },
-                  { amount: 2100.00, date: 'Dec 6, 2024', status: 'paid' },
-                ].map((payout, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                    <div>
-                      <p className="font-bold text-green-600">${payout.amount.toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">{payout.date}</p>
+                {payouts.length > 0 ? (
+                  payouts.slice(0, 3).map((payout: any) => (
+                    <div key={payout.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                      <div>
+                        <p className="font-bold text-green-600">${payout.amount.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(payout.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <Badge className={cn(
+                        payout.status === 'paid' || payout.status === 'completed'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                          : payout.status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                          : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400'
+                      )}>
+                        {payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
+                      </Badge>
                     </div>
-                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
-                      Paid
-                    </Badge>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground text-sm">
+                    <p>No payouts yet</p>
                   </div>
-                ))}
+                )}
               </div>
-              <Button variant="outline" className="w-full mt-4">
-                View All Payouts
-              </Button>
+              {payouts.length > 3 && (
+                <Button variant="outline" className="w-full mt-4">
+                  View All Payouts
+                </Button>
+              )}
             </Card>
 
             <Card className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-2 border-blue-200 dark:border-blue-800">

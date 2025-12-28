@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   ShoppingCart,
   Search,
@@ -19,6 +19,7 @@ import {
   Phone,
   Mail,
   X,
+  Loader2,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -41,104 +42,55 @@ import {
   TableRow,
 } from './ui/table';
 import { Avatar, AvatarFallback } from './ui/avatar';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from './ui/utils';
-import { AnimatePresence } from 'motion/react';
-
-// Mock orders data
-const mockOrders = [
-  {
-    id: 'ORD-2024-001',
-    date: '2024-12-20',
-    customer: {
-      name: 'John Doe',
-      email: 'john@example.com',
-      phone: '+1 (555) 123-4567',
-      address: '123 Main St, New York, NY 10001',
-    },
-    vendor: 'Tech Haven Store',
-    items: [
-      { name: 'Wireless Headphones', quantity: 2, price: 79.99 },
-      { name: 'Phone Case', quantity: 1, price: 19.99 },
-    ],
-    total: 179.97,
-    status: 'pending',
-  },
-  {
-    id: 'ORD-2024-002',
-    date: '2024-12-21',
-    customer: {
-      name: 'Jane Smith',
-      email: 'jane@example.com',
-      phone: '+1 (555) 234-5678',
-      address: '456 Oak Ave, Los Angeles, CA 90001',
-    },
-    vendor: 'Smart Gadgets Hub',
-    items: [
-      { name: 'Smart Watch', quantity: 1, price: 199.99 },
-      { name: 'USB-C Cable', quantity: 2, price: 12.99 },
-    ],
-    total: 225.97,
-    status: 'processing',
-  },
-  {
-    id: 'ORD-2024-003',
-    date: '2024-12-22',
-    customer: {
-      name: 'Mike Johnson',
-      email: 'mike@example.com',
-      phone: '+1 (555) 345-6789',
-      address: '789 Pine Rd, Chicago, IL 60601',
-    },
-    vendor: 'Digital Store',
-    items: [
-      { name: 'Laptop Stand', quantity: 1, price: 45.99 },
-    ],
-    total: 45.99,
-    status: 'shipped',
-  },
-  {
-    id: 'ORD-2024-004',
-    date: '2024-12-23',
-    customer: {
-      name: 'Sarah Williams',
-      email: 'sarah@example.com',
-      phone: '+1 (555) 456-7890',
-      address: '321 Elm St, Miami, FL 33101',
-    },
-    vendor: 'Tech Plaza',
-    items: [
-      { name: 'Portable SSD', quantity: 1, price: 129.99 },
-      { name: 'Wireless Mouse', quantity: 1, price: 29.99 },
-    ],
-    total: 159.98,
-    status: 'delivered',
-  },
-  {
-    id: 'ORD-2024-005',
-    date: '2024-12-24',
-    customer: {
-      name: 'Tom Brown',
-      email: 'tom@example.com',
-      phone: '+1 (555) 567-8901',
-      address: '654 Maple Dr, Boston, MA 02101',
-    },
-    vendor: 'Gadget World',
-    items: [
-      { name: 'Keyboard', quantity: 1, price: 79.99 },
-    ],
-    total: 79.99,
-    status: 'cancelled',
-  },
-];
 
 export function SupplierOrders() {
+  const { user } = useAuth();
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
 
-  const filteredOrders = mockOrders.filter(order => {
+  // Fetch orders
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchOrders = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.append('supplierId', user.id);
+        if (statusFilter !== 'all') params.append('status', statusFilter);
+
+        const response = await fetch(`/api/supplier/orders?${params.toString()}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setOrders(data.orders || []);
+        } else {
+          showToast.error(data.error || 'Failed to fetch orders');
+        }
+      } catch (error) {
+        console.error('Fetch orders error:', error);
+        showToast.error('Failed to fetch orders');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchOrders();
+  }, [user?.id, statusFilter]);
+
+  const filteredOrders = orders.filter(order => {
     const matchesSearch =
       order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.customer.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -147,12 +99,12 @@ export function SupplierOrders() {
   });
 
   const stats = {
-    total: mockOrders.length,
-    pending: mockOrders.filter(o => o.status === 'pending').length,
-    processing: mockOrders.filter(o => o.status === 'processing').length,
-    shipped: mockOrders.filter(o => o.status === 'shipped').length,
-    delivered: mockOrders.filter(o => o.status === 'delivered').length,
-    cancelled: mockOrders.filter(o => o.status === 'cancelled').length,
+    total: orders.length,
+    pending: orders.filter(o => o.status === 'pending').length,
+    processing: orders.filter(o => o.status === 'processing').length,
+    shipped: orders.filter(o => o.status === 'shipped').length,
+    delivered: orders.filter(o => o.status === 'delivered').length,
+    cancelled: orders.filter(o => o.status === 'cancelled').length,
   };
 
   const getStatusIcon = (status: string) => {
@@ -279,69 +231,100 @@ export function SupplierOrders() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredOrders.map((order, index) => (
-              <motion.tr
-                key={order.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="hover:bg-muted/50"
-              >
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-cyan-500">
-                      <ShoppingCart className="w-4 h-4 text-white" />
+            {filteredOrders.length > 0 ? (
+              filteredOrders.map((order, index) => (
+                <motion.tr
+                  key={order.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="hover:bg-muted/50"
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-cyan-500">
+                        <ShoppingCart className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="font-mono font-semibold text-sm">
+                        {order.id}
+                      </span>
                     </div>
-                    <span className="font-mono font-semibold text-sm">
-                      {order.id}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {new Date(order.date).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-500 text-white text-xs">
+                          {order.customer?.name?.slice(0, 2).toUpperCase() || 'N/A'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-sm">{order.customer?.name || 'Unknown'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {order.customer?.email || ''}
+                        </p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">{order.vendor || 'Unknown'}</TableCell>
+                  <TableCell className="text-sm">{order.items?.length || 0} items</TableCell>
+                  <TableCell>
+                    <span className="font-bold text-purple-600">
+                      ${order.total?.toFixed(2) || '0.00'}
                     </span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {new Date(order.date).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-500 text-white text-xs">
-                        {order.customer.name.slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium text-sm">{order.customer.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {order.customer.email}
-                      </p>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={cn('capitalize', getStatusColor(order.status))}>
+                      {getStatusIcon(order.status)}
+                      <span className="ml-1">{order.status}</span>
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleUpdateStatus(order)}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        View
+                      </Button>
                     </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{order.vendor}</TableCell>
-                <TableCell className="text-sm">{order.items.length} items</TableCell>
-                <TableCell>
-                  <span className="font-bold text-purple-600">
-                    ${order.total.toFixed(2)}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <Badge className={cn('capitalize', getStatusColor(order.status))}>
-                    {getStatusIcon(order.status)}
-                    <span className="ml-1">{order.status}</span>
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleUpdateStatus(order)}
+                  </TableCell>
+                </motion.tr>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-16">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center justify-center"
+                  >
+                    <motion.div
+                      animate={{ y: [0, -10, 0] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                     >
-                      <Eye className="w-4 h-4 mr-1" />
-                      View
-                    </Button>
-                  </div>
+                      <ShoppingCart className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                    </motion.div>
+                    <p className="text-lg font-medium text-muted-foreground mb-2">
+                      {searchQuery || statusFilter !== 'all' 
+                        ? 'No orders found'
+                        : 'No orders yet'
+                      }
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {searchQuery || statusFilter !== 'all'
+                        ? 'Try adjusting your search or filters'
+                        : 'Orders will appear here once customers place them'
+                      }
+                    </p>
+                  </motion.div>
                 </TableCell>
-              </motion.tr>
-            ))}
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </Card>
@@ -389,7 +372,7 @@ function OrderDetailModal({ order, onClose }: { order: any; onClose: () => void 
   const handleUpdateStatus = async () => {
     setIsUpdating(true);
     await new Promise(resolve => setTimeout(resolve, 1500));
-    toast.success('Order status updated successfully!');
+    showToast.success('Order status updated successfully!');
     setIsUpdating(false);
     onClose();
   };

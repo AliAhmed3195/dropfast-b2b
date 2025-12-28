@@ -32,6 +32,7 @@ import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Switch } from './ui/switch';
 import { showToast } from '../../lib/toast';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from './ui/utils';
 import { currencies, formatCurrency } from '../../data/currencies';
 
@@ -115,8 +116,12 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
   const [uploadingImages, setUploadingImages] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   
+  const { user } = useAuth();
   // Supplier selection (for admin creating products)
-  const [supplierId, setSupplierId] = useState(product?.supplierId || product?.supplier?.id || '');
+  // For supplier users, auto-set their ID
+  const [supplierId, setSupplierId] = useState(
+    product?.supplierId || product?.supplier?.id || (user?.role === 'supplier' ? user.id : '')
+  );
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
 
@@ -253,10 +258,10 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     }
   }, [product]);
 
-  // Fetch suppliers list (for admin)
+  // Fetch suppliers list (for admin only)
   useEffect(() => {
-    if (!product) {
-      // Only fetch suppliers when creating new product (not editing)
+    if (!product && user?.role === 'admin') {
+      // Only fetch suppliers when creating new product (not editing) and user is admin
       const loadSuppliers = async () => {
         try {
           setLoadingSuppliers(true);
@@ -276,8 +281,11 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
         }
       };
       loadSuppliers();
+    } else if (user?.role === 'supplier' && !supplierId) {
+      // Auto-set supplier ID for supplier users
+      setSupplierId(user.id);
     }
-  }, [product]);
+  }, [product, user, supplierId]);
 
   // Auto-calculate profit margin
   useEffect(() => {
@@ -496,8 +504,8 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
           showToast.error('SKU is required');
           return false;
         }
-        // Validate supplierId only for new products
-        if (!product && !supplierId) {
+        // Validate supplierId only for admin creating new products
+        if (!product && user?.role === 'admin' && !supplierId) {
           showToast.error('Please select a supplier');
           return false;
         }
@@ -569,7 +577,11 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     }
   };
 
-  const handleNext = () => {
+  const handleNext = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (validateStep(currentStep)) {
       if (currentStep < 5) {
         setCurrentStep(currentStep + 1);
@@ -597,6 +609,11 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     setIsSubmitting(true);
     
     try {
+      // Determine supplierId based on user role
+      const finalSupplierId = user?.role === 'supplier' 
+        ? user.id 
+        : (supplierId || product?.supplierId || product?.supplier?.id || '');
+
       const productData = {
         productName,
         description,
@@ -631,7 +648,7 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
         productImages, // API will convert this to 'images' array
         // For admin creating products, we need to get supplierId from the form or use a default
         // In a real scenario, admin would select which supplier to create the product for
-        supplierId: supplierId || product?.supplierId || product?.supplier?.id, // Required for new products
+        supplierId: finalSupplierId, // Required for new products
       };
 
       const url = product ? `/api/admin/products/${product.id}` : '/api/admin/products';
@@ -789,7 +806,13 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
       <motion.form
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        onSubmit={handleSubmit}
+        onSubmit={(e) => {
+          e.preventDefault();
+          // Only submit on the last step (step 5)
+          if (currentStep === 5) {
+            handleSubmit(e);
+          }
+        }}
         className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8"
       >
         <AnimatePresence mode="wait">
@@ -891,8 +914,8 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
                   </div>
                 </div>
 
-                {/* Supplier Selection (only for new products, not editing) */}
-                {!product && (
+                {/* Supplier Selection (only for admin creating new products, not editing) */}
+                {user?.role === 'admin' && !product && (
                   <div className="space-y-2">
                     <Label htmlFor="supplierId">
                       Supplier <span className="text-red-500">*</span>

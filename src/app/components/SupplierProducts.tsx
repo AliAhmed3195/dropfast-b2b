@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Slider from 'react-slick';
 import {
@@ -37,109 +37,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from './ui/utils';
 import { ProductForm } from './ProductForm';
-
-// Mock products data
-const mockProducts = [
-  {
-    id: 1,
-    name: 'Wireless Bluetooth Headphones',
-    sku: 'WBH-2024-001',
-    category: 'Electronics',
-    subcategory: 'Audio',
-    stock: 245,
-    price: 79.99,
-    status: 'active',
-    orders: 156,
-    description: 'Premium wireless headphones with noise cancellation',
-    moq: 10,
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
-    images: [
-      'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600',
-      'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=600',
-      'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=600',
-      'https://images.unsplash.com/photo-1577174881658-0f30157f5a57?w=600',
-    ],
-  },
-  {
-    id: 2,
-    name: 'Smart Watch Pro',
-    sku: 'SWP-2024-002',
-    category: 'Wearables',
-    subcategory: 'Watches',
-    stock: 89,
-    price: 199.99,
-    status: 'active',
-    orders: 98,
-    description: 'Advanced smartwatch with health monitoring',
-    moq: 5,
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400',
-    images: [
-      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600',
-      'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=600',
-      'https://images.unsplash.com/photo-1434494878577-86c23bcb06b9?w=600',
-    ],
-  },
-  {
-    id: 3,
-    name: 'USB-C Fast Charger',
-    sku: 'UFC-2024-003',
-    category: 'Accessories',
-    subcategory: 'Chargers',
-    stock: 12,
-    price: 29.99,
-    status: 'low-stock',
-    orders: 234,
-    description: '65W fast charging adapter',
-    moq: 20,
-    image: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400',
-    images: [
-      'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=600',
-      'https://images.unsplash.com/photo-1624823183493-ed5832f48f18?w=600',
-    ],
-  },
-  {
-    id: 4,
-    name: 'Laptop Stand Adjustable',
-    sku: 'LSA-2024-004',
-    category: 'Office',
-    subcategory: 'Accessories',
-    stock: 0,
-    price: 45.99,
-    status: 'out-of-stock',
-    orders: 67,
-    description: 'Ergonomic laptop stand with adjustable height',
-    moq: 15,
-    image: 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400',
-    images: [
-      'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=600',
-      'https://images.unsplash.com/photo-1588508065123-287b28e013da?w=600',
-      'https://images.unsplash.com/photo-1585076800246-0405417327a7?w=600',
-    ],
-  },
-  {
-    id: 5,
-    name: 'Portable SSD 1TB',
-    sku: 'PSS-2024-005',
-    category: 'Storage',
-    subcategory: 'External Drives',
-    stock: 156,
-    price: 129.99,
-    status: 'active',
-    orders: 89,
-    description: 'High-speed portable solid state drive',
-    moq: 8,
-    image: 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?w=400',
-    images: [
-      'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?w=600',
-      'https://images.unsplash.com/photo-1531492746076-161ca9bcad58?w=600',
-    ],
-  },
-];
+import { Loader2 } from 'lucide-react';
 
 export function SupplierProducts() {
+  const { user } = useAuth();
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [showDetailView, setShowDetailView] = useState(false);
@@ -150,7 +59,42 @@ export function SupplierProducts() {
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'add' | 'edit'>('list');
 
-  const filteredProducts = mockProducts.filter(
+  // Fetch products
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchProducts = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.append('supplierId', user.id);
+        if (statusFilter !== 'all') params.append('status', statusFilter);
+        if (categoryFilter !== 'all') params.append('category', categoryFilter);
+        if (searchQuery) params.append('search', searchQuery);
+
+        const response = await fetch(`/api/supplier/products?${params.toString()}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setProducts(data.products || []);
+        } else {
+          showToast.error(data.error || 'Failed to fetch products');
+        }
+      } catch (error) {
+        console.error('Fetch products error:', error);
+        showToast.error('Failed to fetch products');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchProducts();
+  }, [user?.id, statusFilter, categoryFilter, searchQuery]);
+
+  const filteredProducts = products.filter(
     product =>
       (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.sku.toLowerCase().includes(searchQuery.toLowerCase())) &&
@@ -198,14 +142,50 @@ export function SupplierProducts() {
     setEditingProduct(null);
   };
 
-  const handleEditProduct = (product: any) => {
-    setViewMode('edit');
-    setEditingProduct(product);
+  const handleEditProduct = async (product: any) => {
+    try {
+      // Fetch full product details for editing
+      const response = await fetch(`/api/admin/products/${product.id}`);
+      const data = await response.json();
+      if (response.ok && data.product) {
+        setEditingProduct(data.product);
+        setViewMode('edit');
+      } else {
+        showToast.error('Failed to load product details');
+      }
+    } catch (error) {
+      console.error('Fetch product error:', error);
+      showToast.error('Failed to load product details');
+    }
   };
 
   const handleBackToList = () => {
     setViewMode('list');
     setEditingProduct(null);
+    // Refresh products list
+    fetchingRef.current = false;
+    setLoading(true);
+    const fetchProducts = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.append('supplierId', user?.id || '');
+        if (statusFilter !== 'all') params.append('status', statusFilter);
+        if (categoryFilter !== 'all') params.append('category', categoryFilter);
+        if (searchQuery) params.append('search', searchQuery);
+
+        const response = await fetch(`/api/supplier/products?${params.toString()}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setProducts(data.products || []);
+        }
+      } catch (error) {
+        console.error('Fetch products error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
   };
 
   // If in add/edit mode, show ProductForm as full page
@@ -215,6 +195,14 @@ export function SupplierProducts() {
         product={editingProduct}
         onClose={handleBackToList}
       />
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
     );
   }
 
@@ -327,8 +315,9 @@ export function SupplierProducts() {
       </Card>
 
       {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProducts.map((product, index) => (
+      {filteredProducts.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProducts.map((product, index) => (
           <motion.div
             key={product.id}
             initial={{ opacity: 0, y: 20 }}
@@ -414,7 +403,7 @@ export function SupplierProducts() {
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                           className="text-red-600"
-                          onClick={() => toast.success('Product deleted successfully!')}
+                          onClick={() => showToast.success('Product deleted successfully!')}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           Delete
@@ -432,7 +421,44 @@ export function SupplierProducts() {
             </Card>
           </motion.div>
         ))}
-      </div>
+        </div>
+      ) : (
+        <Card className="p-16">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center text-center"
+          >
+            <motion.div
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Package className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+            </motion.div>
+            <p className="text-lg font-medium text-muted-foreground mb-2">
+              {searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'
+                ? 'No products found'
+                : 'No products yet'
+              }
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              {searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'
+                ? 'Try adjusting your search or filters'
+                : 'Get started by adding your first product'
+              }
+            </p>
+            {!searchQuery && statusFilter === 'all' && categoryFilter === 'all' && (
+              <Button
+                onClick={handleAddProduct}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Your First Product
+              </Button>
+            )}
+          </motion.div>
+        </Card>
+      )}
 
       {/* Product Detail Modal */}
       <AnimatePresence>
@@ -486,8 +512,8 @@ function ProductDetailView(
     slidesToScroll: 1,
     autoplay: false,
     arrows: true,
-    nextArrow: <NextArrow />,
-    prevArrow: <PrevArrow />,
+    nextArrow: <NextArrow onClick={() => {}} />,
+    prevArrow: <PrevArrow onClick={() => {}} />,
   };
 
   return (
