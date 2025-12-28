@@ -31,8 +31,9 @@ import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Switch } from './ui/switch';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
+import { currencies, formatCurrency } from '../../data/currencies';
 
 // Currency exchange rates (mock - in production, fetch from API)
 const EXCHANGE_RATES: Record<string, number> = {
@@ -88,8 +89,9 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
   
   // Classification
   const [category, setCategory] = useState(product?.category || '');
+  const [categoryId, setCategoryId] = useState(product?.categoryId || '');
   const [subcategory, setSubcategory] = useState(product?.subcategory || '');
-  const [tags, setTags] = useState<string[]>(product?.tags || []);
+  const [productTags, setProductTags] = useState<string[]>(product?.tags || []);
   const [tagInput, setTagInput] = useState('');
   
   // Product Details
@@ -110,6 +112,26 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
   const [hasVariants, setHasVariants] = useState(product?.hasVariants || false);
   const [variants, setVariants] = useState<any[]>(product?.variants || []);
   const [productImages, setProductImages] = useState<string[]>(product?.images || []);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  
+  // Supplier selection (for admin creating products)
+  const [supplierId, setSupplierId] = useState(product?.supplierId || product?.supplier?.id || '');
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+
+  // Categories and Tags from API
+  const [categories, setCategories] = useState<any[]>([]);
+  const [availableTags, setAvailableTags] = useState<any[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [loadingTags, setLoadingTags] = useState(false);
+  
+  // Add new category/tag modals
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showAddTag, setShowAddTag] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#9333ea');
 
   // Auto-convert to USD when base currency or prices change
   useEffect(() => {
@@ -128,6 +150,66 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     }
   }, [baseSellingPrice, baseCurrency]);
 
+  // Fetch categories and tags
+  useEffect(() => {
+    const loadCategoriesAndTags = async () => {
+      try {
+        setLoadingCategories(true);
+        setLoadingTags(true);
+        
+        const [categoriesRes, tagsRes] = await Promise.all([
+          fetch('/api/admin/categories'),
+          fetch('/api/admin/tags'),
+        ]);
+
+        const [categoriesData, tagsData] = await Promise.all([
+          categoriesRes.json(),
+          tagsRes.json(),
+        ]);
+
+        if (categoriesData.categories) {
+          setCategories(categoriesData.categories);
+        }
+        if (tagsData.tags) {
+          setAvailableTags(tagsData.tags);
+        }
+      } catch (error) {
+        console.error('Fetch categories/tags error:', error);
+      } finally {
+        setLoadingCategories(false);
+        setLoadingTags(false);
+      }
+    };
+
+    loadCategoriesAndTags();
+  }, []);
+
+  // Fetch suppliers list (for admin)
+  useEffect(() => {
+    if (!product) {
+      // Only fetch suppliers when creating new product (not editing)
+      const loadSuppliers = async () => {
+        try {
+          setLoadingSuppliers(true);
+          const response = await fetch('/api/admin/suppliers');
+          const data = await response.json();
+          if (response.ok) {
+            setSuppliers(data.suppliers || []);
+            // Auto-select first supplier if available
+            if (data.suppliers && data.suppliers.length > 0 && !supplierId) {
+              setSupplierId(data.suppliers[0].id);
+            }
+          }
+        } catch (error) {
+          console.error('Fetch suppliers error:', error);
+        } finally {
+          setLoadingSuppliers(false);
+        }
+      };
+      loadSuppliers();
+    }
+  }, [product]);
+
   // Auto-calculate profit margin
   useEffect(() => {
     if (usdCostPrice > 0 && usdSellingPrice > 0) {
@@ -137,14 +219,99 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
   }, [usdCostPrice, usdSellingPrice]);
 
   const handleAddTag = () => {
-    if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-      setTags([...tags, tagInput.trim()]);
+    if (tagInput.trim() && !productTags.includes(tagInput.trim())) {
+      setProductTags([...productTags, tagInput.trim()]);
       setTagInput('');
     }
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
+    setProductTags(productTags.filter(tag => tag !== tagToRemove));
+  };
+
+  const handleAddNewCategory = async () => {
+    if (!newCategoryName.trim()) {
+      showToast.error('Category name is required');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newCategoryName.trim(),
+          description: '',
+          displayOrder: categories.length + 1,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok && data.category) {
+        showToast.success('Category created successfully!');
+        // Format category to match the list format
+        const formattedCategory = {
+          id: data.category.id,
+          name: data.category.name,
+          description: data.category.description || '',
+          displayOrder: data.category.displayOrder || 0,
+          productCount: 0,
+          createdAt: data.category.createdAt || new Date().toISOString().split('T')[0],
+          image: data.category.image || null,
+        };
+        setCategories([...categories, formattedCategory]);
+        setCategory(formattedCategory.name);
+        setCategoryId(formattedCategory.id);
+        setShowAddCategory(false);
+        setNewCategoryName('');
+      } else {
+        showToast.error(data.error || 'Failed to create category');
+      }
+    } catch (error) {
+      console.error('Create category error:', error);
+      showToast.error('Failed to create category');
+    }
+  };
+
+  const handleAddNewTag = async () => {
+    if (!newTagName.trim()) {
+      showToast.error('Tag name is required');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTagName.trim(),
+          color: newTagColor,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok && data.tag) {
+        showToast.success('Tag created successfully!');
+        // Format tag to match the list format
+        const formattedTag = {
+          id: data.tag.id,
+          name: data.tag.name,
+          color: data.tag.color || '#9333ea',
+          productCount: 0,
+          createdAt: data.tag.createdAt || new Date().toISOString().split('T')[0],
+        };
+        setAvailableTags([...availableTags, formattedTag]);
+        setProductTags([...productTags, formattedTag.name]);
+        setShowAddTag(false);
+        setNewTagName('');
+        setNewTagColor('#9333ea');
+      } else {
+        showToast.error(data.error || 'Failed to create tag');
+      }
+    } catch (error) {
+      console.error('Create tag error:', error);
+      showToast.error('Failed to create tag');
+    }
   };
 
   const handleAddVariant = () => {
@@ -158,77 +325,168 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     setVariants(variants.filter((_, i) => i !== index));
   };
 
+  // Image upload handlers
+  const handleImageUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const maxImages = 5;
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+
+    // Check if adding these files would exceed the limit
+    if (productImages.length + files.length > maxImages) {
+      showToast.error(`Maximum ${maxImages} images allowed. Please remove some images first.`);
+      return;
+    }
+
+    setUploadingImages(true);
+    const newImages: string[] = [];
+
+    try {
+      for (let i = 0; i < files.length && productImages.length + newImages.length < maxImages; i++) {
+        const file = files[i];
+
+        // Validate file type
+        if (!allowedTypes.includes(file.type)) {
+          showToast.error(`${file.name} is not a valid image format. Please use PNG, JPG, or WEBP.`);
+          continue;
+        }
+
+        // Validate file size
+        if (file.size > maxSize) {
+          showToast.error(`${file.name} is too large. Maximum size is 10MB.`);
+          continue;
+        }
+
+        // Convert to base64
+        const reader = new FileReader();
+        await new Promise<void>((resolve, reject) => {
+          reader.onload = (e) => {
+            const result = e.target?.result as string;
+            if (result) {
+              newImages.push(result);
+              resolve();
+            } else {
+              reject(new Error('Failed to read file'));
+            }
+          };
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (newImages.length > 0) {
+        setProductImages([...productImages, ...newImages]);
+        showToast.success(`${newImages.length} image(s) added successfully!`);
+      }
+    } catch (error) {
+      console.error('Image upload error:', error);
+      showToast.error('Failed to upload images');
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleImageUpload(e.dataTransfer.files);
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setProductImages(productImages.filter((_, i) => i !== index));
+  };
+
   // Validation for each step
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1: // Basic Info
         if (!productName.trim()) {
-          toast.error('Product name is required');
+          showToast.error('Product name is required');
           return false;
         }
         if (!brandName.trim()) {
-          toast.error('Brand name is required');
+          showToast.error('Brand name is required');
           return false;
         }
         if (!sku.trim()) {
-          toast.error('SKU is required');
+          showToast.error('SKU is required');
+          return false;
+        }
+        // Validate supplierId only for new products
+        if (!product && !supplierId) {
+          showToast.error('Please select a supplier');
           return false;
         }
         return true;
 
       case 2: // Pricing & Stock
         if (!baseCostPrice || parseFloat(baseCostPrice) <= 0) {
-          toast.error('Valid cost price is required');
+          showToast.error('Valid cost price is required');
           return false;
         }
         if (!baseSellingPrice || parseFloat(baseSellingPrice) <= 0) {
-          toast.error('Valid selling price is required');
+          showToast.error('Valid selling price is required');
           return false;
         }
         if (!stock || parseInt(stock) < 0) {
-          toast.error('Valid stock quantity is required');
+          showToast.error('Valid stock quantity is required');
           return false;
         }
         if (!moq || parseInt(moq) <= 0) {
-          toast.error('Valid MOQ is required');
+          showToast.error('Valid MOQ is required');
           return false;
         }
         if (!stockAlertThreshold || parseInt(stockAlertThreshold) < 0) {
-          toast.error('Valid stock alert threshold is required');
+          showToast.error('Valid stock alert threshold is required');
           return false;
         }
         return true;
 
       case 3: // Classification
         if (!category) {
-          toast.error('Category is required');
+          showToast.error('Category is required');
           return false;
         }
         if (!warrantyPeriod) {
-          toast.error('Warranty period is required');
+          showToast.error('Warranty period is required');
           return false;
         }
         if (!leadTime) {
-          toast.error('Lead time is required');
+          showToast.error('Lead time is required');
           return false;
         }
         return true;
 
       case 4: // Shipping
         if (!weight || parseFloat(weight) <= 0) {
-          toast.error('Valid weight is required');
+          showToast.error('Valid weight is required');
           return false;
         }
         if (!length || parseFloat(length) <= 0) {
-          toast.error('Valid length is required');
+          showToast.error('Valid length is required');
           return false;
         }
         if (!width || parseFloat(width) <= 0) {
-          toast.error('Valid width is required');
+          showToast.error('Valid width is required');
           return false;
         }
         if (!height || parseFloat(height) <= 0) {
-          toast.error('Valid height is required');
+          showToast.error('Valid height is required');
           return false;
         }
         return true;
@@ -269,49 +527,67 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
 
     setIsSubmitting(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const productData = {
-      productName,
-      description,
-      brandName,
-      sku,
-      barcode,
-      productStatus,
-      baseCurrency,
-      baseCostPrice: parseFloat(baseCostPrice),
-      baseSellingPrice: parseFloat(baseSellingPrice),
-      usdCostPrice,
-      usdSellingPrice,
-      profitMargin,
-      stock: parseInt(stock),
-      moq: parseInt(moq),
-      stockAlertThreshold: parseInt(stockAlertThreshold),
-      category,
-      subcategory,
-      tags,
-      productCondition,
-      warrantyPeriod,
-      leadTime,
-      weight: parseFloat(weight),
-      weightUnit,
-      dimensions: {
-        length: parseFloat(length),
-        width: parseFloat(width),
-        height: parseFloat(height),
-        unit: dimensionUnit,
-      },
-      shippingCost: shippingCost ? parseFloat(shippingCost) : 0,
-      hasVariants,
-      variants,
-      productImages,
-    };
-    
-    console.log('Product Data:', productData);
-    toast.success(product ? 'Product updated successfully!' : 'Product added successfully!');
-    setIsSubmitting(false);
-    onClose();
+    try {
+      const productData = {
+        productName,
+        description,
+        brandName,
+        sku,
+        barcode,
+        productStatus: productStatus || 'DRAFT',
+        baseCurrency,
+        baseCostPrice: parseFloat(baseCostPrice),
+        baseSellingPrice: parseFloat(baseSellingPrice),
+        stock: parseInt(stock),
+        moq: parseInt(moq),
+        stockAlertThreshold: parseInt(stockAlertThreshold),
+        categoryId: categoryId || (category ? categories.find(c => c.name === category)?.id : null),
+        category,
+        subcategory,
+        tags: productTags,
+        productCondition,
+        warrantyPeriod,
+        leadTime,
+        weight: parseFloat(weight),
+        weightUnit,
+        dimensions: {
+          length: parseFloat(length),
+          width: parseFloat(width),
+          height: parseFloat(height),
+          unit: dimensionUnit,
+        },
+        shippingCost: shippingCost ? parseFloat(shippingCost) : 0,
+        hasVariants,
+        variants,
+        productImages, // API will convert this to 'images' array
+        // For admin creating products, we need to get supplierId from the form or use a default
+        // In a real scenario, admin would select which supplier to create the product for
+        supplierId: supplierId || product?.supplierId || product?.supplier?.id, // Required for new products
+      };
+
+      const url = product ? `/api/admin/products/${product.id}` : '/api/admin/products';
+      const method = product ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(productData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success(product ? 'Product updated successfully!' : 'Product added successfully!');
+        onClose();
+      } else {
+        showToast.error(data.error || (product ? 'Failed to update product' : 'Failed to create product'));
+      }
+    } catch (error: any) {
+      console.error('Submit product error:', error);
+      showToast.error(product ? 'Failed to update product' : 'Failed to create product');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -542,6 +818,37 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
                     </Select>
                   </div>
                 </div>
+
+                {/* Supplier Selection (only for new products, not editing) */}
+                {!product && (
+                  <div className="space-y-2">
+                    <Label htmlFor="supplierId">
+                      Supplier <span className="text-red-500">*</span>
+                    </Label>
+                    <Select 
+                      value={supplierId} 
+                      onValueChange={setSupplierId}
+                      disabled={loadingSuppliers}
+                    >
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder={loadingSuppliers ? "Loading suppliers..." : "Select a supplier"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {suppliers.map((supplier) => (
+                          <SelectItem key={supplier.id} value={supplier.id}>
+                            {supplier.businessName || supplier.fullName || supplier.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!supplierId && (
+                      <p className="text-sm text-red-500 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        Please select a supplier
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -583,15 +890,11 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="USD">🇺🇸 USD - US Dollar</SelectItem>
-                      <SelectItem value="EUR">🇪🇺 EUR - Euro</SelectItem>
-                      <SelectItem value="GBP">🇬🇧 GBP - British Pound</SelectItem>
-                      <SelectItem value="CNY">🇨🇳 CNY - Chinese Yuan</SelectItem>
-                      <SelectItem value="INR">🇮🇳 INR - Indian Rupee</SelectItem>
-                      <SelectItem value="JPY">🇯🇵 JPY - Japanese Yen</SelectItem>
-                      <SelectItem value="AUD">🇦🇺 AUD - Australian Dollar</SelectItem>
-                      <SelectItem value="CAD">🇨🇦 CAD - Canadian Dollar</SelectItem>
-                      <SelectItem value="PKR">🇵🇰 PKR - Pakistani Rupee</SelectItem>
+                      {currencies.map((currency) => (
+                        <SelectItem key={currency.code} value={currency.code}>
+                          {formatCurrency(currency, true)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -745,68 +1048,124 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
                     <Label htmlFor="category">
                       Category <span className="text-red-500">*</span>
                     </Label>
-                    <Select value={category} onValueChange={setCategory}>
-                      <SelectTrigger className="h-11">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="electronics">Electronics</SelectItem>
-                        <SelectItem value="fashion">Fashion</SelectItem>
-                        <SelectItem value="home">Home & Kitchen</SelectItem>
-                        <SelectItem value="sports">Sports & Fitness</SelectItem>
-                        <SelectItem value="beauty">Beauty & Personal Care</SelectItem>
-                        <SelectItem value="toys">Toys & Games</SelectItem>
-                        <SelectItem value="automotive">Automotive</SelectItem>
-                        <SelectItem value="books">Books & Media</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex gap-2">
+                      <Select 
+                        value={category} 
+                        onValueChange={(value) => {
+                          if (value === 'add-new') {
+                            setShowAddCategory(true);
+                          } else {
+                            setCategory(value);
+                            const selectedCat = categories.find(c => c.name === value);
+                            setCategoryId(selectedCat?.id || '');
+                          }
+                        }}
+                        disabled={loadingCategories}
+                      >
+                        <SelectTrigger className="h-11 flex-1">
+                          <SelectValue placeholder={loadingCategories ? "Loading categories..." : "Select category"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.name}>
+                              {cat.name}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="add-new" className="text-purple-600 font-semibold">
+                            <Plus className="w-4 h-4 inline mr-2" />
+                            Add New Category
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="subcategory">Subcategory</Label>
-                    <Select value={subcategory} onValueChange={setSubcategory}>
-                      <SelectTrigger className="h-11">
-                        <SelectValue placeholder="Select subcategory" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="audio">Audio</SelectItem>
-                        <SelectItem value="wearables">Wearables</SelectItem>
-                        <SelectItem value="accessories">Accessories</SelectItem>
-                        <SelectItem value="chargers">Chargers & Cables</SelectItem>
-                        <SelectItem value="storage">Storage Devices</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      id="subcategory"
+                      value={subcategory}
+                      onChange={(e) => setSubcategory(e.target.value)}
+                      placeholder="e.g., Wearables, Audio, etc."
+                      className="h-11"
+                    />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="tags">Product Tags</Label>
                   <div className="flex gap-2">
+                    <Select
+                      value=""
+                      onValueChange={(value) => {
+                        if (value === 'add-new') {
+                          setShowAddTag(true);
+                        } else if (value && !productTags.includes(value)) {
+                          setProductTags([...productTags, value]);
+                        }
+                      }}
+                      disabled={loadingTags}
+                    >
+                      <SelectTrigger className="h-11 flex-1">
+                        <SelectValue placeholder={loadingTags ? "Loading tags..." : "Select or add tags"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableTags.map((tag) => (
+                          <SelectItem key={tag.id} value={tag.name}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: tag.color || '#9333ea' }}
+                              />
+                              {tag.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="add-new" className="text-purple-600 font-semibold">
+                          <Plus className="w-4 h-4 inline mr-2" />
+                          Add New Tag
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Input
                       id="tags"
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                      placeholder="Add tags (e.g., wireless, bluetooth)"
-                      className="h-11"
+                      placeholder="Or type custom tag"
+                      className="h-11 flex-1"
                     />
                     <Button type="button" onClick={handleAddTag} variant="outline">
                       <Plus className="w-4 h-4" />
                     </Button>
                   </div>
-                  {tags.length > 0 && (
+                  {productTags.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {tags.map((tag, index) => (
-                        <Badge key={index} variant="outline" className="px-3 py-1">
-                          {tag}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTag(tag)}
-                            className="ml-2 hover:text-red-500"
+                      {productTags.map((tag, index) => {
+                        const tagData = availableTags.find(t => t.name === tag);
+                        return (
+                          <Badge 
+                            key={index} 
+                            variant="outline" 
+                            className="px-3 py-1"
+                            style={tagData?.color ? { borderColor: tagData.color, color: tagData.color } : {}}
                           >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </Badge>
-                      ))}
+                            {tagData && (
+                              <div 
+                                className="w-2 h-2 rounded-full mr-2" 
+                                style={{ backgroundColor: tagData.color || '#9333ea' }}
+                              />
+                            )}
+                            {tag}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTag(tag)}
+                              className="ml-2 hover:text-red-500"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1053,26 +1412,82 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
               <div className="space-y-6">
                 {/* Product Images */}
                 <div className="space-y-3">
-                  <Label>Product Images</Label>
-                  <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-8 text-center hover:border-purple-400 transition-colors cursor-pointer">
-                    <Upload className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                    <p className="font-semibold mb-1">Click to upload or drag and drop</p>
-                    <p className="text-sm text-muted-foreground">
-                      PNG, JPG up to 10MB (Maximum 5 images)
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <Label>Product Images</Label>
+                    <span className="text-sm text-muted-foreground">
+                      {productImages.length} / 5 images
+                    </span>
                   </div>
+                  <input
+                    type="file"
+                    id="image-upload"
+                    multiple
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={(e) => handleImageUpload(e.target.files)}
+                    className="hidden"
+                    disabled={productImages.length >= 5 || uploadingImages}
+                  />
+                  <label
+                    htmlFor="image-upload"
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    className={cn(
+                      "border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer",
+                      dragActive
+                        ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
+                        : "border-slate-300 dark:border-slate-700 hover:border-purple-400",
+                      (productImages.length >= 5 || uploadingImages) && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {uploadingImages ? (
+                      <>
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                          className="w-12 h-12 mx-auto mb-3 border-2 border-purple-500 border-t-transparent rounded-full"
+                        />
+                        <p className="font-semibold mb-1">Uploading images...</p>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                        <p className="font-semibold mb-1">Click to upload or drag and drop</p>
+                        <p className="text-sm text-muted-foreground">
+                          PNG, JPG, WEBP up to 10MB (Maximum 5 images)
+                        </p>
+                      </>
+                    )}
+                  </label>
                   {productImages.length > 0 && (
-                    <div className="grid grid-cols-5 gap-3 mt-3">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-3">
                       {productImages.map((img, idx) => (
-                        <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border">
-                          <img src={img} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+                        <motion.div
+                          key={idx}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="relative aspect-square rounded-lg overflow-hidden border-2 border-slate-200 dark:border-slate-700 group"
+                        >
+                          <img 
+                            src={img} 
+                            alt={`Product ${idx + 1}`} 
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                           <button
                             type="button"
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                            onClick={() => handleRemoveImage(idx)}
+                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="w-4 h-4" />
                           </button>
-                        </div>
+                          {idx === 0 && (
+                            <div className="absolute bottom-2 left-2 bg-purple-500 text-white text-xs px-2 py-1 rounded">
+                              Primary
+                            </div>
+                          )}
+                        </motion.div>
                       ))}
                     </div>
                   )}
@@ -1263,6 +1678,107 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
           )}
         </div>
       </motion.form>
+
+      {/* Add New Category Modal */}
+      <AnimatePresence>
+        {showAddCategory && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={() => setShowAddCategory(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6"
+            >
+              <h3 className="text-xl font-bold mb-4">Add New Category</h3>
+              <div className="space-y-4">
+                <div>
+                  <Label>Category Name *</Label>
+                  <Input
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="e.g., Electronics"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setShowAddCategory(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleAddNewCategory}>
+                    Add Category
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add New Tag Modal */}
+      <AnimatePresence>
+        {showAddTag && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={() => setShowAddTag(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6"
+            >
+              <h3 className="text-xl font-bold mb-4">Add New Tag</h3>
+              <div className="space-y-4">
+                <div>
+                  <Label>Tag Name *</Label>
+                  <Input
+                    value={newTagName}
+                    onChange={(e) => setNewTagName(e.target.value)}
+                    placeholder="e.g., Best Seller"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Tag Color</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      type="color"
+                      value={newTagColor}
+                      onChange={(e) => setNewTagColor(e.target.value)}
+                      className="w-20 h-11"
+                    />
+                    <Input
+                      value={newTagColor}
+                      onChange={(e) => setNewTagColor(e.target.value)}
+                      placeholder="#9333ea"
+                      className="flex-1"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setShowAddTag(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleAddNewTag}>
+                    Add Tag
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

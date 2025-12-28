@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -54,355 +54,12 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
-import { toast } from 'sonner';
-import { useNavigation } from '../contexts/NavigationContext';
-
-// Mock product data
-const mockProducts = [
-  {
-    id: '1',
-    name: 'Wireless Bluetooth Headphones',
-    sku: 'WBH-001',
-    category: 'Electronics',
-    subcategory: 'Audio',
-    price: 79.99,
-    moq: 10,
-    stock: 145,
-    status: 'active',
-    addedBy: 'Tech Supply Co.',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['Featured', 'Best Seller'],
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200',
-    description: 'Premium wireless headphones with noise cancellation',
-  },
-  {
-    id: '2',
-    name: 'Smart Watch Series 5',
-    sku: 'SW-005',
-    category: 'Electronics',
-    subcategory: 'Wearables',
-    price: 299.99,
-    moq: 5,
-    stock: 89,
-    status: 'active',
-    addedBy: 'Global Electronics',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['New Arrival'],
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200',
-    description: 'Advanced fitness tracking smartwatch',
-  },
-  {
-    id: '3',
-    name: 'Ergonomic Office Chair',
-    sku: 'EOC-023',
-    category: 'Furniture',
-    subcategory: 'Office',
-    price: 249.99,
-    moq: 2,
-    stock: 34,
-    status: 'active',
-    addedBy: 'Fashion Hub',
-    addedByType: 'vendor',
-    store: 'Fashion Hub Store',
-    tags: ['Featured'],
-    image: 'https://images.unsplash.com/photo-1580480055273-228ff5388ef8?w=200',
-    description: 'Comfortable ergonomic chair for long work hours',
-  },
-  {
-    id: '4',
-    name: 'Gaming Keyboard RGB',
-    sku: 'GKR-078',
-    category: 'Electronics',
-    subcategory: 'Gaming',
-    price: 129.99,
-    moq: 10,
-    stock: 5,
-    status: 'low_stock',
-    addedBy: 'Tech Supply Co.',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['Best Seller'],
-    image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=200',
-    description: 'Mechanical gaming keyboard with RGB lighting',
-  },
-  {
-    id: '5',
-    name: 'Portable Power Bank',
-    sku: 'PPB-156',
-    category: 'Accessories',
-    subcategory: 'Charging',
-    price: 39.99,
-    moq: 20,
-    stock: 0,
-    status: 'out_of_stock',
-    addedBy: 'Global Electronics',
-    addedByType: 'supplier',
-    store: '',
-    tags: [],
-    image: 'https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=200',
-    description: '10000mAh portable charger',
-  },
-  {
-    id: '6',
-    name: 'Wireless Gaming Mouse',
-    sku: 'WGM-045',
-    category: 'Electronics',
-    subcategory: 'Gaming',
-    price: 59.99,
-    moq: 15,
-    stock: 78,
-    status: 'active',
-    addedBy: 'Tech Supply Co.',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['Best Seller'],
-    image: 'https://images.unsplash.com/photo-1527814050087-3793815479db?w=200',
-    description: 'High-precision wireless gaming mouse',
-  },
-  {
-    id: '7',
-    name: 'Premium Laptop Stand',
-    sku: 'PLS-012',
-    category: 'Accessories',
-    subcategory: 'Office',
-    price: 45.99,
-    moq: 8,
-    stock: 120,
-    status: 'active',
-    addedBy: 'Tech Haven Store',
-    addedByType: 'vendor',
-    store: 'Tech Haven Store',
-    tags: ['Featured'],
-    image: 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=200',
-    description: 'Adjustable aluminum laptop stand',
-  },
-  {
-    id: '8',
-    name: 'USB-C Hub 7-in-1',
-    sku: 'UCH-789',
-    category: 'Accessories',
-    subcategory: 'Connectivity',
-    price: 34.99,
-    moq: 25,
-    stock: 156,
-    status: 'active',
-    addedBy: 'Global Electronics',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['New Arrival'],
-    image: 'https://images.unsplash.com/photo-1625948515291-69613efd103f?w=200',
-    description: 'Multi-port USB-C hub with HDMI and SD card reader',
-  },
-  {
-    id: '9',
-    name: 'Mechanical Keyboard Switches',
-    sku: 'MKS-234',
-    category: 'Electronics',
-    subcategory: 'Gaming',
-    price: 89.99,
-    moq: 5,
-    stock: 42,
-    status: 'active',
-    addedBy: 'Tech Supply Co.',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['Featured'],
-    image: 'https://images.unsplash.com/photo-1595225476474-87563907a212?w=200',
-    description: 'Premium mechanical keyboard switches for enthusiasts',
-  },
-  {
-    id: '10',
-    name: 'Desk Organizer Set',
-    sku: 'DOS-567',
-    category: 'Furniture',
-    subcategory: 'Office',
-    price: 29.99,
-    moq: 12,
-    stock: 8,
-    status: 'low_stock',
-    addedBy: 'Fashion Hub',
-    addedByType: 'vendor',
-    store: 'Fashion Hub Store',
-    tags: [],
-    image: 'https://images.unsplash.com/photo-1594834226164-cbd06f65d53e?w=200',
-    description: 'Complete desk organization solution',
-  },
-  {
-    id: '11',
-    name: '4K Webcam Pro',
-    sku: 'WCP-901',
-    category: 'Electronics',
-    subcategory: 'Video',
-    price: 149.99,
-    moq: 6,
-    stock: 67,
-    status: 'active',
-    addedBy: 'Global Electronics',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['Best Seller', 'New Arrival'],
-    image: 'https://images.unsplash.com/photo-1585931927934-bb61065f2a5e?w=200',
-    description: '4K webcam with auto-focus and noise cancellation',
-  },
-  {
-    id: '12',
-    name: 'Wireless Charging Pad',
-    sku: 'WCP-345',
-    category: 'Accessories',
-    subcategory: 'Charging',
-    price: 24.99,
-    moq: 30,
-    stock: 203,
-    status: 'active',
-    addedBy: 'Tech Supply Co.',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['Featured'],
-    image: 'https://images.unsplash.com/photo-1591290619762-9b2c0659c2e8?w=200',
-    description: 'Fast wireless charging pad for all devices',
-  },
-  {
-    id: '13',
-    name: 'Gaming Headset RGB',
-    sku: 'GHS-678',
-    category: 'Electronics',
-    subcategory: 'Audio',
-    price: 119.99,
-    moq: 8,
-    stock: 91,
-    status: 'active',
-    addedBy: 'Tech Haven Store',
-    addedByType: 'vendor',
-    store: 'Tech Haven Store',
-    tags: ['Best Seller'],
-    image: 'https://images.unsplash.com/photo-1599669454699-248893623440?w=200',
-    description: '7.1 surround sound gaming headset with RGB',
-  },
-  {
-    id: '14',
-    name: 'Monitor Arm Mount',
-    sku: 'MAM-123',
-    category: 'Furniture',
-    subcategory: 'Office',
-    price: 79.99,
-    moq: 4,
-    stock: 45,
-    status: 'active',
-    addedBy: 'Tech Haven Store',
-    addedByType: 'vendor',
-    store: 'Tech Haven Store',
-    tags: ['Featured'],
-    image: 'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=200',
-    description: 'Adjustable dual monitor arm mount',
-  },
-  {
-    id: '15',
-    name: 'Bluetooth Speaker Portable',
-    sku: 'BSP-890',
-    category: 'Electronics',
-    subcategory: 'Audio',
-    price: 69.99,
-    moq: 12,
-    stock: 134,
-    status: 'active',
-    addedBy: 'Global Electronics',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['New Arrival'],
-    image: 'https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=200',
-    description: 'Waterproof portable Bluetooth speaker',
-  },
-  {
-    id: '16',
-    name: 'Cable Management Kit',
-    sku: 'CMK-456',
-    category: 'Accessories',
-    subcategory: 'Office',
-    price: 19.99,
-    moq: 20,
-    stock: 0,
-    status: 'out_of_stock',
-    addedBy: 'Fashion Hub',
-    addedByType: 'vendor',
-    store: 'Fashion Hub Store',
-    tags: [],
-    image: 'https://images.unsplash.com/photo-1558089687-81b5cd2d3f2e?w=200',
-    description: 'Complete cable organization and management kit',
-  },
-  {
-    id: '17',
-    name: 'LED Desk Lamp',
-    sku: 'LDL-234',
-    category: 'Furniture',
-    subcategory: 'Office',
-    price: 54.99,
-    moq: 10,
-    stock: 72,
-    status: 'active',
-    addedBy: 'Tech Haven Store',
-    addedByType: 'vendor',
-    store: 'Tech Haven Store',
-    tags: ['Featured'],
-    image: 'https://images.unsplash.com/photo-1565018697736-9d4a14c07f3c?w=200',
-    description: 'Adjustable LED desk lamp with touch controls',
-  },
-  {
-    id: '18',
-    name: 'External SSD 1TB',
-    sku: 'SSD-789',
-    category: 'Electronics',
-    subcategory: 'Storage',
-    price: 129.99,
-    moq: 5,
-    stock: 56,
-    status: 'active',
-    addedBy: 'Global Electronics',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['Best Seller'],
-    image: 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?w=200',
-    description: 'Ultra-fast portable SSD with 1TB storage',
-  },
-  {
-    id: '19',
-    name: 'Smartphone Gimbal',
-    sku: 'SG-567',
-    category: 'Accessories',
-    subcategory: 'Video',
-    price: 89.99,
-    moq: 6,
-    stock: 3,
-    status: 'low_stock',
-    addedBy: 'Tech Supply Co.',
-    addedByType: 'supplier',
-    store: '',
-    tags: ['New Arrival'],
-    image: 'https://images.unsplash.com/photo-1575819797647-4e90c7c9d6a5?w=200',
-    description: '3-axis smartphone stabilizer gimbal',
-  },
-  {
-    id: '20',
-    name: 'Ergonomic Mouse Pad',
-    sku: 'EMP-345',
-    category: 'Accessories',
-    subcategory: 'Office',
-    price: 14.99,
-    moq: 30,
-    stock: 245,
-    status: 'active',
-    addedBy: 'Fashion Hub',
-    addedByType: 'vendor',
-    store: 'Fashion Hub Store',
-    tags: ['Featured'],
-    image: 'https://images.unsplash.com/photo-1563296239-3d44c2d26b5e?w=200',
-    description: 'Ergonomic mouse pad with wrist support',
-  },
-];
+import { showToast } from '../../lib/toast';
+import { ProductForm } from './ProductForm';
 
 export function AdminInventoryProducts() {
-  const { setView } = useNavigation();
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -412,27 +69,126 @@ export function AdminInventoryProducts() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const fetchingProductsRef = useRef(false);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
+  
+  // Filter options from APIs
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
 
-  // Get unique suppliers and vendors/stores
-  const suppliers = Array.from(
-    new Set(
-      mockProducts
-        .filter(p => p.addedByType === 'supplier')
-        .map(p => p.addedBy)
-    )
-  );
-  const vendors = Array.from(
-    new Set(
-      mockProducts
-        .filter(p => p.addedByType === 'vendor')
-        .map(p => p.addedBy)
-    )
-  );
-  const stores = Array.from(
-    new Set(mockProducts.filter(p => p.store).map(p => p.store))
-  );
+  useEffect(() => {
+    // Prevent duplicate calls
+    if (fetchingProductsRef.current) {
+      return;
+    }
 
-  const filteredProducts = mockProducts.filter(product => {
+    // Abort previous request if any
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
+    fetchingProductsRef.current = true;
+
+    const loadProducts = async () => {
+      if (!isMounted) return;
+
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (categoryFilter !== 'all') params.append('category', categoryFilter);
+        if (statusFilter !== 'all') params.append('status', statusFilter);
+        if (supplierFilter !== 'all') params.append('supplier', supplierFilter);
+        if (vendorFilter !== 'all') params.append('vendor', vendorFilter);
+        if (storeFilter !== 'all') params.append('store', storeFilter);
+        const url = `/api/admin/products${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await fetch(url, {
+          signal: abortController.signal,
+        });
+        const data = await response.json();
+        
+        if (isMounted && response.ok) {
+          setProducts(data.products || []);
+        } else if (isMounted && !response.ok) {
+          showToast.error(data.error || 'Failed to fetch products');
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch products error:', error);
+          showToast.error('Failed to fetch products');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          fetchingProductsRef.current = false;
+        }
+      }
+    };
+
+    loadProducts();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      currentAbortControllerRef.current = null;
+      fetchingProductsRef.current = false;
+    };
+  }, [categoryFilter, statusFilter, supplierFilter, vendorFilter, storeFilter]);
+
+  // Fetch filter options (suppliers, vendors, categories, stores)
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        // Fetch suppliers, vendors, categories in parallel
+        const [suppliersRes, vendorsRes, categoriesRes] = await Promise.all([
+          fetch('/api/admin/suppliers'),
+          fetch('/api/admin/vendors'),
+          fetch('/api/admin/categories'),
+        ]);
+
+        const [suppliersData, vendorsData, categoriesData] = await Promise.all([
+          suppliersRes.json(),
+          vendorsRes.json(),
+          categoriesRes.json(),
+        ]);
+
+        if (suppliersData.suppliers) {
+          setSuppliers(suppliersData.suppliers);
+        }
+        if (vendorsData.vendors) {
+          setVendors(vendorsData.vendors);
+        }
+        if (categoriesData.categories) {
+          setCategories(categoriesData.categories);
+        }
+      } catch (error) {
+        console.error('Fetch filter options error:', error);
+      }
+    };
+
+    fetchFilterOptions();
+  }, []);
+
+  // Get stores from products (products linked to stores via StoreProduct)
+  useEffect(() => {
+    // Extract unique stores from products
+    const productStores = new Set<string>();
+    products.forEach(product => {
+      if (product.stores && Array.isArray(product.stores)) {
+        product.stores.forEach((store: string) => {
+          productStores.add(store);
+        });
+      }
+    });
+    setStores(Array.from(productStores));
+  }, [products]);
+
+  const filteredProducts = products.filter(product => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.sku.toLowerCase().includes(searchQuery.toLowerCase());
@@ -442,10 +198,15 @@ export function AdminInventoryProducts() {
     const matchesSupplier =
       supplierFilter === 'all' ||
       (product.addedByType === 'supplier' && product.addedBy === supplierFilter);
+    // Match vendor - check if product is in any store owned by this vendor
     const matchesVendor =
       vendorFilter === 'all' ||
-      (product.addedByType === 'vendor' && product.addedBy === vendorFilter);
-    const matchesStore = storeFilter === 'all' || product.store === storeFilter;
+      (product.vendors && Array.isArray(product.vendors) && product.vendors.includes(vendorFilter));
+    
+    // Match store - check if product is in this store
+    const matchesStore =
+      storeFilter === 'all' ||
+      (product.stores && Array.isArray(product.stores) && product.stores.includes(storeFilter));
     return (
       matchesSearch &&
       matchesCategory &&
@@ -457,10 +218,10 @@ export function AdminInventoryProducts() {
   });
 
   const stats = {
-    total: mockProducts.length,
-    active: mockProducts.filter(p => p.status === 'active').length,
-    lowStock: mockProducts.filter(p => p.status === 'low_stock').length,
-    outOfStock: mockProducts.filter(p => p.status === 'out_of_stock').length,
+    total: products.length,
+    active: products.filter(p => p.status === 'active').length,
+    lowStock: products.filter(p => p.status === 'low_stock').length,
+    outOfStock: products.filter(p => p.status === 'out_of_stock').length,
   };
 
   const getStatusColor = (status: string) => {
@@ -580,9 +341,11 @@ export function AdminInventoryProducts() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              <SelectItem value="Electronics">Electronics</SelectItem>
-              <SelectItem value="Furniture">Furniture</SelectItem>
-              <SelectItem value="Accessories">Accessories</SelectItem>
+              {categories.map(category => (
+                <SelectItem key={category.id} value={category.name}>
+                  {category.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -604,8 +367,8 @@ export function AdminInventoryProducts() {
             <SelectContent>
               <SelectItem value="all">All Suppliers</SelectItem>
               {suppliers.map(supplier => (
-                <SelectItem key={supplier} value={supplier}>
-                  {supplier}
+                <SelectItem key={supplier.id} value={supplier.businessName || supplier.fullName}>
+                  {supplier.businessName || supplier.fullName}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -618,8 +381,8 @@ export function AdminInventoryProducts() {
             <SelectContent>
               <SelectItem value="all">All Vendors</SelectItem>
               {vendors.map(vendor => (
-                <SelectItem key={vendor} value={vendor}>
-                  {vendor}
+                <SelectItem key={vendor.id} value={vendor.businessName || vendor.fullName}>
+                  {vendor.businessName || vendor.fullName}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -658,7 +421,43 @@ export function AdminInventoryProducts() {
       </Card>
 
       {/* Products Grid/List */}
-      {viewMode === 'grid' ? (
+      {loading ? (
+        <Card className="p-12">
+          <div className="flex flex-col items-center gap-3">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+              className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"
+            />
+            <p className="text-muted-foreground">Loading products...</p>
+          </div>
+        </Card>
+      ) : filteredProducts.length === 0 ? (
+        <Card className="p-12">
+          <div className="flex flex-col items-center gap-4">
+            <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800">
+              <Package className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <div className="text-center">
+              <p className="font-semibold text-lg">No products found</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {searchQuery || categoryFilter !== 'all' || statusFilter !== 'all'
+                  ? 'Try adjusting your search or filters.'
+                  : 'No products have been added yet. Click "Add Product" to create your first product.'}
+              </p>
+            </div>
+            {!searchQuery && categoryFilter === 'all' && statusFilter === 'all' && (
+              <Button
+                onClick={() => setShowAddForm(true)}
+                className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white mt-2"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Product
+              </Button>
+            )}
+          </div>
+        </Card>
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredProducts.map((product, index) => (
             <motion.div
@@ -704,14 +503,28 @@ export function AdminInventoryProducts() {
                     )}
                     <span className="truncate">{product.addedBy}</span>
                   </div>
-                  <Button
-                    className="w-full"
-                    size="sm"
-                    onClick={() => setSelectedProduct(product)}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Details
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelectedProduct(product)}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      size="sm"
+                      onClick={() => {
+                        setEditingProduct(product);
+                        setSelectedProduct(null);
+                      }}
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  </div>
                 </div>
               </Card>
             </motion.div>
@@ -733,14 +546,33 @@ export function AdminInventoryProducts() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProducts.map((product, index) => (
-                <motion.tr
-                  key={product.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="hover:bg-muted/50"
-                >
+              {filteredProducts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-12">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800">
+                        <Package className="w-8 h-8 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-lg">No products found</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {searchQuery || categoryFilter !== 'all' || statusFilter !== 'all'
+                            ? 'Try adjusting your search or filters.'
+                            : 'No products have been added yet. Click "Add Product" to create your first product.'}
+                        </p>
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredProducts.map((product, index) => (
+                  <motion.tr
+                    key={product.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="hover:bg-muted/50"
+                  >
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <img
@@ -790,16 +622,29 @@ export function AdminInventoryProducts() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedProduct(product)}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedProduct(product)}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditingProduct(product);
+                          setSelectedProduct(null);
+                        }}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </motion.tr>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </Card>
@@ -908,235 +753,61 @@ export function AdminInventoryProducts() {
           </>
         )}
 
-        {/* Add Product Form */}
-        {showAddForm && (
-          <>
+        {/* Add/Edit Product Form Modal */}
+        <AnimatePresence>
+          {(showAddForm || editingProduct) && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
-              onClick={() => setShowAddForm(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="fixed inset-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-4xl z-50 max-h-[90vh] overflow-y-auto"
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+              onClick={() => {
+                setShowAddForm(false);
+                setEditingProduct(null);
+              }}
             >
-              <AddProductForm onClose={() => setShowAddForm(false)} />
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-6xl w-full max-h-[95vh] overflow-y-auto custom-scrollbar"
+              >
+                <div className="p-6">
+                  <ProductForm
+                    product={editingProduct}
+                    onClose={() => {
+                      setShowAddForm(false);
+                      setEditingProduct(null);
+                      // Refresh products list
+                      const loadProducts = async () => {
+                        try {
+                          const params = new URLSearchParams();
+                          if (categoryFilter !== 'all') params.append('category', categoryFilter);
+                          if (statusFilter !== 'all') params.append('status', statusFilter);
+                          if (supplierFilter !== 'all') params.append('supplier', supplierFilter);
+                          if (vendorFilter !== 'all') params.append('vendor', vendorFilter);
+                          if (storeFilter !== 'all') params.append('store', storeFilter);
+                          const url = `/api/admin/products${params.toString() ? '?' + params.toString() : ''}`;
+                          const response = await fetch(url);
+                          const data = await response.json();
+                          if (response.ok) {
+                            setProducts(data.products || []);
+                            showToast.success(editingProduct ? 'Product updated successfully!' : 'Product added successfully!');
+                          }
+                        } catch (error) {
+                          console.error('Refresh products error:', error);
+                        }
+                      };
+                      loadProducts();
+                    }}
+                  />
+                </div>
+              </motion.div>
             </motion.div>
-          </>
-        )}
+          )}
+        </AnimatePresence>
       </AnimatePresence>
     </div>
-  );
-}
-
-// Add Product Form Component (with all supplier fields)
-function AddProductForm({ onClose }: { onClose: () => void }) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    toast.success('Product added successfully!');
-    setIsSubmitting(false);
-    onClose();
-  };
-
-  return (
-    <Card className="h-full overflow-y-auto">
-      <div className="sticky top-0 bg-white dark:bg-slate-900 border-b p-6 flex items-center justify-between z-10">
-        <div>
-          <h2 className="text-2xl font-bold">Add New Product</h2>
-          <p className="text-sm text-muted-foreground">
-            Fill in the product details below
-          </p>
-        </div>
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          <X className="w-5 h-5" />
-        </Button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="p-6 space-y-6">
-        {/* Basic Information */}
-        <div className="space-y-4">
-          <h3 className="font-bold flex items-center gap-2">
-            <Package className="w-5 h-5 text-purple-500" />
-            Basic Information
-          </h3>
-
-          <div className="space-y-2">
-            <Label htmlFor="productName">
-              Product Name <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="productName"
-              placeholder="e.g., Wireless Headphones"
-              className="h-11"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Describe your product..."
-              className="min-h-[100px]"
-              rows={4}
-            />
-          </div>
-        </div>
-
-        {/* Pricing */}
-        <div className="space-y-4">
-          <h3 className="font-bold flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-green-500" />
-            Pricing
-          </h3>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="price">
-                Price (USD) <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                className="h-11"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="moq">
-                MOQ (Minimum Order Quantity) <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="moq"
-                type="number"
-                placeholder="10"
-                className="h-11"
-                required
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Category & Tags */}
-        <div className="space-y-4">
-          <h3 className="font-bold flex items-center gap-2">
-            <Layers className="w-5 h-5 text-cyan-500" />
-            Classification
-          </h3>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="category">
-                Category <span className="text-red-500">*</span>
-              </Label>
-              <Select required>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="electronics">Electronics</SelectItem>
-                  <SelectItem value="wearables">Wearables</SelectItem>
-                  <SelectItem value="accessories">Accessories</SelectItem>
-                  <SelectItem value="office">Office</SelectItem>
-                  <SelectItem value="storage">Storage</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="subcategory">Subcategory</Label>
-              <Select>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Select subcategory" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="audio">Audio</SelectItem>
-                  <SelectItem value="watches">Watches</SelectItem>
-                  <SelectItem value="chargers">Chargers</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-
-        {/* Stock Information */}
-        <div className="space-y-4">
-          <h3 className="font-bold flex items-center gap-2">
-            <Box className="w-5 h-5 text-yellow-500" />
-            Stock Information
-          </h3>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="stock">
-                Available Stock <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="stock"
-                type="number"
-                placeholder="100"
-                className="h-11"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="sku">
-                SKU <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="sku"
-                placeholder="e.g., WBH-2024-001"
-                className="h-11"
-                required
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Product Image */}
-        <div className="space-y-4">
-          <h3 className="font-bold flex items-center gap-2">
-            <ImageIcon className="w-5 h-5 text-blue-500" />
-            Product Image
-          </h3>
-
-          <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 text-center hover:border-purple-500 transition-colors cursor-pointer">
-            <ImageIcon className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="font-medium mb-1">Click to upload or drag and drop</p>
-            <p className="text-sm text-muted-foreground">
-              PNG, JPG up to 10MB
-            </p>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-3 pt-4 border-t">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            className="flex-1"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex-1 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white font-semibold hover:from-purple-700 hover:via-indigo-700 hover:to-cyan-700"
-          >
-            {isSubmitting ? 'Adding Product...' : 'Add Product'}
-          </Button>
-        </div>
-      </form>
-    </Card>
   );
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   FileText,
@@ -32,76 +32,102 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
-
-// Mock recent reports data
-const recentReports = [
-  {
-    id: 'RPT-001',
-    type: 'Sales Report',
-    dateRange: 'Dec 1-24, 2024',
-    format: 'PDF',
-    generatedAt: '2024-12-24 10:30 AM',
-    status: 'completed',
-    fileSize: '2.4 MB',
-  },
-  {
-    id: 'RPT-002',
-    type: 'Order Report',
-    dateRange: 'Dec 1-24, 2024',
-    format: 'Excel',
-    generatedAt: '2024-12-23 03:15 PM',
-    status: 'completed',
-    fileSize: '1.8 MB',
-  },
-  {
-    id: 'RPT-003',
-    type: 'Payout Report',
-    dateRange: 'Nov 1-30, 2024',
-    format: 'PDF',
-    generatedAt: '2024-12-22 09:45 AM',
-    status: 'completed',
-    fileSize: '3.1 MB',
-  },
-  {
-    id: 'RPT-004',
-    type: 'Inventory Report',
-    dateRange: 'Dec 1-24, 2024',
-    format: 'CSV',
-    generatedAt: '2024-12-21 02:20 PM',
-    status: 'completed',
-    fileSize: '0.9 MB',
-  },
-  {
-    id: 'RPT-005',
-    type: 'User Report',
-    dateRange: 'Dec 1-24, 2024',
-    format: 'Excel',
-    generatedAt: '2024-12-20 11:10 AM',
-    status: 'completed',
-    fileSize: '1.2 MB',
-  },
-];
 
 export function Reports() {
   const [reportType, setReportType] = useState('sales');
   const [format, setFormat] = useState('pdf');
-  const [dateFrom, setDateFrom] = useState('2024-12-01');
-  const [dateTo, setDateTo] = useState('2024-12-24');
+  const [dateFrom, setDateFrom] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    return date.toISOString().split('T')[0];
+  });
+  const [dateTo, setDateTo] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [recentReports, setRecentReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingReportsRef = useRef(false);
+  const generatingReportRef = useRef(false);
+
+  useEffect(() => {
+    if (fetchingReportsRef.current) return;
+    fetchReports();
+  }, []);
+
+  const fetchReports = async () => {
+    if (fetchingReportsRef.current) return;
+    fetchingReportsRef.current = true;
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/reports');
+      const data = await response.json();
+      
+      if (response.ok) {
+        setRecentReports(data.reports || []);
+      } else {
+        showToast.error(data.error || 'Failed to fetch reports');
+      }
+    } catch (error) {
+      console.error('Fetch reports error:', error);
+      showToast.error('Failed to fetch reports');
+    } finally {
+      setLoading(false);
+      fetchingReportsRef.current = false;
+    }
+  };
 
   const handleGenerateReport = async () => {
+    if (generatingReportRef.current) return;
+    
+    if (!dateFrom || !dateTo) {
+      showToast.error('Please select both start and end dates');
+      return;
+    }
+
+    if (new Date(dateFrom) > new Date(dateTo)) {
+      showToast.error('Start date must be before end date');
+      return;
+    }
+
+    generatingReportRef.current = true;
     setIsGenerating(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsGenerating(false);
-    toast.success('Report generated successfully!', {
-      description: 'Your report is ready to download.',
-    });
+    
+    try {
+      const response = await fetch('/api/admin/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: reportType,
+          format,
+          dateFrom,
+          dateTo,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success('Report generated successfully! Your report is ready to download.');
+        // Refresh reports list
+        await fetchReports();
+      } else {
+        showToast.error(data.error || 'Failed to generate report');
+      }
+    } catch (error) {
+      console.error('Generate report error:', error);
+      showToast.error('Failed to generate report');
+    } finally {
+      setIsGenerating(false);
+      generatingReportRef.current = false;
+    }
   };
 
   const handleDownload = (reportId: string) => {
-    toast.success(`Downloading ${reportId}...`);
+    showToast.success(`Downloading ${reportId}...`);
+    // TODO: Implement actual download functionality
   };
 
   const getFormatIcon = (format: string) => {
@@ -336,11 +362,23 @@ export function Reports() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">This Month</span>
-                <span className="text-2xl font-bold text-green-600">5</span>
+                <span className="text-2xl font-bold text-green-600">
+                  {recentReports.filter(r => {
+                    const reportDate = new Date(r.createdAt || r.generatedAt || '');
+                    const now = new Date();
+                    return reportDate.getMonth() === now.getMonth() && 
+                           reportDate.getFullYear() === now.getFullYear();
+                  }).length}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Size</span>
-                <span className="text-lg font-semibold">9.4 MB</span>
+                <span className="text-lg font-semibold">
+                  {recentReports.reduce((sum, r) => {
+                    const size = parseFloat(r.fileSize || '0');
+                    return sum + size;
+                  }, 0).toFixed(1)} MB
+                </span>
               </div>
             </div>
           </Card>
@@ -397,7 +435,23 @@ export function Reports() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {recentReports.map((report, index) => (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-8">
+                  <div className="flex items-center justify-center">
+                    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mr-2" />
+                    Loading reports...
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : recentReports.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  No reports generated yet. Generate your first report above.
+                </TableCell>
+              </TableRow>
+            ) : (
+              recentReports.map((report, index) => (
               <motion.tr
                 key={report.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -423,15 +477,36 @@ export function Reports() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {report.generatedAt}
+                  {report.generatedAt 
+                    ? new Date(report.generatedAt).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : new Date(report.createdAt).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                  }
                 </TableCell>
                 <TableCell className="text-sm font-medium">
                   {report.fileSize}
                 </TableCell>
                 <TableCell>
-                  <Badge className="bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+                  <Badge className={
+                    report.status === 'completed' || report.status === 'COMPLETED'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                      : report.status === 'generating' || report.status === 'GENERATING'
+                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                      : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                  }>
                     <CheckCircle2 className="w-3 h-3 mr-1" />
-                    {report.status}
+                    {report.status.charAt(0).toUpperCase() + report.status.slice(1).toLowerCase()}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -445,7 +520,8 @@ export function Reports() {
                   </Button>
                 </TableCell>
               </motion.tr>
-            ))}
+              ))
+            )}
           </TableBody>
         </Table>
       </Card>

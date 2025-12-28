@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tag, Plus, Edit, Trash2, Search, ChevronLeft, X } from 'lucide-react';
 import { Card } from './ui/card';
@@ -10,17 +10,6 @@ import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-
-const mockTags = [
-  { id: '1', name: 'Featured', color: 'purple', productCount: 45 },
-  { id: '2', name: 'Best Seller', color: 'blue', productCount: 78 },
-  { id: '3', name: 'New Arrival', color: 'cyan', productCount: 34 },
-  { id: '4', name: 'Sale', color: 'red', productCount: 23 },
-  { id: '5', name: 'Limited Edition', color: 'orange', productCount: 12 },
-  { id: '6', name: 'Premium', color: 'indigo', productCount: 56 },
-  { id: '7', name: 'Trending', color: 'green', productCount: 67 },
-  { id: '8', name: 'Eco-Friendly', color: 'emerald', productCount: 29 },
-];
 
 const colorOptions = [
   { value: 'purple', label: 'Purple', bg: 'bg-purple-500' },
@@ -35,15 +24,116 @@ const colorOptions = [
 
 export function AdminInventoryTags() {
   const router = useRouter();
+  const [tags, setTags] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTag, setEditingTag] = useState<any>(null);
+  const [selectedColor, setSelectedColor] = useState('purple');
 
-  const filteredTags = mockTags.filter(tag =>
-    tag.name.toLowerCase().includes(searchQuery.toLowerCase())
+  useEffect(() => {
+    fetchTags();
+  }, []);
+
+  const fetchTags = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/tags');
+      const data = await response.json();
+      
+      if (response.ok) {
+        setTags(data.tags || []);
+      } else {
+        toast.error(data.error || 'Failed to fetch tags');
+      }
+    } catch (error) {
+      console.error('Fetch tags error:', error);
+      toast.error('Failed to fetch tags');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (tagId: string) => {
+    if (!confirm('Are you sure you want to delete this tag?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/tags/${tagId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchTags();
+        toast.success('Tag deleted successfully!');
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to delete tag');
+      }
+    } catch (error) {
+      console.error('Delete tag error:', error);
+      toast.error('Failed to delete tag');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const name = formData.get('tagName') as string;
+
+    try {
+      if (editingTag) {
+        // Update tag
+        const response = await fetch(`/api/admin/tags/${editingTag.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, color: selectedColor }),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          toast.success('Tag updated successfully!');
+          await fetchTags();
+          setShowAddForm(false);
+          setEditingTag(null);
+          setSelectedColor('purple');
+        } else {
+          toast.error(data.error || 'Failed to update tag');
+        }
+      } else {
+        // Create tag
+        const response = await fetch('/api/admin/tags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, color: selectedColor }),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          toast.success('Tag created successfully!');
+          await fetchTags();
+          setShowAddForm(false);
+          setSelectedColor('purple');
+        } else {
+          toast.error(data.error || 'Failed to create tag');
+        }
+      }
+    } catch (error) {
+      console.error('Save tag error:', error);
+      toast.error('Failed to save tag');
+    }
+  };
+
+  const filteredTags = tags.filter(tag =>
+    tag.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getTagColor = (color: string) => {
+    // Handle hex colors or color names
+    if (color?.startsWith('#')) {
+      // If it's a hex color, use inline style
+      return '';
+    }
+    
     switch (color) {
       case 'purple':
         return 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400';
@@ -108,7 +198,7 @@ export function AdminInventoryTags() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground font-medium">Total Tags</p>
-              <p className="text-2xl font-bold">{mockTags.length}</p>
+              <p className="text-2xl font-bold">{tags.length}</p>
             </div>
           </div>
         </Card>
@@ -119,7 +209,7 @@ export function AdminInventoryTags() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground font-medium">Tagged Products</p>
-              <p className="text-2xl font-bold">{mockTags.reduce((sum, t) => sum + t.productCount, 0)}</p>
+              <p className="text-2xl font-bold">{tags.reduce((sum, t) => sum + (t.productCount || 0), 0)}</p>
             </div>
           </div>
         </Card>
@@ -139,6 +229,11 @@ export function AdminInventoryTags() {
       </Card>
 
       {/* Tags Grid */}
+      {loading ? (
+        <div className="text-center py-16">
+          <p className="text-muted-foreground">Loading tags...</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
         {filteredTags.map((tag, idx) => (
           <motion.div
@@ -150,7 +245,10 @@ export function AdminInventoryTags() {
             <Card className="p-4 hover:shadow-lg transition-all group">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Badge className={`${getTagColor(tag.color)} text-sm px-3 py-1`}>
+                  <Badge 
+                    className={`${getTagColor(tag.color)} text-sm px-3 py-1`}
+                    style={tag.color?.startsWith('#') ? { backgroundColor: tag.color + '20', color: tag.color } : {}}
+                  >
                     {tag.name}
                   </Badge>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -158,7 +256,11 @@ export function AdminInventoryTags() {
                       variant="ghost" 
                       size="icon" 
                       className="h-7 w-7"
-                      onClick={() => setEditingTag(tag)}
+                      onClick={() => {
+                        setEditingTag(tag);
+                        setSelectedColor(tag.color || 'purple');
+                        setShowAddForm(true);
+                      }}
                     >
                       <Edit className="w-3 h-3" />
                     </Button>
@@ -166,7 +268,7 @@ export function AdminInventoryTags() {
                       variant="ghost" 
                       size="icon" 
                       className="h-7 w-7"
-                      onClick={() => toast.success('Tag deleted')}
+                      onClick={() => handleDelete(tag.id)}
                     >
                       <Trash2 className="w-3 h-3 text-red-500" />
                     </Button>
@@ -174,7 +276,7 @@ export function AdminInventoryTags() {
                 </div>
 
                 <div className="text-center pt-2 border-t">
-                  <p className="text-2xl font-bold text-purple-600">{tag.productCount}</p>
+                  <p className="text-2xl font-bold text-purple-600">{tag.productCount || 0}</p>
                   <p className="text-xs text-muted-foreground">Products</p>
                 </div>
               </div>
@@ -182,6 +284,7 @@ export function AdminInventoryTags() {
           </motion.div>
         ))}
       </div>
+      )}
 
       {/* Add/Edit Form */}
       <AnimatePresence>
@@ -214,18 +317,14 @@ export function AdminInventoryTags() {
                   </Button>
                 </div>
 
-                <form className="space-y-4" onSubmit={(e) => {
-                  e.preventDefault();
-                  toast.success(editingTag ? 'Tag updated!' : 'Tag added!');
-                  setShowAddForm(false);
-                  setEditingTag(null);
-                }}>
+                <form className="space-y-4" onSubmit={handleSubmit}>
                   <div className="space-y-2">
                     <Label htmlFor="tagName">
                       Tag Name <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="tagName"
+                      name="tagName"
                       defaultValue={editingTag?.name}
                       placeholder="e.g., Featured"
                       required
@@ -241,8 +340,9 @@ export function AdminInventoryTags() {
                         <button
                           key={color.value}
                           type="button"
+                          onClick={() => setSelectedColor(color.value)}
                           className={`h-12 rounded-lg ${color.bg} hover:scale-110 transition-transform flex items-center justify-center text-white font-semibold text-xs ${
-                            editingTag?.color === color.value ? 'ring-4 ring-offset-2 ring-purple-500' : ''
+                            selectedColor === color.value ? 'ring-4 ring-offset-2 ring-purple-500' : ''
                           }`}
                         >
                           {color.label}

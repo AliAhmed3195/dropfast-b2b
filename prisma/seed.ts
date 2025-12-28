@@ -77,6 +77,15 @@ async function main() {
   console.log(`   - Vendor: ${vendor.email}`)
   console.log(`   - Customer: ${customer.email}`)
 
+  // Seed invoice templates
+  const { seedInvoiceTemplates } = await import('../src/lib/invoice-templates-seed')
+  const templateResult = await seedInvoiceTemplates()
+  if (templateResult.success) {
+    console.log('✅ Invoice templates seeded')
+  } else {
+    console.error('❌ Invoice templates seed failed:', templateResult.error)
+  }
+
   console.log('\n🎉 Seed completed successfully!')
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   TrendingUp,
@@ -40,149 +40,76 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
 
-// Mock data for revenue trend (last 30 days)
-const revenueTrendData = [
-  { date: 'Dec 1', revenue: 1200 },
-  { date: 'Dec 2', revenue: 1450 },
-  { date: 'Dec 3', revenue: 1300 },
-  { date: 'Dec 4', revenue: 1600 },
-  { date: 'Dec 5', revenue: 1800 },
-  { date: 'Dec 6', revenue: 1550 },
-  { date: 'Dec 7', revenue: 1900 },
-  { date: 'Dec 8', revenue: 1700 },
-  { date: 'Dec 9', revenue: 2100 },
-  { date: 'Dec 10', revenue: 1950 },
-  { date: 'Dec 11', revenue: 2200 },
-  { date: 'Dec 12', revenue: 2050 },
-  { date: 'Dec 13', revenue: 2300 },
-  { date: 'Dec 14', revenue: 2150 },
-  { date: 'Dec 15', revenue: 2400 },
-  { date: 'Dec 16', revenue: 2250 },
-  { date: 'Dec 17', revenue: 2500 },
-  { date: 'Dec 18', revenue: 2350 },
-  { date: 'Dec 19', revenue: 2600 },
-  { date: 'Dec 20', revenue: 2450 },
-  { date: 'Dec 21', revenue: 2700 },
-  { date: 'Dec 22', revenue: 2550 },
-  { date: 'Dec 23', revenue: 2800 },
-  { date: 'Dec 24', revenue: 2650 },
-];
-
-// Mock data for order status distribution
-const orderStatusData = [
-  { name: 'Delivered', value: 145, color: '#10b981' },
-  { name: 'Shipped', value: 48, color: '#6366f1' },
-  { name: 'Processing', value: 32, color: '#06b6d4' },
-  { name: 'Pending', value: 25, color: '#f59e0b' },
-  { name: 'Cancelled', value: 12, color: '#ef4444' },
-];
-
-// Mock data for order volume trend
-const orderVolumeTrendData = [
-  { date: 'Dec 1', orders: 8 },
-  { date: 'Dec 2', orders: 10 },
-  { date: 'Dec 3', orders: 9 },
-  { date: 'Dec 4', orders: 12 },
-  { date: 'Dec 5', orders: 14 },
-  { date: 'Dec 6', orders: 11 },
-  { date: 'Dec 7', orders: 15 },
-  { date: 'Dec 8', orders: 13 },
-  { date: 'Dec 9', orders: 16 },
-  { date: 'Dec 10', orders: 14 },
-  { date: 'Dec 11', orders: 17 },
-  { date: 'Dec 12', orders: 15 },
-  { date: 'Dec 13', orders: 18 },
-  { date: 'Dec 14', orders: 16 },
-  { date: 'Dec 15', orders: 19 },
-  { date: 'Dec 16', orders: 17 },
-  { date: 'Dec 17', orders: 20 },
-  { date: 'Dec 18', orders: 18 },
-  { date: 'Dec 19', orders: 21 },
-  { date: 'Dec 20', orders: 19 },
-  { date: 'Dec 21', orders: 22 },
-  { date: 'Dec 22', orders: 20 },
-  { date: 'Dec 23', orders: 23 },
-  { date: 'Dec 24', orders: 21 },
-];
-
-// Mock data for top vendors
-const topVendorsData = [
-  { name: 'Tech Haven', revenue: 15750 },
-  { name: 'Smart Gadgets', revenue: 12340 },
-  { name: 'Digital Store', revenue: 9850 },
-  { name: 'Gadget World', revenue: 7560 },
-  { name: 'Tech Plaza', revenue: 6420 },
-];
-
-// Mock data for top suppliers
-const topSuppliersData = [
-  { name: 'Global Electronics', orders: 145 },
-  { name: 'Tech Supply Co.', orders: 132 },
-  { name: 'Digital Imports', orders: 98 },
-  { name: 'Smart Tech Ltd.', orders: 76 },
-  { name: 'Gadget Wholesale', orders: 54 },
-];
-
-// Mock data for top products
-const topProductsData = [
-  { id: 1, name: 'Wireless Headphones', units: 234, revenue: 18720 },
-  { id: 2, name: 'Smart Watch', units: 189, revenue: 56700 },
-  { id: 3, name: 'Phone Case', units: 456, revenue: 9120 },
-  { id: 4, name: 'USB-C Cable', units: 678, revenue: 8814 },
-  { id: 5, name: 'Power Bank', units: 321, revenue: 16050 },
-];
-
-// Mock data for user registration trend
-const userRegistrationData = [
-  { date: 'Dec 1', users: 5 },
-  { date: 'Dec 2', users: 7 },
-  { date: 'Dec 3', users: 6 },
-  { date: 'Dec 4', users: 9 },
-  { date: 'Dec 5', users: 11 },
-  { date: 'Dec 6', users: 8 },
-  { date: 'Dec 7', users: 12 },
-  { date: 'Dec 8', users: 10 },
-  { date: 'Dec 9', users: 14 },
-  { date: 'Dec 10', users: 12 },
-  { date: 'Dec 11', users: 15 },
-  { date: 'Dec 12', users: 13 },
-  { date: 'Dec 13', users: 16 },
-  { date: 'Dec 14', users: 14 },
-  { date: 'Dec 15', users: 18 },
-  { date: 'Dec 16', users: 16 },
-  { date: 'Dec 17', users: 19 },
-  { date: 'Dec 18', users: 17 },
-  { date: 'Dec 19', users: 21 },
-  { date: 'Dec 20', users: 19 },
-  { date: 'Dec 21', users: 22 },
-  { date: 'Dec 22', users: 20 },
-  { date: 'Dec 23', users: 24 },
-  { date: 'Dec 24', users: 22 },
-];
-
-// Mock data for user type distribution
-const userTypeData = [
-  { name: 'Customers', value: 845, color: '#6366f1' },
-  { name: 'Vendors', value: 28, color: '#06b6d4' },
-  { name: 'Suppliers', value: 15, color: '#10b981' },
-];
+// All mock data removed - data now comes from API only
 
 export function Analytics() {
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('30');
+  const fetchingAnalyticsRef = useRef(false);
 
-  const stats = {
-    totalRevenue: 65230,
-    revenueChange: 12.5,
-    avgOrderValue: 234.5,
-    avgChange: 5.2,
-    totalOrders: 262,
-    ordersChange: 8.3,
-    totalUsers: 888,
-    newUsers: 45,
-    activeVendors: 23,
-    activeSuppliers: 12,
+  useEffect(() => {
+    if (fetchingAnalyticsRef.current) return;
+    fetchAnalytics();
+  }, [dateRange]);
+
+  const fetchAnalytics = async () => {
+    if (fetchingAnalyticsRef.current) return;
+    fetchingAnalyticsRef.current = true;
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/admin/analytics?dateRange=${dateRange}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setAnalyticsData(data);
+      } else {
+        showToast.error(data.error || 'Failed to fetch analytics');
+      }
+    } catch (error) {
+      console.error('Fetch analytics error:', error);
+      showToast.error('Failed to fetch analytics');
+    } finally {
+      setLoading(false);
+      fetchingAnalyticsRef.current = false;
+    }
+  };
+
+  // Use API data only - no fallback to mock data
+  const revenueTrendData = analyticsData?.revenueTrend || [];
+  const orderStatusData = analyticsData?.orderStatus || [];
+  const orderVolumeTrendData = analyticsData?.orderVolumeTrend || [];
+  const topVendorsData = analyticsData?.topVendors || [];
+  const topSuppliersData = analyticsData?.topSuppliers || [];
+  const topProductsData = analyticsData?.topProducts || [];
+  const userRegistrationData = analyticsData?.userRegistration || [];
+  const userTypeData = analyticsData?.userType || [];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading analytics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = analyticsData?.stats || {
+    totalRevenue: 0,
+    revenueChange: 0,
+    avgOrderValue: 0,
+    avgChange: 0,
+    totalOrders: 0,
+    ordersChange: 0,
+    totalUsers: 0,
+    newUsers: 0,
+    activeVendors: 0,
+    activeSuppliers: 0,
   };
 
   return (
@@ -278,40 +205,46 @@ export function Analytics() {
 
         {/* Revenue Trend Chart */}
         <Card className="p-6">
-          <h4 className="font-semibold mb-4">Revenue Trend (Last 30 Days)</h4>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={revenueTrendData}>
-              <defs>
-                <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
-              <YAxis stroke="#6b7280" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'white',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="revenue"
-                stroke="url(#gradient)"
-                strokeWidth={3}
-                fill="url(#revenueGradient)"
-              />
-              <defs>
-                <linearGradient id="gradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#6366f1" />
-                  <stop offset="100%" stopColor="#06b6d4" />
-                </linearGradient>
-              </defs>
-            </AreaChart>
-          </ResponsiveContainer>
+          <h4 className="font-semibold mb-4">Revenue Trend (Last {dateRange} Days)</h4>
+          {revenueTrendData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={revenueTrendData}>
+                <defs>
+                  <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
+                <YAxis stroke="#6b7280" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'white',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="url(#gradient)"
+                  strokeWidth={3}
+                  fill="url(#revenueGradient)"
+                />
+                <defs>
+                  <linearGradient id="gradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#6366f1" />
+                    <stop offset="100%" stopColor="#06b6d4" />
+                  </linearGradient>
+                </defs>
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <p>No revenue data available</p>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -326,8 +259,9 @@ export function Analytics() {
           {/* Order Status Distribution */}
           <Card className="p-6">
             <h4 className="font-semibold mb-4">Order Status Distribution</h4>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
+            {orderStatusData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
                 <Pie
                   data={orderStatusData}
                   cx="50%"
@@ -345,27 +279,43 @@ export function Analytics() {
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">Fulfillment Rate</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {((145 / 262) * 100).toFixed(1)}%
-                </p>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                <p>No order data available</p>
               </div>
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">Cancellation Rate</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {((12 / 262) * 100).toFixed(1)}%
-                </p>
+            )}
+            {orderStatusData.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Fulfillment Rate</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {(() => {
+                      const delivered = orderStatusData.find(s => s.name === 'Delivered')?.value || 0
+                      const total = orderStatusData.reduce((sum, s) => sum + s.value, 0)
+                      return total > 0 ? ((delivered / total) * 100).toFixed(1) : '0.0'
+                    })()}%
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Cancellation Rate</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    {(() => {
+                      const cancelled = orderStatusData.find(s => s.name === 'Cancelled')?.value || 0
+                      const total = orderStatusData.reduce((sum, s) => sum + s.value, 0)
+                      return total > 0 ? ((cancelled / total) * 100).toFixed(1) : '0.0'
+                    })()}%
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </Card>
 
           {/* Order Volume Trend */}
           <Card className="p-6">
             <h4 className="font-semibold mb-4">Order Volume Trend</h4>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={orderVolumeTrendData}>
+            {orderVolumeTrendData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={orderVolumeTrendData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
                 <YAxis stroke="#6b7280" fontSize={12} />
@@ -386,6 +336,11 @@ export function Analytics() {
                 />
               </LineChart>
             </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                <p>No order volume data available</p>
+              </div>
+            )}
           </Card>
         </div>
       </div>
@@ -404,8 +359,9 @@ export function Analytics() {
               <Store className="w-4 h-4 text-purple-500" />
               Top 5 Vendors by Revenue
             </h4>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={topVendorsData} layout="vertical">
+            {topVendorsData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={topVendorsData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis type="number" stroke="#6b7280" fontSize={12} />
                 <YAxis dataKey="name" type="category" stroke="#6b7280" fontSize={12} width={100} />
@@ -441,6 +397,11 @@ export function Analytics() {
                 </defs>
               </BarChart>
             </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                <p>No vendor data available</p>
+              </div>
+            )}
           </Card>
 
           {/* Top Suppliers */}
@@ -449,8 +410,9 @@ export function Analytics() {
               <Building2 className="w-4 h-4 text-cyan-500" />
               Top 5 Suppliers by Orders
             </h4>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={topSuppliersData} layout="vertical">
+            {topSuppliersData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={topSuppliersData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis type="number" stroke="#6b7280" fontSize={12} />
                 <YAxis dataKey="name" type="category" stroke="#6b7280" fontSize={12} width={100} />
@@ -486,6 +448,11 @@ export function Analytics() {
                 </defs>
               </BarChart>
             </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                <p>No supplier data available</p>
+              </div>
+            )}
           </Card>
 
           {/* Top Products */}
@@ -494,8 +461,9 @@ export function Analytics() {
               <Package className="w-4 h-4 text-green-500" />
               Top 5 Products
             </h4>
-            <div className="space-y-3">
-              {topProductsData.map((product, index) => (
+            {topProductsData.length > 0 ? (
+              <div className="space-y-3">
+                {topProductsData.map((product, index) => (
                 <motion.div
                   key={product.id}
                   initial={{ opacity: 0, x: -20 }}
@@ -515,7 +483,12 @@ export function Analytics() {
                   <p className="font-bold text-purple-600">${product.revenue.toLocaleString()}</p>
                 </motion.div>
               ))}
-            </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+                <p>No product data available</p>
+              </div>
+            )}
           </Card>
         </div>
       </div>
@@ -550,9 +523,10 @@ export function Analytics() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* User Registration Trend */}
           <Card className="p-6">
-            <h4 className="font-semibold mb-4">User Registration Trend (Last 30 Days)</h4>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={userRegistrationData}>
+            <h4 className="font-semibold mb-4">User Registration Trend (Last {dateRange} Days)</h4>
+            {userRegistrationData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={userRegistrationData}>
                 <defs>
                   <linearGradient id="userGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -578,13 +552,19 @@ export function Analytics() {
                 />
               </AreaChart>
             </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                <p>No user registration data available</p>
+              </div>
+            )}
           </Card>
 
           {/* User Type Distribution */}
           <Card className="p-6">
             <h4 className="font-semibold mb-4">User Type Distribution</h4>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
+            {userTypeData.length > 0 && userTypeData.some(u => u.value > 0) ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
                 <Pie
                   data={userTypeData}
                   cx="50%"
@@ -600,6 +580,11 @@ export function Analytics() {
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                <p>No user type data available</p>
+              </div>
+            )}
           </Card>
         </div>
       </div>

@@ -1,20 +1,28 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { User, Mail, Lock, Building2, FileText, Globe, DollarSign, MapPin, Phone, Calendar, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { cn } from './ui/utils';
+import { countries as countriesData } from '../../data/countries';
+import { currencies as currenciesData, formatCurrency } from '../../data/currencies';
+import { showToast } from '../../lib/toast';
 
 interface UserFormProps {
   preSelectedRole?: 'supplier' | 'vendor' | 'customer';
+  editUser?: any; // User data for edit mode
   onCancel: () => void;
   onSuccess: () => void;
 }
 
-export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps) {
+export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: UserFormProps) {
+  const isEditMode = !!editUser;
+  const fetchingDetailsRef = useRef(false);
+  const detailsAbortControllerRef = useRef<AbortController | null>(null);
+
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -44,7 +52,90 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(isEditMode);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Load user data when in edit mode
+  useEffect(() => {
+    if (!isEditMode || !editUser?.id) return;
+
+    // Prevent duplicate calls
+    if (fetchingDetailsRef.current) {
+      return;
+    }
+
+    // Abort previous request if any
+    if (detailsAbortControllerRef.current) {
+      detailsAbortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    detailsAbortControllerRef.current = abortController;
+    fetchingDetailsRef.current = true;
+
+    const loadUserDetails = async () => {
+      if (!isMounted) return;
+
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/admin/users/${editUser.id}`, {
+          signal: abortController.signal,
+        });
+        const data = await response.json();
+
+        if (isMounted && response.ok) {
+          const user = data.user;
+          setFormData({
+            fullName: user.name || editUser.fullName || '',
+            email: user.email || editUser.email || '',
+            password: '', // Don't pre-fill password
+            role: (user.role || editUser.role || preSelectedRole || 'customer').toLowerCase(),
+            includeBusinessDetails: !!(user.businessName || user.businessType),
+            businessName: user.businessName || editUser.businessName || '',
+            businessType: user.businessType || 'individual',
+            registrationNumber: user.registrationNumber || '',
+            vatNumber: user.vatNumber || '',
+            country: user.country || editUser.country || 'United States',
+            currency: user.currency || 'USD',
+            streetAddress: user.streetAddress || '',
+            city: user.city || '',
+            stateProvince: user.stateProvince || '',
+            addressCountry: user.addressCountry || user.country || 'United States',
+            phoneNumber: user.phone || editUser.phoneNumber || '',
+            dateOfBirth: user.dateOfBirth || '',
+            // Supplier specific
+            productCategories: user.productCategories || '',
+            shippingLocations: user.shippingLocations || '',
+            minimumOrderValue: user.minimumOrderValue?.toString() || '',
+            // Vendor specific
+            storeName: '',
+            storeType: 'single',
+            commissionRate: user.commissionRate?.toString() || '15',
+          });
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch user details error:', error);
+          showToast.error('Failed to load user data');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          fetchingDetailsRef.current = false;
+        }
+      }
+    };
+
+    loadUserDetails();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      detailsAbortControllerRef.current = null;
+      fetchingDetailsRef.current = false;
+    };
+  }, [isEditMode, editUser?.id, preSelectedRole]);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -63,7 +154,14 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
     if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
     if (!formData.email.trim()) newErrors.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Invalid email format';
-    if (!formData.password || formData.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
+    // Password is only required for new users, not for editing
+    if (!isEditMode && (!formData.password || formData.password.length < 6)) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+    // If editing and password is provided, validate it
+    if (isEditMode && formData.password && formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
 
     if (formData.includeBusinessDetails) {
       if (!formData.businessName.trim()) newErrors.businessName = 'Business name is required';
@@ -82,11 +180,116 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
 
     setIsSubmitting(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setIsSubmitting(false);
-    onSuccess();
+    try {
+      if (isEditMode) {
+        // Update existing user
+        const payload: any = {
+          name: formData.fullName,
+          email: formData.email,
+          phone: formData.phoneNumber || null,
+          businessName: formData.includeBusinessDetails ? formData.businessName : null,
+          businessType: formData.includeBusinessDetails ? formData.businessType : null,
+          streetAddress: formData.streetAddress || null,
+          city: formData.city || null,
+          stateProvince: formData.stateProvince || null,
+          zipCode: '',
+          addressCountry: formData.addressCountry || null,
+          country: formData.country || null,
+          currency: formData.currency || null,
+        };
+
+        // Add role-specific fields
+        if (formData.role === 'supplier') {
+          payload.productCategories = formData.productCategories || null;
+          payload.shippingLocations = formData.shippingLocations || null;
+          payload.minimumOrderValue = formData.minimumOrderValue || null;
+        } else if (formData.role === 'vendor') {
+          payload.commissionRate = formData.commissionRate || '15.0';
+        }
+
+        // Only include password if it's provided
+        if (formData.password) {
+          payload.password = formData.password;
+        }
+
+        const response = await fetch(`/api/admin/users/${editUser.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const roleName = formData.role === 'vendor' ? 'Vendor' : formData.role === 'supplier' ? 'Supplier' : 'User';
+          showToast.success(`${roleName} updated successfully!`);
+          onSuccess();
+        } else {
+          const errorMessage = data.error || 'Failed to update user';
+          showToast.error(errorMessage);
+          setErrors({ submit: errorMessage });
+        }
+      } else {
+        // Create new user
+        const endpoint = formData.role === 'vendor' 
+          ? '/api/admin/vendors' 
+          : formData.role === 'supplier'
+          ? '/api/admin/suppliers'
+          : '/api/admin/users';
+
+        const payload: any = {
+          name: formData.fullName,
+          email: formData.email,
+          password: formData.password,
+          phone: formData.phoneNumber || null,
+          businessName: formData.includeBusinessDetails ? formData.businessName : null,
+          businessType: formData.includeBusinessDetails ? formData.businessType : null,
+          streetAddress: formData.streetAddress || null,
+          city: formData.city || null,
+          stateProvince: formData.stateProvince || null,
+          zipCode: '',
+          addressCountry: formData.addressCountry || null,
+          country: formData.country || null,
+          currency: formData.currency || null,
+        };
+
+        // Add role-specific fields
+        if (formData.role === 'supplier') {
+          payload.productCategories = formData.productCategories || null;
+          payload.shippingLocations = formData.shippingLocations || null;
+          payload.minimumOrderValue = formData.minimumOrderValue || null;
+        } else if (formData.role === 'vendor') {
+          payload.commissionRate = formData.commissionRate || '15.0';
+        } else {
+          payload.role = formData.role.toUpperCase();
+        }
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const roleName = formData.role === 'vendor' ? 'Vendor' : formData.role === 'supplier' ? 'Supplier' : 'User';
+          showToast.success(`${roleName} created successfully!`);
+          onSuccess();
+        } else {
+          const errorMessage = data.error || 'Failed to create user';
+          showToast.error(errorMessage);
+          setErrors({ submit: errorMessage });
+        }
+      }
+    } catch (error) {
+      console.error(isEditMode ? 'Update user error:' : 'Create user error:', error);
+      const errorMessage = isEditMode ? 'Failed to update user' : 'Failed to create user';
+      showToast.error(errorMessage);
+      setErrors({ submit: errorMessage });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const businessTypes = [
@@ -96,20 +299,6 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
     { value: 'corporation', label: 'Corporation' },
   ];
 
-  const countries = [
-    'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France', 'India', 'China', 'Japan', 'Brazil'
-  ];
-
-  const currencies = [
-    { code: 'USD', name: 'US Dollar', symbol: '$' },
-    { code: 'GBP', name: 'British Pound', symbol: '£' },
-    { code: 'EUR', name: 'Euro', symbol: '€' },
-    { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$' },
-    { code: 'AUD', name: 'Australian Dollar', symbol: 'A$' },
-    { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
-    { code: 'CNY', name: 'Chinese Yuan', symbol: '¥' },
-    { code: 'JPY', name: 'Japanese Yen', symbol: '¥' },
-  ];
 
   const roles = [
     { value: 'supplier', label: 'Supplier', color: 'from-blue-500 to-blue-600' },
@@ -365,9 +554,9 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
                         errors.country ? "border-red-500" : "border-slate-200 dark:border-slate-700"
                       )}
                     >
-                      {countries.map(country => (
-                        <option key={country} value={country}>
-                          {country}
+                      {countriesData.map((country: any) => (
+                        <option key={country.code} value={country.name}>
+                          {country.flag} {country.name}
                         </option>
                       ))}
                     </select>
@@ -387,9 +576,9 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
                         errors.currency ? "border-red-500" : "border-slate-200 dark:border-slate-700"
                       )}
                     >
-                      {currencies.map(currency => (
+                      {currenciesData.map((currency: any) => (
                         <option key={currency.code} value={currency.code}>
-                          {currency.code} - {currency.name} ({currency.symbol})
+                          {formatCurrency(currency, true)}
                         </option>
                       ))}
                     </select>
@@ -457,9 +646,9 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
                       onChange={(e) => handleInputChange('addressCountry', e.target.value)}
                       className="w-full h-11 px-3 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-purple-500/20"
                     >
-                      {countries.map(country => (
-                        <option key={country} value={country}>
-                          {country}
+                      {countriesData.map((country) => (
+                        <option key={country.code} value={country.name}>
+                          {country.flag} {country.name}
                         </option>
                       ))}
                     </select>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   DollarSign,
@@ -151,31 +151,90 @@ const mockTransactions = [
 ];
 
 export function AdminPayouts() {
+  const [payouts, setPayouts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectedPayout, setSelectedPayout] = useState<any>(null);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('pending');
+  const fetchingPayoutsRef = useRef(false);
 
-  const filteredPayouts = mockPendingPayouts.filter(payout => {
+  const fetchPayouts = async () => {
+    if (fetchingPayoutsRef.current) return;
+    fetchingPayoutsRef.current = true;
+    
+    try {
+      setLoading(true);
+      const status = activeTab === 'pending' ? 'pending' : activeTab === 'completed' ? 'completed' : '';
+      const url = status ? `/api/admin/payouts?status=${status}` : '/api/admin/payouts';
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setPayouts(data.payouts || []);
+      } else {
+        toast.error(data.error || 'Failed to fetch payouts');
+      }
+    } catch (error) {
+      console.error('Fetch payouts error:', error);
+      toast.error('Failed to fetch payouts');
+    } finally {
+      setLoading(false);
+      fetchingPayoutsRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (fetchingPayoutsRef.current) return;
+    fetchPayouts();
+  }, [typeFilter, activeTab]);
+
+  const filteredPayouts = payouts.filter(payout => {
     const matchesSearch =
-      payout.recipientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payout.email.toLowerCase().includes(searchQuery.toLowerCase());
+      payout.recipientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      payout.email?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === 'all' || payout.recipientType === typeFilter;
     return matchesSearch && matchesType;
   });
 
+  const pendingPayouts = payouts.filter(p => p.status === 'pending');
+  const completedPayouts = payouts.filter(p => p.status === 'completed');
+
   const stats = {
-    totalPending: mockPendingPayouts.reduce((sum, p) => sum + p.dueAmount, 0),
-    totalCompleted: mockTransactions
-      .filter(t => t.status === 'completed')
-      .reduce((sum, t) => sum + t.amount, 0),
-    pendingCount: mockPendingPayouts.length,
-    completedCount: mockTransactions.filter(t => t.status === 'completed').length,
+    totalPending: pendingPayouts.reduce((sum, p) => sum + (p.dueAmount || p.amount || 0), 0),
+    totalCompleted: completedPayouts.reduce((sum, p) => sum + (p.amount || 0), 0),
+    pendingCount: pendingPayouts.length,
+    completedCount: completedPayouts.length,
   };
 
   const handleProcessPayout = (payout: any) => {
     setSelectedPayout(payout);
     setShowPayoutModal(true);
+  };
+
+  const handleUpdatePayoutStatus = async (payoutId: string, status: string) => {
+    try {
+      const response = await fetch(`/api/admin/payouts/${payoutId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await fetchPayouts();
+        toast.success(`Payout status updated to ${status}`);
+        setShowPayoutModal(false);
+        setSelectedPayout(null);
+      } else {
+        toast.error(data.error || 'Failed to update payout status');
+      }
+    } catch (error) {
+      console.error('Update payout error:', error);
+      toast.error('Failed to update payout status');
+    }
   };
 
   return (
@@ -246,7 +305,7 @@ export function AdminPayouts() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="pending" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full md:w-[400px] grid-cols-2">
           <TabsTrigger value="pending" className="gap-2">
             <Clock className="w-4 h-4" />
@@ -302,77 +361,95 @@ export function AdminPayouts() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPayouts.map((payout, index) => (
-                  <motion.tr
-                    key={payout.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="hover:bg-muted/50"
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-10 h-10">
-                          <AvatarFallback
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-2 animate-pulse" />
+                      <p className="text-muted-foreground">Loading payouts...</p>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredPayouts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      <Wallet className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                      <p className="text-muted-foreground">No pending payouts found</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <>
+                    {filteredPayouts.map((payout, index) => (
+                      <motion.tr
+                        key={payout.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="hover:bg-muted/50"
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="w-10 h-10">
+                              <AvatarFallback
+                                className={cn(
+                                  'text-white',
+                                  payout.recipientType === 'supplier'
+                                    ? 'bg-gradient-to-br from-blue-500 to-indigo-500'
+                                    : 'bg-gradient-to-br from-cyan-500 to-purple-500'
+                                )}
+                              >
+                                {payout.recipientName.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-semibold">{payout.recipientName}</p>
+                              <p className="text-xs text-muted-foreground">{payout.email}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
                             className={cn(
-                              'text-white',
                               payout.recipientType === 'supplier'
-                                ? 'bg-gradient-to-br from-blue-500 to-indigo-500'
-                                : 'bg-gradient-to-br from-cyan-500 to-purple-500'
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                                : 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-400'
                             )}
                           >
-                            {payout.recipientName.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold">{payout.recipientName}</p>
-                          <p className="text-xs text-muted-foreground">{payout.email}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          payout.recipientType === 'supplier'
-                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
-                            : 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-400'
-                        )}
-                      >
-                        {payout.recipientType === 'supplier' ? (
-                          <Building2 className="w-3 h-3 mr-1" />
-                        ) : (
-                          <User className="w-3 h-3 mr-1" />
-                        )}
-                        {payout.recipientType}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {payout.phone}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">{payout.accountNumber}</TableCell>
-                    <TableCell>
-                      <span className="text-lg font-bold text-purple-600">
-                        ${payout.dueAmount.toLocaleString()}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{payout.ordersCount} orders</Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(payout.lastPayout).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        onClick={() => handleProcessPayout(payout)}
-                        className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-700 hover:to-cyan-700"
-                      >
-                        <Send className="w-4 h-4 mr-2" />
-                        Process
-                      </Button>
-                    </TableCell>
-                  </motion.tr>
-                ))}
+                            {payout.recipientType === 'supplier' ? (
+                              <Building2 className="w-3 h-3 mr-1" />
+                            ) : (
+                              <User className="w-3 h-3 mr-1" />
+                            )}
+                            {payout.recipientType}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {payout.phone}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">{payout.accountNumber}</TableCell>
+                        <TableCell>
+                          <span className="text-lg font-bold text-purple-600">
+                            ${(payout.dueAmount || payout.amount || 0).toLocaleString()}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{payout.ordersCount || 0} orders</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {payout.lastPayout ? new Date(payout.lastPayout).toLocaleDateString() : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            onClick={() => handleProcessPayout(payout)}
+                            className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-700 hover:to-cyan-700"
+                          >
+                            <Send className="w-4 h-4 mr-2" />
+                            Process
+                          </Button>
+                        </TableCell>
+                      </motion.tr>
+                    ))}
+                  </>
+                )}
               </TableBody>
             </Table>
           </Card>
@@ -395,7 +472,22 @@ export function AdminPayouts() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockTransactions.map((txn, index) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-2 animate-pulse" />
+                      <p className="text-muted-foreground">Loading transactions...</p>
+                    </TableCell>
+                  </TableRow>
+                ) : completedPayouts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      <History className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                      <p className="text-muted-foreground">No transactions found</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  completedPayouts.map((txn, index) => (
                   <motion.tr
                     key={txn.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -435,7 +527,7 @@ export function AdminPayouts() {
                     </TableCell>
                     <TableCell>
                       <span className="font-bold text-purple-600">
-                        ${txn.amount.toLocaleString()}
+                        ${(txn.amount || 0).toLocaleString()}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -443,7 +535,9 @@ export function AdminPayouts() {
                         className={cn(
                           txn.status === 'completed'
                             ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                            : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                            : txn.status === 'processing'
+                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                            : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
                         )}
                       >
                         {txn.status === 'completed' ? (
@@ -455,19 +549,20 @@ export function AdminPayouts() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {new Date(txn.date).toLocaleDateString()}
+                      {txn.processedAt ? new Date(txn.processedAt).toLocaleDateString() : new Date(txn.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm">
                         <CreditCard className="w-4 h-4 text-muted-foreground" />
-                        {txn.paymentMethod}
+                        {txn.method || 'Bank Transfer'}
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
-                      {txn.referenceNumber}
+                      {txn.id || 'N/A'}
                     </TableCell>
                   </motion.tr>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           </Card>
@@ -497,9 +592,10 @@ export function AdminPayouts() {
                   setShowPayoutModal(false);
                   setSelectedPayout(null);
                 }}
-                onSuccess={() => {
+                onSuccess={async () => {
                   setShowPayoutModal(false);
                   setSelectedPayout(null);
+                  await fetchPayouts();
                   toast.success('Payout processed successfully!');
                 }}
               />
@@ -555,9 +651,30 @@ function PayoutForm({ payout, onCancel, onSuccess }: PayoutFormProps) {
     if (!validateForm()) return;
 
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsSubmitting(false);
-    onSuccess();
+    
+    try {
+      const response = await fetch(`/api/admin/payouts/${payout.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'completed',
+          processedAt: new Date().toISOString(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        onSuccess();
+      } else {
+        setErrors({ submit: data.error || 'Failed to process payout' });
+      }
+    } catch (error) {
+      console.error('Process payout error:', error);
+      setErrors({ submit: 'Failed to process payout' });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

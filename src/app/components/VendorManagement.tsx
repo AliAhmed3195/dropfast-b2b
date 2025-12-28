@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Mail, Phone, Building2, MapPin, CheckCircle2, XCircle, Store } from 'lucide-react';
 import { UserForm } from './UserForm';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { showToast } from '../../lib/toast';
 
 interface Vendor {
   id: string;
@@ -25,79 +26,135 @@ export function VendorManagement() {
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const fetchingVendorsRef = useRef(false);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
 
-  // Mock data
-  const [vendors, setVendors] = useState<Vendor[]>([
-    {
-      id: '1',
-      fullName: 'David Thompson',
-      email: 'david@premiumstore.com',
-      businessName: 'Premium Store Network',
-      country: 'United States',
-      phoneNumber: '+1 (555) 234-5678',
-      status: 'active',
-      joinedDate: '2024-01-10',
-      totalStores: 3,
-      totalOrders: 456,
-      totalRevenue: 89500,
-    },
-    {
-      id: '2',
-      fullName: 'Lisa Rodriguez',
-      email: 'lisa@fashionhub.com',
-      businessName: 'Fashion Hub Ltd.',
-      country: 'United Kingdom',
-      phoneNumber: '+44 20 7234 5678',
-      status: 'active',
-      joinedDate: '2024-02-05',
-      totalStores: 2,
-      totalOrders: 312,
-      totalRevenue: 67800,
-    },
-    {
-      id: '3',
-      fullName: 'Raj Patel',
-      email: 'raj@techbazaar.in',
-      businessName: 'Tech Bazaar India',
-      country: 'India',
-      phoneNumber: '+91 22 1234 5678',
-      status: 'active',
-      joinedDate: '2024-01-25',
-      totalStores: 5,
-      totalOrders: 789,
-      totalRevenue: 125000,
-    },
-    {
-      id: '4',
-      fullName: 'Anna Schmidt',
-      email: 'anna@euromarket.de',
-      businessName: 'Euro Market GmbH',
-      country: 'Germany',
-      phoneNumber: '+49 30 23456789',
-      status: 'inactive',
-      joinedDate: '2024-03-15',
-      totalStores: 1,
-      totalOrders: 145,
-      totalRevenue: 34200,
-    },
-    {
-      id: '5',
-      fullName: 'James Kim',
-      email: 'james@asiaretail.kr',
-      businessName: 'Asia Retail Co.',
-      country: 'South Korea',
-      phoneNumber: '+82 2 1234 5678',
-      status: 'active',
-      joinedDate: '2024-02-18',
-      totalStores: 4,
-      totalOrders: 523,
-      totalRevenue: 98700,
-    },
-  ]);
+  useEffect(() => {
+    // Prevent duplicate calls
+    if (fetchingVendorsRef.current) {
+      return;
+    }
 
-  const handleFormSuccess = () => {
+    // Abort previous request if any
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
+    fetchingVendorsRef.current = true;
+
+    const loadVendors = async () => {
+      if (!isMounted) return;
+
+      try {
+        setLoading(true);
+        const status = filterStatus === 'all' ? '' : filterStatus;
+        const url = status ? `/api/admin/vendors?status=${status}` : '/api/admin/vendors';
+        const response = await fetch(url, {
+          signal: abortController.signal,
+        });
+        const data = await response.json();
+        
+        if (isMounted && response.ok) {
+          setVendors(data.vendors || []);
+        } else if (isMounted && !response.ok) {
+          showToast.error(data.error || 'Failed to fetch vendors');
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch vendors error:', error);
+          showToast.error('Failed to fetch vendors');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          fetchingVendorsRef.current = false;
+        }
+      }
+    };
+
+    loadVendors();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      currentAbortControllerRef.current = null;
+      fetchingVendorsRef.current = false;
+    };
+  }, [filterStatus]);
+
+  const fetchVendors = async () => {
+    // Prevent duplicate calls
+    if (fetchingVendorsRef.current) {
+      return;
+    }
+
+    // Abort previous request if any
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
+    fetchingVendorsRef.current = true;
+
+    try {
+      setLoading(true);
+      const status = filterStatus === 'all' ? '' : filterStatus;
+      const url = status ? `/api/admin/vendors?status=${status}` : '/api/admin/vendors';
+      const response = await fetch(url, {
+        signal: abortController.signal,
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setVendors(data.vendors || []);
+      } else {
+        showToast.error(data.error || 'Failed to fetch vendors');
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Fetch vendors error:', error);
+        showToast.error('Failed to fetch vendors');
+      }
+    } finally {
+      setLoading(false);
+      fetchingVendorsRef.current = false;
+      currentAbortControllerRef.current = null;
+    }
+  };
+
+  const handleFormSuccess = async () => {
     setShowForm(false);
-    // Refresh vendors list
+    await fetchVendors();
+    // Toast message is already shown in UserForm
+  };
+
+
+  const handleDeleteVendor = async (vendorId: string) => {
+    if (!confirm('Are you sure you want to delete this vendor?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/users/${vendorId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchVendors();
+        showToast.success('Vendor deleted successfully!');
+      } else {
+        const data = await response.json();
+        showToast.error(data.error || 'Failed to delete vendor');
+      }
+    } catch (error) {
+      console.error('Delete vendor error:', error);
+      showToast.error('Failed to delete vendor');
+    }
   };
 
   const filteredVendors = vendors.filter(vendor => {
@@ -111,12 +168,21 @@ export function VendorManagement() {
     return matchesSearch && matchesFilter;
   });
 
-  if (showForm) {
+  if (showForm || editingVendor) {
     return (
       <UserForm
         preSelectedRole="vendor"
-        onCancel={() => setShowForm(false)}
-        onSuccess={handleFormSuccess}
+        editUser={editingVendor}
+        onCancel={() => {
+          setShowForm(false);
+          setEditingVendor(null);
+        }}
+        onSuccess={async () => {
+          setShowForm(false);
+          setEditingVendor(null);
+          await fetchVendors();
+          // Toast message is already shown in UserForm
+        }}
       />
     );
   }
@@ -295,11 +361,24 @@ export function VendorManagement() {
 
                 {/* Actions */}
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => {
+                      setEditingVendor(vendor);
+                      setShowForm(false);
+                    }}
+                  >
                     <Edit className="w-3 h-3 mr-1" />
                     Edit
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1 hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-500 hover:text-red-600">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1 hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-500 hover:text-red-600"
+                    onClick={() => handleDeleteVendor(vendor.id)}
+                  >
                     <Trash2 className="w-3 h-3 mr-1" />
                     Delete
                   </Button>
@@ -325,6 +404,7 @@ export function VendorManagement() {
           </Button>
         </motion.div>
       )}
+
     </div>
   );
 }

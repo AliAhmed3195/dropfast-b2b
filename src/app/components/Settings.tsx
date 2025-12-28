@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   User,
@@ -26,22 +26,32 @@ import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 
 export function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [isSaving, setIsSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const savingProfileRef = useRef(false);
+  const savingNotificationsRef = useRef(false);
+  const savingPasswordRef = useRef(false);
+  const fetchingUserRef = useRef(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
 
   // Profile Settings
   const [profileData, setProfileData] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    phone: '+1 (555) 123-4567',
-    company: 'FastDrop Enterprise',
-    address: '123 Business Street',
-    city: 'San Francisco',
-    country: 'United States',
+    name: '',
+    email: '',
+    phone: '',
+    company: '',
+    address: '',
+    city: '',
+    country: '',
   });
 
   // Notification Settings
@@ -53,19 +63,192 @@ export function Settings() {
     securityAlerts: true,
   });
 
+  // Fetch full user details from API
+  useEffect(() => {
+    if (!user?.id || fetchingUserRef.current) return;
+    
+    const fetchUserDetails = async () => {
+      fetchingUserRef.current = true;
+      setLoading(true);
+      
+      try {
+        const response = await fetch(`/api/admin/users/${user.id}`);
+        const data = await response.json();
+        
+        if (response.ok && data.user) {
+          const userData = data.user;
+          setProfileData({
+            name: userData.name || '',
+            email: userData.email || '',
+            phone: userData.phone || '',
+            company: userData.businessName || '',
+            address: userData.streetAddress || '',
+            city: userData.city || '',
+            country: userData.country || userData.addressCountry || '',
+          });
+        } else {
+          showToast.error(data.error || 'Failed to load user details');
+        }
+      } catch (error) {
+        console.error('Fetch user details error:', error);
+        showToast.error('Failed to load user details');
+      } finally {
+        setLoading(false);
+        fetchingUserRef.current = false;
+      }
+    };
+
+    fetchUserDetails();
+  }, [user?.id]);
+
   const handleSaveProfile = async () => {
+    if (savingProfileRef.current || !user) return;
+    
+    // Validation
+    if (!profileData.name || !profileData.email) {
+      showToast.error('Name and email are required');
+      return;
+    }
+
+    if (profileData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileData.email)) {
+      showToast.error('Please enter a valid email address');
+      return;
+    }
+    
+    savingProfileRef.current = true;
     setIsSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    toast.success('Profile updated successfully');
+    
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: profileData.name,
+          email: profileData.email,
+          phone: profileData.phone || null,
+          businessName: profileData.company || null,
+          streetAddress: profileData.address || null,
+          city: profileData.city || null,
+          country: profileData.country || null,
+          addressCountry: profileData.country || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success('Profile updated successfully');
+        // Refresh user data
+        fetchingUserRef.current = false;
+        const refreshResponse = await fetch(`/api/admin/users/${user.id}`);
+        const refreshData = await refreshResponse.json();
+        if (refreshResponse.ok && refreshData.user) {
+          const userData = refreshData.user;
+          setProfileData({
+            name: userData.name || '',
+            email: userData.email || '',
+            phone: userData.phone || '',
+            company: userData.businessName || '',
+            address: userData.streetAddress || '',
+            city: userData.city || '',
+            country: userData.country || userData.addressCountry || '',
+          });
+        }
+      } else {
+        showToast.error(data.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('Save profile error:', error);
+      showToast.error('Failed to update profile');
+    } finally {
+      setIsSaving(false);
+      savingProfileRef.current = false;
+    }
   };
 
   const handleSaveNotifications = async () => {
+    if (savingNotificationsRef.current) return;
+    
+    savingNotificationsRef.current = true;
     setIsSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    toast.success('Notification preferences saved');
+    
+    try {
+      // TODO: Create API endpoint for notification preferences
+      // For now, save to localStorage
+      localStorage.setItem('notificationPreferences', JSON.stringify(notifications));
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      showToast.success('Notification preferences saved');
+    } catch (error) {
+      console.error('Save notifications error:', error);
+      showToast.error('Failed to save notification preferences');
+    } finally {
+      setIsSaving(false);
+      savingNotificationsRef.current = false;
+    }
   };
+
+  const handleUpdatePassword = async () => {
+    if (savingPasswordRef.current || !user) return;
+
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      showToast.error('Please fill all password fields');
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      showToast.error('New passwords do not match');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      showToast.error('Password must be at least 6 characters long');
+      return;
+    }
+
+    savingPasswordRef.current = true;
+    setIsSaving(true);
+    
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password: passwordData.newPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success('Password updated successfully');
+        setPasswordData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: '',
+        });
+      } else {
+        showToast.error(data.error || 'Failed to update password');
+      }
+    } catch (error) {
+      console.error('Update password error:', error);
+      showToast.error('Failed to update password');
+    } finally {
+      setIsSaving(false);
+      savingPasswordRef.current = false;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -367,6 +550,8 @@ export function Settings() {
                     type="password"
                     placeholder="Enter current password"
                     className="pl-10"
+                    value={passwordData.currentPassword}
+                    onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
                   />
                 </div>
               </div>
@@ -382,6 +567,8 @@ export function Settings() {
                     type="password"
                     placeholder="Enter new password"
                     className="pl-10"
+                    value={passwordData.newPassword}
+                    onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                   />
                 </div>
               </div>
@@ -397,6 +584,8 @@ export function Settings() {
                     type="password"
                     placeholder="Confirm new password"
                     className="pl-10"
+                    value={passwordData.confirmPassword}
+                    onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                   />
                 </div>
               </div>
@@ -404,11 +593,21 @@ export function Settings() {
 
             <div className="flex justify-end mt-6">
               <Button
-                onClick={() => toast.success('Password updated successfully')}
+                onClick={handleUpdatePassword}
+                disabled={isSaving}
                 className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white"
               >
-                <Save className="w-4 h-4 mr-2" />
-                Update Password
+                {isSaving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Update Password
+                  </>
+                )}
               </Button>
             </div>
           </Card>

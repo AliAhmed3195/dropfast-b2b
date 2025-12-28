@@ -56,11 +56,32 @@ export function SimpleUserForm({ onCancel, onSuccess }: SimpleUserFormProps) {
 
     setIsSubmitting(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setIsSubmitting(false);
-    onSuccess();
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.fullName,
+          email: formData.email,
+          password: formData.password,
+          role: formData.role.toUpperCase(),
+          phone: formData.phoneNumber || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        onSuccess();
+      } else {
+        setErrors({ submit: data.error || 'Failed to create user' });
+      }
+    } catch (error) {
+      console.error('Create user error:', error);
+      setErrors({ submit: 'Failed to create user' });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const roles = [

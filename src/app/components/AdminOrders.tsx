@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ShoppingCart,
@@ -52,99 +52,8 @@ import {
   TableRow,
 } from './ui/table';
 import { Avatar, AvatarFallback } from './ui/avatar';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
-
-// Mock orders data
-const mockOrders = [
-  {
-    id: 'ORD-001',
-    orderNumber: '#12345',
-    customer: {
-      name: 'John Doe',
-      email: 'john@example.com',
-      phone: '+1 (555) 123-4567',
-      address: '123 Main St, New York, NY 10001',
-    },
-    items: [
-      { name: 'Wireless Headphones', quantity: 2, price: 79.99 },
-      { name: 'Phone Case', quantity: 1, price: 19.99 },
-    ],
-    total: 179.97,
-    status: 'pending',
-    createdAt: '2024-12-20',
-    vendor: 'Tech Haven Store',
-  },
-  {
-    id: 'ORD-002',
-    orderNumber: '#12346',
-    customer: {
-      name: 'Sarah Smith',
-      email: 'sarah@example.com',
-      phone: '+1 (555) 234-5678',
-      address: '456 Oak Ave, Los Angeles, CA 90001',
-    },
-    items: [
-      { name: 'Smart Watch', quantity: 1, price: 299.99 },
-    ],
-    total: 299.99,
-    status: 'approved',
-    createdAt: '2024-12-21',
-    vendor: 'Tech Haven Store',
-  },
-  {
-    id: 'ORD-003',
-    orderNumber: '#12347',
-    customer: {
-      name: 'Mike Johnson',
-      email: 'mike@example.com',
-      phone: '+1 (555) 345-6789',
-      address: '789 Elm St, Chicago, IL 60601',
-    },
-    items: [
-      { name: 'Gaming Keyboard', quantity: 1, price: 129.99 },
-      { name: 'Gaming Mouse', quantity: 1, price: 59.99 },
-    ],
-    total: 189.98,
-    status: 'shipped',
-    createdAt: '2024-12-19',
-    vendor: 'Tech Haven Store',
-  },
-  {
-    id: 'ORD-004',
-    orderNumber: '#12348',
-    customer: {
-      name: 'Emily Davis',
-      email: 'emily@example.com',
-      phone: '+1 (555) 456-7890',
-      address: '321 Pine Rd, Houston, TX 77001',
-    },
-    items: [
-      { name: 'Laptop Stand', quantity: 1, price: 49.99 },
-    ],
-    total: 49.99,
-    status: 'delivered',
-    createdAt: '2024-12-18',
-    vendor: 'Tech Haven Store',
-  },
-  {
-    id: 'ORD-005',
-    orderNumber: '#12349',
-    customer: {
-      name: 'Robert Brown',
-      email: 'robert@example.com',
-      phone: '+1 (555) 567-8901',
-      address: '654 Maple Dr, Phoenix, AZ 85001',
-    },
-    items: [
-      { name: 'USB-C Cable', quantity: 3, price: 12.99 },
-    ],
-    total: 38.97,
-    status: 'cancelled',
-    createdAt: '2024-12-22',
-    vendor: 'Tech Haven Store',
-  },
-];
 
 const statusOptions = [
   { value: 'pending', label: 'Pending', icon: Clock, color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' },
@@ -156,16 +65,76 @@ const statusOptions = [
 ];
 
 export function AdminOrders() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [showStatusUpdate, setShowStatusUpdate] = useState(false);
+  const fetchingOrdersRef = useRef(false);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
 
-  const filteredOrders = mockOrders.filter(order => {
+  useEffect(() => {
+    // Prevent duplicate calls
+    if (fetchingOrdersRef.current) {
+      return;
+    }
+
+    // Abort previous request if any
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
+    fetchingOrdersRef.current = true;
+
+    const loadOrders = async () => {
+      if (!isMounted) return;
+
+      try {
+        setLoading(true);
+        const status = statusFilter === 'all' ? '' : statusFilter;
+        const url = status ? `/api/admin/orders?status=${status}` : '/api/admin/orders';
+        const response = await fetch(url, {
+          signal: abortController.signal,
+        });
+        const data = await response.json();
+        
+        if (isMounted && response.ok) {
+          setOrders(data.orders || []);
+        } else if (isMounted && !response.ok) {
+          showToast.error(data.error || 'Failed to fetch orders');
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch orders error:', error);
+          showToast.error('Failed to fetch orders');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          fetchingOrdersRef.current = false;
+        }
+      }
+    };
+
+    loadOrders();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      currentAbortControllerRef.current = null;
+      fetchingOrdersRef.current = false;
+    };
+  }, [statusFilter]);
+
+  const filteredOrders = orders.filter(order => {
     const matchesSearch =
-      order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer.email.toLowerCase().includes(searchQuery.toLowerCase());
+      order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.customer?.email?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -173,14 +142,14 @@ export function AdminOrders() {
   // Calculate current month orders
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
-  const currentMonthOrders = mockOrders.filter(order => {
+  const currentMonthOrders = orders.filter(order => {
     const orderDate = new Date(order.createdAt);
     return orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear;
   });
 
   const stats = {
-    total: mockOrders.length,
-    pending: mockOrders.filter(o => o.status === 'pending').length,
+    total: orders.length,
+    pending: orders.filter(o => o.status === 'pending').length,
     currentMonth: currentMonthOrders.length,
     currentMonthRevenue: currentMonthOrders.reduce((sum, o) => sum + o.total, 0),
   };
@@ -189,10 +158,31 @@ export function AdminOrders() {
     return statusOptions.find(opt => opt.value === status) || statusOptions[0];
   };
 
-  const handleStatusUpdate = (newStatus: string) => {
-    toast.success(`Order status updated to ${newStatus}`);
-    setShowStatusUpdate(false);
-    setSelectedOrder(null);
+  const handleStatusUpdate = async (statusValue: string) => {
+    if (!selectedOrder) return;
+
+    try {
+      const response = await fetch(`/api/admin/orders/${selectedOrder.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: statusValue }), // Send status value (e.g., "pending", "approved")
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await fetchOrders();
+        const statusLabel = statusOptions.find(s => s.value === statusValue)?.label || statusValue;
+        showToast.success(`Order status updated to ${statusLabel}`);
+        setShowStatusUpdate(false);
+        setSelectedOrder(null);
+      } else {
+        showToast.error(data.error || 'Failed to update order status');
+      }
+    } catch (error) {
+      console.error('Update order error:', error);
+      showToast.error('Failed to update order status');
+    }
   };
 
   return (
@@ -295,81 +285,114 @@ export function AdminOrders() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredOrders.map((order, index) => {
-              const statusConfig = getStatusConfig(order.status);
-              const StatusIcon = statusConfig.icon;
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12">
+                  <div className="flex flex-col items-center gap-3">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                      className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"
+                    />
+                    <p className="text-muted-foreground">Loading orders...</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredOrders.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-12">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800">
+                      <ShoppingCart className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-lg">No orders found</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {searchQuery || statusFilter !== 'all'
+                          ? 'Try adjusting your search or filters'
+                          : 'No orders have been placed yet'}
+                      </p>
+                    </div>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredOrders.map((order, index) => {
+                const statusConfig = getStatusConfig(order.status);
+                const StatusIcon = statusConfig.icon;
 
-              return (
-                <motion.tr
-                  key={order.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="hover:bg-muted/50"
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-cyan-500">
-                        <ShoppingCart className="w-4 h-4 text-white" />
+                return (
+                  <motion.tr
+                    key={order.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="hover:bg-muted/50"
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-cyan-500">
+                          <ShoppingCart className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="font-semibold">{order.orderNumber}</p>
+                          <p className="text-xs text-muted-foreground">{order.vendor}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-semibold">{order.orderNumber}</p>
-                        <p className="text-xs text-muted-foreground">{order.vendor}</p>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Avatar className="w-8 h-8">
+                          <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">
+                            {order.customer.name.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium text-sm">{order.customer.name}</p>
+                          <p className="text-xs text-muted-foreground">{order.customer.email}</p>
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Avatar className="w-8 h-8">
-                        <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">
-                          {order.customer.name.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium text-sm">{order.customer.name}</p>
-                        <p className="text-xs text-muted-foreground">{order.customer.email}</p>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm font-medium">{order.items.length} items</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-bold text-purple-600">${order.total.toFixed(2)}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={statusConfig.color}>
+                        <StatusIcon className="w-3 h-3 mr-1" />
+                        {statusConfig.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(order.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedOrder(order)}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedOrder(order);
+                            setShowStatusUpdate(true);
+                          }}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm font-medium">{order.items.length} items</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-bold text-purple-600">${order.total.toFixed(2)}</span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={statusConfig.color}>
-                      <StatusIcon className="w-3 h-3 mr-1" />
-                      {statusConfig.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {new Date(order.createdAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedOrder(order)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setShowStatusUpdate(true);
-                        }}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </motion.tr>
-              );
-            })}
+                    </TableCell>
+                  </motion.tr>
+                );
+              })
+            )}
           </TableBody>
         </Table>
       </Card>
@@ -522,7 +545,12 @@ export function AdminOrders() {
             >
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-bold">Update Order Status</h2>
+                  <div>
+                    <h2 className="text-xl font-bold">Update Order Status</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Only status can be changed. Other order details are read-only.
+                    </p>
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -544,7 +572,7 @@ export function AdminOrders() {
                             key={status.value}
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
-                            onClick={() => handleStatusUpdate(status.label)}
+                            onClick={() => handleStatusUpdate(status.value)}
                             className={cn(
                               'p-4 rounded-xl border-2 transition-all text-left',
                               selectedOrder.status === status.value

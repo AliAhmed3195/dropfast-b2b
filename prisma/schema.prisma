@@ -60,6 +60,9 @@ model User {
   // Notification Preferences (JSON)
   notificationPreferences Json?  // { emailNotifications, orderUpdates, promotionalEmails, weeklyReports, securityAlerts }
 
+  // Account Status
+  isActive          Boolean  @default(true) // Account active/inactive status
+
   // Relations
   productsAsSupplier Product[] @relation("SupplierProducts")
   storesAsVendor     Store[]   @relation("VendorStores")

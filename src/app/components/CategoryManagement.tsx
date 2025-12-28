@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Layers,
@@ -37,52 +37,98 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
 
-// Mock categories data
-const mockCategories = [
-  {
-    id: '1',
-    name: 'Electronics',
-    description: 'Electronic devices and gadgets',
-    displayOrder: 1,
-    productCount: 156,
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Furniture',
-    description: 'Home and office furniture',
-    displayOrder: 2,
-    productCount: 89,
-    createdAt: '2024-02-10',
-  },
-  {
-    id: '3',
-    name: 'Accessories',
-    description: 'Various accessories and add-ons',
-    displayOrder: 3,
-    productCount: 234,
-    createdAt: '2024-03-05',
-  },
-  {
-    id: '4',
-    name: 'Clothing',
-    description: 'Apparel and fashion items',
-    displayOrder: 4,
-    productCount: 67,
-    createdAt: '2024-04-12',
-  },
-];
-
 export function CategoryManagement() {
+  const [categories, setCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<any>(null);
+  const fetchingCategoriesRef = useRef(false);
 
-  const filteredCategories = mockCategories.filter(category =>
-    category.name.toLowerCase().includes(searchQuery.toLowerCase())
+  useEffect(() => {
+    // Prevent duplicate calls - check before setting
+    if (fetchingCategoriesRef.current) {
+      return;
+    }
+
+    let isMounted = true;
+    fetchingCategoriesRef.current = true;
+
+    const loadCategories = async () => {
+      if (!isMounted) return;
+
+      try {
+        setLoading(true);
+        // Global interceptor handles duplicate prevention and AbortController
+        const response = await fetch('/api/admin/categories');
+        const data = await response.json();
+        
+        if (isMounted && response.ok) {
+          setCategories(data.categories || []);
+        } else if (isMounted && !response.ok) {
+          showToast.error(data.error || 'Failed to fetch categories');
+        }
+      } catch (error: any) {
+        // AbortError is expected from global interceptor's duplicate prevention
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch categories error:', error);
+          showToast.error('Failed to fetch categories');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          fetchingCategoriesRef.current = false;
+        }
+      }
+    };
+
+    loadCategories();
+
+    return () => {
+      isMounted = false;
+      fetchingCategoriesRef.current = false;
+    };
+  }, []);
+
+  const fetchCategories = async () => {
+    // Prevent duplicate calls
+    if (fetchingCategoriesRef.current) {
+      return;
+    }
+
+    let isMounted = true;
+    fetchingCategoriesRef.current = true;
+
+    try {
+      setLoading(true);
+      // Global interceptor handles duplicate prevention and AbortController
+      const response = await fetch('/api/admin/categories');
+      const data = await response.json();
+      
+      if (isMounted && response.ok) {
+        setCategories(data.categories || []);
+      } else if (isMounted && !response.ok) {
+        showToast.error(data.error || 'Failed to fetch categories');
+      }
+    } catch (error: any) {
+      // AbortError is expected from global interceptor's duplicate prevention
+      if (error.name !== 'AbortError' && isMounted) {
+      console.error('Fetch categories error:', error);
+        showToast.error('Failed to fetch categories');
+      }
+    } finally {
+      if (isMounted) {
+      setLoading(false);
+        fetchingCategoriesRef.current = false;
+      }
+    }
+  };
+
+  const filteredCategories = categories.filter(category =>
+    category.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleEdit = (category: any) => {
@@ -93,6 +139,27 @@ export function CategoryManagement() {
   const handleAddNew = () => {
     setEditingCategory(null);
     setShowForm(true);
+  };
+
+  const handleDelete = async (categoryId: string) => {
+    if (!confirm('Are you sure you want to delete this category?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/categories/${categoryId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchCategories();
+        showToast.success('Category deleted successfully!');
+      } else {
+        const data = await response.json();
+        showToast.error(data.error || 'Failed to delete category');
+      }
+    } catch (error) {
+      console.error('Delete category error:', error);
+      showToast.error('Failed to delete category');
+    }
   };
 
   return (
@@ -125,7 +192,7 @@ export function CategoryManagement() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Categories</p>
-                  <p className="text-2xl font-bold">{mockCategories.length}</p>
+                  <p className="text-2xl font-bold">{categories.length}</p>
                 </div>
               </div>
             </Card>
@@ -138,7 +205,7 @@ export function CategoryManagement() {
                 <div>
                   <p className="text-sm text-muted-foreground">Total Products</p>
                   <p className="text-2xl font-bold">
-                    {mockCategories.reduce((sum, cat) => sum + cat.productCount, 0)}
+                    {categories.reduce((sum, cat) => sum + (cat.productCount || 0), 0)}
                   </p>
                 </div>
               </div>
@@ -151,7 +218,7 @@ export function CategoryManagement() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Active Categories</p>
-                  <p className="text-2xl font-bold">{mockCategories.length}</p>
+                  <p className="text-2xl font-bold">{categories.filter(c => c.isActive !== false).length}</p>
                 </div>
               </div>
             </Card>
@@ -184,7 +251,39 @@ export function CategoryManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCategories.map((category, index) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-3">
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                          className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"
+                        />
+                        <p className="text-muted-foreground">Loading categories...</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredCategories.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800">
+                          <Layers className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-lg">No categories found</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {searchQuery
+                              ? 'Try adjusting your search'
+                              : 'No categories have been created yet. Click "Add Category" to create your first category.'}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredCategories.map((category, index) => (
                   <motion.tr
                     key={category.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -230,7 +329,7 @@ export function CategoryManagement() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            onClick={() => toast.success('Category deleted')}
+                            onClick={() => handleDelete(category.id)}
                             className="text-red-600"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -240,7 +339,8 @@ export function CategoryManagement() {
                       </DropdownMenu>
                     </TableCell>
                   </motion.tr>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           </Card>
@@ -252,12 +352,11 @@ export function CategoryManagement() {
             setShowForm(false);
             setEditingCategory(null);
           }}
-          onSuccess={() => {
+          onSuccess={async () => {
             setShowForm(false);
             setEditingCategory(null);
-            toast.success(
-              editingCategory ? 'Category updated successfully!' : 'Category created successfully!'
-            );
+            await fetchCategories();
+            // Success toast is already shown in CategoryForm
           }}
         />
       )}
@@ -308,9 +407,39 @@ function CategoryForm({ category, onCancel, onSuccess }: CategoryFormProps) {
     if (!validateForm()) return;
 
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    onSuccess();
+    
+    try {
+      const url = category ? `/api/admin/categories/${category.id}` : '/api/admin/categories';
+      const method = category ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description || null,
+          displayOrder: formData.displayOrder || 0,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success(category ? 'Category updated successfully!' : 'Category created successfully!');
+        onSuccess();
+      } else {
+        const errorMessage = data.error || 'Failed to save category';
+        showToast.error(errorMessage);
+        setErrors({ submit: errorMessage });
+      }
+    } catch (error) {
+      console.error('Save category error:', error);
+      const errorMessage = 'Failed to save category';
+      showToast.error(errorMessage);
+      setErrors({ submit: errorMessage });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

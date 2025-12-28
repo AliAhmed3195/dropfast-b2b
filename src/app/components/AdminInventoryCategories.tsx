@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Layers, Plus, Edit, Trash2, Search, ChevronLeft, X, Package } from 'lucide-react';
 import { Card } from './ui/card';
@@ -12,21 +12,108 @@ import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 
-const mockCategories = [
-  { id: '1', name: 'Electronics', description: 'Electronic devices and gadgets', productCount: 156, subcategories: ['Audio', 'Gaming', 'Wearables'] },
-  { id: '2', name: 'Furniture', description: 'Home and office furniture', productCount: 45, subcategories: ['Office', 'Bedroom', 'Living Room'] },
-  { id: '3', name: 'Accessories', description: 'Various accessories', productCount: 89, subcategories: ['Charging', 'Cables', 'Cases'] },
-  { id: '4', name: 'Office', description: 'Office supplies', productCount: 67, subcategories: ['Stationery', 'Storage', 'Desk'] },
-];
-
 export function AdminInventoryCategories() {
   const router = useRouter();
+  const [categories, setCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<any>(null);
 
-  const filteredCategories = mockCategories.filter(cat =>
-    cat.name.toLowerCase().includes(searchQuery.toLowerCase())
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/categories');
+      const data = await response.json();
+      
+      if (response.ok) {
+        setCategories(data.categories || []);
+      } else {
+        toast.error(data.error || 'Failed to fetch categories');
+      }
+    } catch (error) {
+      console.error('Fetch categories error:', error);
+      toast.error('Failed to fetch categories');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (categoryId: string) => {
+    if (!confirm('Are you sure you want to delete this category?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/categories/${categoryId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchCategories();
+        toast.success('Category deleted successfully!');
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Failed to delete category');
+      }
+    } catch (error) {
+      console.error('Delete category error:', error);
+      toast.error('Failed to delete category');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const name = formData.get('categoryName') as string;
+    const description = formData.get('description') as string;
+    const subcategoriesStr = formData.get('subcategories') as string;
+
+    try {
+      if (editingCategory) {
+        // Update category
+        const response = await fetch(`/api/admin/categories/${editingCategory.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description }),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          toast.success('Category updated successfully!');
+          await fetchCategories();
+          setShowAddForm(false);
+          setEditingCategory(null);
+        } else {
+          toast.error(data.error || 'Failed to update category');
+        }
+      } else {
+        // Create category
+        const response = await fetch('/api/admin/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description }),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          toast.success('Category created successfully!');
+          await fetchCategories();
+          setShowAddForm(false);
+        } else {
+          toast.error(data.error || 'Failed to create category');
+        }
+      }
+    } catch (error) {
+      console.error('Save category error:', error);
+      toast.error('Failed to save category');
+    }
+  };
+
+  const filteredCategories = categories.filter(cat =>
+    cat.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -71,7 +158,7 @@ export function AdminInventoryCategories() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground font-medium">Total Categories</p>
-              <p className="text-2xl font-bold">{mockCategories.length}</p>
+              <p className="text-2xl font-bold">{categories.length}</p>
             </div>
           </div>
         </Card>
@@ -82,7 +169,7 @@ export function AdminInventoryCategories() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground font-medium">Total Products</p>
-              <p className="text-2xl font-bold">{mockCategories.reduce((sum, c) => sum + c.productCount, 0)}</p>
+              <p className="text-2xl font-bold">{categories.reduce((sum, c) => sum + (c.productCount || 0), 0)}</p>
             </div>
           </div>
         </Card>
@@ -92,8 +179,8 @@ export function AdminInventoryCategories() {
               <Layers className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground font-medium">Subcategories</p>
-              <p className="text-2xl font-bold">{mockCategories.reduce((sum, c) => sum + c.subcategories.length, 0)}</p>
+              <p className="text-sm text-muted-foreground font-medium">Active Categories</p>
+              <p className="text-2xl font-bold">{categories.filter(c => (c.productCount || 0) > 0).length}</p>
             </div>
           </div>
         </Card>
@@ -113,8 +200,13 @@ export function AdminInventoryCategories() {
       </Card>
 
       {/* Categories Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCategories.map((category, idx) => (
+      {loading ? (
+        <div className="text-center py-16">
+          <p className="text-muted-foreground">Loading categories...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredCategories.map((category, idx) => (
           <motion.div
             key={category.id}
             initial={{ opacity: 0, y: 20 }}
@@ -130,7 +222,7 @@ export function AdminInventoryCategories() {
                   <Button variant="ghost" size="icon" onClick={() => setEditingCategory(category)}>
                     <Edit className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => toast.success('Category deleted')}>
+                  <Button variant="ghost" size="icon" onClick={() => handleDelete(category.id)}>
                     <Trash2 className="w-4 h-4 text-red-500" />
                   </Button>
                 </div>
@@ -141,28 +233,19 @@ export function AdminInventoryCategories() {
 
               <div className="flex items-center justify-between pt-4 border-t">
                 <div>
-                  <p className="text-2xl font-bold text-purple-600">{category.productCount}</p>
+                  <p className="text-2xl font-bold text-purple-600">{category.productCount || 0}</p>
                   <p className="text-xs text-muted-foreground">Products</p>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold">{category.subcategories.length}</p>
-                  <p className="text-xs text-muted-foreground">Subcategories</p>
+                  <p className="text-lg font-semibold">{category.displayOrder || 0}</p>
+                  <p className="text-xs text-muted-foreground">Display Order</p>
                 </div>
               </div>
-
-              {category.subcategories.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {category.subcategories.map(sub => (
-                    <Badge key={sub} variant="outline" className="text-xs">
-                      {sub}
-                    </Badge>
-                  ))}
-                </div>
-              )}
             </Card>
           </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Add/Edit Form */}
       <AnimatePresence>
@@ -195,18 +278,14 @@ export function AdminInventoryCategories() {
                   </Button>
                 </div>
 
-                <form className="space-y-4" onSubmit={(e) => {
-                  e.preventDefault();
-                  toast.success(editingCategory ? 'Category updated!' : 'Category added!');
-                  setShowAddForm(false);
-                  setEditingCategory(null);
-                }}>
+                <form className="space-y-4" onSubmit={handleSubmit}>
                   <div className="space-y-2">
                     <Label htmlFor="categoryName">
                       Category Name <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="categoryName"
+                      name="categoryName"
                       defaultValue={editingCategory?.name}
                       placeholder="e.g., Electronics"
                       required
@@ -217,18 +296,10 @@ export function AdminInventoryCategories() {
                     <Label htmlFor="description">Description</Label>
                     <Textarea
                       id="description"
+                      name="description"
                       defaultValue={editingCategory?.description}
                       placeholder="Describe this category..."
                       rows={3}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="subcategories">Subcategories (comma separated)</Label>
-                    <Input
-                      id="subcategories"
-                      defaultValue={editingCategory?.subcategories.join(', ')}
-                      placeholder="Audio, Gaming, Wearables"
                     />
                   </div>
 
@@ -249,3 +320,4 @@ export function AdminInventoryCategories() {
     </div>
   );
 }
+

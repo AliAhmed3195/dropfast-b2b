@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Mail, Phone, Building2, MapPin, CheckCircle2, XCircle } from 'lucide-react';
 import { UserForm } from './UserForm';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { showToast } from '../../lib/toast';
 
 interface Supplier {
   id: string;
@@ -24,62 +25,135 @@ export function SupplierManagement() {
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const fetchingSuppliersRef = useRef(false);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
 
-  // Mock data
-  const [suppliers, setSuppliers] = useState<Supplier[]>([
-    {
-      id: '1',
-      fullName: 'John Anderson',
-      email: 'john@techsupply.com',
-      businessName: 'Tech Supply Co.',
-      country: 'United States',
-      phoneNumber: '+1 (555) 123-4567',
-      status: 'active',
-      joinedDate: '2024-01-15',
-      totalProducts: 245,
-      totalRevenue: 125000,
-    },
-    {
-      id: '2',
-      fullName: 'Sarah Martinez',
-      email: 'sarah@globalgoods.com',
-      businessName: 'Global Goods Ltd.',
-      country: 'United Kingdom',
-      phoneNumber: '+44 20 7123 4567',
-      status: 'active',
-      joinedDate: '2024-02-20',
-      totalProducts: 189,
-      totalRevenue: 98500,
-    },
-    {
-      id: '3',
-      fullName: 'Michael Chen',
-      email: 'michael@eastsupplies.com',
-      businessName: 'East Supplies Inc.',
-      country: 'China',
-      phoneNumber: '+86 10 1234 5678',
-      status: 'inactive',
-      joinedDate: '2024-03-10',
-      totalProducts: 312,
-      totalRevenue: 156000,
-    },
-    {
-      id: '4',
-      fullName: 'Emma Wilson',
-      email: 'emma@europarts.eu',
-      businessName: 'Euro Parts Distribution',
-      country: 'Germany',
-      phoneNumber: '+49 30 12345678',
-      status: 'active',
-      joinedDate: '2024-01-28',
-      totalProducts: 178,
-      totalRevenue: 87300,
-    },
-  ]);
+  useEffect(() => {
+    // Prevent duplicate calls
+    if (fetchingSuppliersRef.current) {
+      return;
+    }
 
-  const handleFormSuccess = () => {
+    // Abort previous request if any
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
+    fetchingSuppliersRef.current = true;
+
+    const loadSuppliers = async () => {
+      if (!isMounted) return;
+
+      try {
+        setLoading(true);
+        const status = filterStatus === 'all' ? '' : filterStatus;
+        const url = status ? `/api/admin/suppliers?status=${status}` : '/api/admin/suppliers';
+        const response = await fetch(url, {
+          signal: abortController.signal,
+        });
+        const data = await response.json();
+        
+        if (isMounted && response.ok) {
+          setSuppliers(data.suppliers || []);
+        } else if (isMounted && !response.ok) {
+          showToast.error(data.error || 'Failed to fetch suppliers');
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch suppliers error:', error);
+          showToast.error('Failed to fetch suppliers');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          fetchingSuppliersRef.current = false;
+        }
+      }
+    };
+
+    loadSuppliers();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      currentAbortControllerRef.current = null;
+      fetchingSuppliersRef.current = false;
+    };
+  }, [filterStatus]);
+
+  const fetchSuppliers = async () => {
+    // Prevent duplicate calls
+    if (fetchingSuppliersRef.current) {
+      return;
+    }
+
+    // Abort previous request if any
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
+    fetchingSuppliersRef.current = true;
+
+    try {
+      setLoading(true);
+      const status = filterStatus === 'all' ? '' : filterStatus;
+      const url = status ? `/api/admin/suppliers?status=${status}` : '/api/admin/suppliers';
+      const response = await fetch(url, {
+        signal: abortController.signal,
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setSuppliers(data.suppliers || []);
+      } else {
+        showToast.error(data.error || 'Failed to fetch suppliers');
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Fetch suppliers error:', error);
+        showToast.error('Failed to fetch suppliers');
+      }
+    } finally {
+      setLoading(false);
+      fetchingSuppliersRef.current = false;
+      currentAbortControllerRef.current = null;
+    }
+  };
+
+  const handleFormSuccess = async () => {
     setShowForm(false);
-    // Refresh suppliers list
+    await fetchSuppliers();
+    // Toast message is already shown in UserForm
+  };
+
+
+  const handleDeleteSupplier = async (supplierId: string) => {
+    if (!confirm('Are you sure you want to delete this supplier?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/users/${supplierId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchSuppliers();
+        showToast.success('Supplier deleted successfully!');
+      } else {
+        const data = await response.json();
+        showToast.error(data.error || 'Failed to delete supplier');
+      }
+    } catch (error) {
+      console.error('Delete supplier error:', error);
+      showToast.error('Failed to delete supplier');
+    }
   };
 
   const filteredSuppliers = suppliers.filter(supplier => {
@@ -93,12 +167,21 @@ export function SupplierManagement() {
     return matchesSearch && matchesFilter;
   });
 
-  if (showForm) {
+  if (showForm || editingSupplier) {
     return (
       <UserForm
         preSelectedRole="supplier"
-        onCancel={() => setShowForm(false)}
-        onSuccess={handleFormSuccess}
+        editUser={editingSupplier}
+        onCancel={() => {
+          setShowForm(false);
+          setEditingSupplier(null);
+        }}
+        onSuccess={async () => {
+          setShowForm(false);
+          setEditingSupplier(null);
+          await fetchSuppliers();
+          // Toast message is already shown in UserForm
+        }}
       />
     );
   }
@@ -271,11 +354,24 @@ export function SupplierManagement() {
 
                 {/* Actions */}
                 <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => {
+                      setEditingSupplier(supplier);
+                      setShowForm(false);
+                    }}
+                  >
                     <Edit className="w-3 h-3 mr-1" />
                     Edit
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1 hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-500 hover:text-red-600">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1 hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-500 hover:text-red-600"
+                    onClick={() => handleDeleteSupplier(supplier.id)}
+                  >
                     <Trash2 className="w-3 h-3 mr-1" />
                     Delete
                   </Button>
@@ -301,6 +397,7 @@ export function SupplierManagement() {
           </Button>
         </motion.div>
       )}
+
     </div>
   );
 }

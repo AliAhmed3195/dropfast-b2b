@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useApiCall } from '../../hooks/useApiCall';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Users,
@@ -23,6 +24,7 @@ import {
   Shield,
   Briefcase,
   X,
+  Calendar,
 } from 'lucide-react';
 import { SimpleUserForm } from './SimpleUserForm';
 import { Card } from './ui/card';
@@ -52,7 +54,8 @@ import {
   TableRow,
 } from './ui/table';
 import { Avatar, AvatarFallback } from './ui/avatar';
-import { toast } from 'sonner';
+import { Label } from './ui/label';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
 
 // Mock user data - Admin internal users
@@ -207,35 +210,128 @@ const vendorUsers = [
   },
 ];
 
-const allUsers = [...adminUsers, ...supplierUsers, ...vendorUsers];
-
 export function AdminUsers() {
-  const [users, setUsers] = useState(allUsers);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'admin' | 'supplier' | 'vendor'>('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [viewingUser, setViewingUser] = useState<any>(null);
+  const { callApi } = useApiCall();
 
-  const handleFormSuccess = () => {
+  const fetchUsers = async (signal?: AbortSignal) => {
+    try {
+      setLoading(true);
+      const role = userTypeFilter === 'all' ? '' : userTypeFilter;
+      const url = role ? `/api/admin/users?role=${role}` : '/api/admin/users';
+      const response = await fetch(url, { signal });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUsers(data.users || []);
+      } else {
+        showToast.error(data.error || 'Failed to fetch users');
+      }
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Fetch users error:', error);
+        showToast.error('Failed to fetch users');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch users on mount
+  useEffect(() => {
+    callApi(fetchUsers);
+  }, [userTypeFilter, callApi]);
+
+  const handleFormSuccess = async () => {
     setShowForm(false);
-    toast.success('User created successfully!');
+    await fetchUsers();
+    showToast.success('User created successfully!');
   };
 
-  const handleSaveUser = (updatedUser: any) => {
-    setUsers(prev =>
-      prev.map(u => (u.id === updatedUser.id ? updatedUser : u))
-    );
-    setEditingUser(null);
-    toast.success('User updated successfully!');
+  const handleSaveUser = async (updatedUser: any) => {
+    try {
+      // Map to API format - ensure role is properly formatted
+      const roleValue = updatedUser.userType || updatedUser.role || 'customer';
+      const apiData: any = {
+        name: updatedUser.name || '',
+        email: updatedUser.email || '',
+        role: roleValue.toLowerCase(), // API expects lowercase
+        businessName: updatedUser.organization || updatedUser.businessName || null,
+      };
+
+      // Include status if provided
+      if (updatedUser.status !== undefined) {
+        apiData.status = updatedUser.status; // API will convert to isActive
+      } else if (updatedUser.isActive !== undefined) {
+        apiData.isActive = updatedUser.isActive;
+      }
+
+      // Validate required fields
+      if (!apiData.name || !apiData.email) {
+        showToast.error('Name and Email are required');
+        return;
+      }
+
+      const response = await fetch(`/api/admin/users/${updatedUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(apiData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await fetchUsers();
+        setEditingUser(null);
+        showToast.success('User updated successfully!');
+      } else {
+        showToast.error(data.error || 'Failed to update user');
+      }
+    } catch (error) {
+      console.error('Update user error:', error);
+      showToast.error('Failed to update user');
+    }
   };
 
-  const handleToggleStatus = (userId: string) => {
-    setUsers(prev =>
-      prev.map(u =>
-        u.id === userId ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' } : u
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchUsers();
+        showToast.success('User deleted successfully!');
+      } else {
+        const data = await response.json();
+        showToast.error(data.error || 'Failed to delete user');
+      }
+    } catch (error) {
+      console.error('Delete user error:', error);
+      showToast.error('Failed to delete user');
+    }
+  };
+
+  const handleToggleStatus = async (userId: string, newStatus: string) => {
+    // Update local state immediately for better UX
+    setUsers(prevUsers => 
+      prevUsers.map(u => 
+        u.id === userId ? { ...u, status: newStatus } : u
       )
     );
+    
+    // Note: Status is UI-only since database doesn't have status field
+    // The status will persist in component state until page refresh
+    // To persist in database, we would need to add a status field to the User model
   };
 
   const filteredUsers = users.filter(user => {
@@ -275,10 +371,10 @@ export function AdminUsers() {
   };
 
   const stats = {
-    total: allUsers.length,
-    admin: adminUsers.length,
-    supplier: supplierUsers.length,
-    vendor: vendorUsers.length,
+    total: users.length,
+    admin: users.filter(u => u.userType === 'admin').length,
+    supplier: users.filter(u => u.userType === 'supplier').length,
+    vendor: users.filter(u => u.userType === 'vendor').length,
   };
 
   // If form is showing, render it instead of the list
@@ -463,20 +559,26 @@ export function AdminUsers() {
 
       {/* Users Table */}
       <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="font-semibold">User</TableHead>
-              <TableHead className="font-semibold">Type</TableHead>
-              <TableHead className="font-semibold">Organization</TableHead>
-              <TableHead className="font-semibold">Created By</TableHead>
-              <TableHead className="font-semibold">Status</TableHead>
-              <TableHead className="font-semibold">Joined</TableHead>
-              <TableHead className="font-semibold">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredUsers.map((user, index) => {
+        {loading ? (
+          <div className="text-center py-16">
+            <Users className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50 animate-pulse" />
+            <p className="text-lg text-muted-foreground">Loading users...</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="font-semibold">User</TableHead>
+                <TableHead className="font-semibold">Type</TableHead>
+                <TableHead className="font-semibold">Organization</TableHead>
+                <TableHead className="font-semibold">Created By</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Joined</TableHead>
+                <TableHead className="font-semibold">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.map((user, index) => {
               const UserTypeIcon = getUserTypeIcon(user.userType);
 
               return (
@@ -545,7 +647,7 @@ export function AdminUsers() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => toast.success('View user details')}>
+                        <DropdownMenuItem onClick={() => setViewingUser(user)}>
                           <Users className="w-4 h-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
@@ -561,8 +663,9 @@ export function AdminUsers() {
             })}
           </TableBody>
         </Table>
+        )}
 
-        {filteredUsers.length === 0 && (
+        {!loading && filteredUsers.length === 0 && (
           <div className="text-center py-16">
             <Users className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
             <p className="text-lg text-muted-foreground">No users found</p>
@@ -581,17 +684,355 @@ export function AdminUsers() {
           />
         )}
       </AnimatePresence>
+
+      {/* View User Details Modal */}
+      <AnimatePresence>
+        {viewingUser && (
+          <UserDetailModal
+            userId={viewingUser.id}
+            onClose={() => setViewingUser(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// View User Details Modal Component
+function UserDetailModal({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    
+    // Prevent duplicate calls
+    if (fetchingRef.current) {
+      return;
+    }
+
+    // Abort previous request if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    fetchingRef.current = true;
+    
+    const fetchUserDetails = async () => {
+      if (!isMounted) return;
+      
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/admin/users/${userId}`, {
+          signal: abortController.signal,
+        });
+        const data = await response.json();
+        
+        if (isMounted) {
+          if (response.ok) {
+            setUser(data.user);
+          } else {
+            showToast.error(data.error || 'Failed to fetch user details');
+            onClose();
+          }
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch user details error:', error);
+          showToast.error('Failed to fetch user details');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          fetchingRef.current = false;
+        }
+      }
+    };
+    
+    fetchUserDetails();
+    
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      abortControllerRef.current = null;
+      fetchingRef.current = false;
+    };
+  }, [userId]);
+
+  if (loading) {
+    return (
+      <>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+          onClick={onClose}
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl z-50 max-h-[90vh] overflow-y-auto"
+        >
+          <Card className="p-6">
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-muted-foreground">Loading user details...</p>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+      </>
+    );
+  }
+
+  if (!user) return null;
+
+  const getUserTypeIcon = (userType: string) => {
+    switch (userType) {
+      case 'admin':
+        return Shield;
+      case 'supplier':
+        return Package;
+      case 'vendor':
+        return Store;
+      default:
+        return Users;
+    }
+  };
+
+  const UserTypeIcon = getUserTypeIcon(user.userType || user.role);
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-3xl z-50 max-h-[90vh] overflow-y-auto"
+      >
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold">User Details</h2>
+              <p className="text-sm text-muted-foreground">Complete user information</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+
+          <div className="space-y-6">
+            {/* User Header */}
+            <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-50 to-cyan-50 dark:from-purple-900/20 dark:to-cyan-900/20 rounded-lg">
+              <Avatar className="w-16 h-16">
+                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-cyan-500 text-white text-xl">
+                  {user.name?.slice(0, 2).toUpperCase() || 'U'}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <h3 className="text-xl font-bold">{user.name}</h3>
+                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  {user.email}
+                </p>
+                <Badge className={cn(
+                  'mt-2',
+                  user.userType === 'admin' || user.role === 'admin'
+                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400'
+                    : user.userType === 'supplier' || user.role === 'supplier'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                    : user.userType === 'vendor' || user.role === 'vendor'
+                    ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-400'
+                    : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400'
+                )}>
+                  <UserTypeIcon className="w-3 h-3 mr-1" />
+                  {(user.userType || user.role || 'customer').charAt(0).toUpperCase() + (user.userType || user.role || 'customer').slice(1)}
+                </Badge>
+              </div>
+            </div>
+
+            {/* Basic Information */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-muted-foreground">Organization</Label>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                  <span>{user.businessName || user.organization || 'N/A'}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-muted-foreground">Joined Date</Label>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                  <span>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                className="flex-1"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </motion.div>
+    </>
   );
 }
 
 // Edit User Modal Component
 function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
   const [formData, setFormData] = useState(user);
+  const [loading, setLoading] = useState(false);
+  const fetchingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch full user data when editing to ensure we have all fields
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    // Prevent duplicate calls
+    if (fetchingRef.current) {
+      return;
+    }
+
+    // Abort previous request if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    fetchingRef.current = true;
+    
+    const loadUserDetails = async () => {
+      if (!isMounted) return;
+      
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/admin/users/${user.id}`, {
+          signal: abortController.signal,
+        });
+        const data = await response.json();
+        
+        if (isMounted && response.ok) {
+          setFormData({
+            ...data.user,
+            organization: data.user.businessName || data.user.organization || '',
+            userType: data.user.userType || data.user.role || 'customer',
+            status: data.user.status || (data.user.isActive ? 'active' : 'inactive') || 'active',
+          });
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch user details error:', error);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          fetchingRef.current = false;
+        }
+      }
+    };
+    
+    loadUserDetails();
+    
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      abortControllerRef.current = null;
+      fetchingRef.current = false;
+    };
+  }, [user?.id]);
+
+  const fetchUserDetails = async () => {
+    if (!user?.id) return;
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/admin/users/${user.id}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        setFormData({
+          ...data.user,
+          organization: data.user.businessName || data.user.organization || '',
+          userType: data.user.userType || data.user.role || 'customer',
+          status: data.user.status || (data.user.isActive ? 'active' : 'inactive') || 'active',
+        });
+      }
+    } catch (error) {
+      console.error('Fetch user details error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    
+    // Validate required fields
+    if (!formData.name || !formData.email) {
+      showToast.error('Name and Email are required');
+      return;
+    }
+
+    // Map formData to API format - only send fields that exist in original form
+    const updateData = {
+      id: user.id,
+      name: formData.name || '',
+      email: formData.email || '',
+      role: (formData.userType || formData.role || 'customer').toLowerCase(),
+      businessName: formData.organization || formData.businessName || null,
+      status: formData.status || 'active', // Include status in save
+    };
+    
+    onSave(updateData);
+  };
+
+  const handleStatusToggle = async () => {
+    const newStatus = formData.status === 'active' ? 'inactive' : 'active';
+    const updatedFormData = { ...formData, status: newStatus };
+    setFormData(updatedFormData);
+    
+    // Immediately save the status change to database
+    const updateData = {
+      id: user.id,
+      name: formData.name || '',
+      email: formData.email || '',
+      role: (formData.userType || formData.role || 'customer').toLowerCase(),
+      businessName: formData.organization || formData.businessName || null,
+      status: newStatus,
+    };
+    
+    try {
+      await onSave(updateData);
+      showToast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully!`);
+    } catch (error) {
+      // Revert status on error
+      setFormData({ ...formData });
+      showToast.error('Failed to update user status');
+    }
   };
 
   return (
@@ -631,7 +1072,7 @@ function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
                   <Input
                     id="user-name"
                     type="text"
-                    value={formData.name}
+                    value={formData.name || ''}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                   />
@@ -643,7 +1084,7 @@ function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
                   <Input
                     id="user-email"
                     type="email"
-                    value={formData.email}
+                    value={formData.email || ''}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
                   />
@@ -658,9 +1099,8 @@ function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
                   <Input
                     id="user-organization"
                     type="text"
-                    value={formData.organization}
-                    onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
-                    required
+                    value={formData.organization || formData.businessName || ''}
+                    onChange={(e) => setFormData({ ...formData, organization: e.target.value, businessName: e.target.value })}
                   />
                 </div>
                 <div>
@@ -668,8 +1108,8 @@ function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
                     User Type
                   </label>
                   <Select
-                    value={formData.userType}
-                    onValueChange={(value) => setFormData({ ...formData, userType: value })}
+                    value={formData.userType || formData.role || 'customer'}
+                    onValueChange={(value) => setFormData({ ...formData, userType: value, role: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -694,11 +1134,7 @@ function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
                   type="button"
                   variant={formData.status === 'active' ? 'outline' : 'default'}
                   size="sm"
-                  onClick={() => {
-                    const newStatus = formData.status === 'active' ? 'inactive' : 'active';
-                    setFormData({ ...formData, status: newStatus });
-                    onToggleStatus(formData.id);
-                  }}
+                  onClick={handleStatusToggle}
                 >
                   {formData.status === 'active' ? 'Deactivate' : 'Activate'}
                 </Button>

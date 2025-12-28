@@ -70,15 +70,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
   const login = async (email: string, password: string): Promise<User | null> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    const userRecord = MOCK_USERS[email.toLowerCase()];
-    if (userRecord && userRecord.password === password) {
-      setUser(userRecord.user);
-      return userRecord.user; // Return user object with role
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+
+      // Format user data to match User interface
+      const userData = data.user;
+      const loggedInUser: User = {
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        role: userData.role.toLowerCase() as UserType,
+        avatar: userData.avatar,
+        company: userData.businessName,
+      };
+
+      setUser(loggedInUser);
+      return loggedInUser;
+    } catch (error) {
+      console.error('Login error:', error);
+      return null;
     }
-    return null; // Return null if login fails
   };
 
   const logout = () => {

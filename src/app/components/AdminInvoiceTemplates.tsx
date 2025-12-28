@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText,
@@ -23,77 +23,93 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
 
-// Mock invoice templates with unique layouts
-const invoiceTemplates = [
-  {
-    id: '1',
-    name: 'Modern Gradient',
-    description: 'Contemporary design with vibrant gradients and clean layout',
-    layout: 'gradient',
-    isDefault: true,
-    isActive: true,
-    accentColor: 'from-purple-600 to-cyan-600',
-    usedBy: 12,
-  },
-  {
-    id: '2',
-    name: 'Classic Professional',
-    description: 'Traditional corporate design with left sidebar',
-    layout: 'classic',
-    isDefault: false,
-    isActive: true,
-    accentColor: 'from-blue-600 to-indigo-600',
-    usedBy: 8,
-  },
-  {
-    id: '3',
-    name: 'Minimalist Clean',
-    description: 'Simple elegant design with subtle borders',
-    layout: 'minimal',
-    isDefault: false,
-    isActive: true,
-    accentColor: 'from-slate-700 to-slate-900',
-    usedBy: 5,
-  },
-  {
-    id: '4',
-    name: 'Bold Corporate',
-    description: 'Professional design with top banner and sections',
-    layout: 'corporate',
-    isDefault: false,
-    isActive: false,
-    accentColor: 'from-green-600 to-teal-600',
-    usedBy: 3,
-  },
-];
+// Note: Invoice templates are now managed in src/lib/invoice-templates-seed.ts
+// They are automatically synced to the database when the API is called
 
 export function AdminInvoiceTemplates() {
-  const [templates, setTemplates] = useState(invoiceTemplates);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const fetchingTemplatesRef = useRef(false);
 
-  const handleSetDefault = (templateId: string) => {
-    setTemplates(prev =>
-      prev.map(t => ({
-        ...t,
-        isDefault: t.id === templateId,
-      }))
-    );
-    toast.success('Default template updated!');
+  useEffect(() => {
+    if (fetchingTemplatesRef.current) return;
+    fetchTemplates();
+  }, []);
+
+  const fetchTemplates = async () => {
+    if (fetchingTemplatesRef.current) return;
+    fetchingTemplatesRef.current = true;
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/invoice-templates');
+      const data = await response.json();
+      
+      if (response.ok) {
+        setTemplates(data.templates || []);
+      } else {
+        showToast.error(data.error || 'Failed to fetch templates');
+      }
+    } catch (error) {
+      console.error('Fetch templates error:', error);
+      showToast.error('Failed to fetch templates');
+    } finally {
+      setLoading(false);
+      fetchingTemplatesRef.current = false;
+    }
   };
 
-  const handleToggleActive = (templateId: string) => {
-    setTemplates(prev =>
-      prev.map(t =>
-        t.id === templateId
-          ? { ...t, isActive: !t.isActive, ...(t.isDefault && !t.isActive ? { isDefault: false } : {}) }
-          : t
-      )
-    );
+  const handleSetDefault = async (templateId: string) => {
+    try {
+      const response = await fetch(`/api/admin/invoice-templates/${templateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isDefault: true }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await fetchTemplates();
+        showToast.success('Default template updated!');
+      } else {
+        showToast.error(data.error || 'Failed to update template');
+      }
+    } catch (error) {
+      console.error('Update template error:', error);
+      showToast.error('Failed to update template');
+    }
+  };
+
+  const handleToggleActive = async (templateId: string) => {
     const template = templates.find(t => t.id === templateId);
-    toast.success(template?.isActive ? 'Template deactivated' : 'Template activated');
+    const newActiveState = !template?.isActive;
+
+    try {
+      const response = await fetch(`/api/admin/invoice-templates/${templateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          isActive: newActiveState,
+          ...(newActiveState === false && template?.isDefault ? { isDefault: false } : {}),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await fetchTemplates();
+        showToast.success(newActiveState ? 'Template activated' : 'Template deactivated');
+      } else {
+        showToast.error(data.error || 'Failed to update template');
+      }
+    } catch (error) {
+      console.error('Update template error:', error);
+      showToast.error('Failed to update template');
+    }
   };
 
   const stats = {
@@ -173,79 +189,99 @@ export function AdminInvoiceTemplates() {
       </div>
 
       {/* Templates Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {templates.map((template, index) => (
-          <motion.div
-            key={template.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+        </div>
+      ) : templates.length === 0 ? (
+        <Card className="p-12 text-center">
+          <FileText className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-xl font-bold mb-2">No Templates Found</h3>
+          <p className="text-muted-foreground mb-4">
+            Invoice templates will be automatically created from code definitions.
+          </p>
+          <Button
+            onClick={fetchTemplates}
+            className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white"
           >
-            <Card className={cn(
-              "overflow-hidden transition-all hover:shadow-xl",
-              template.isDefault && "ring-2 ring-purple-500"
-            )}>
-              {/* Template Preview */}
-              <div className="relative h-80 bg-slate-50 dark:bg-slate-950 p-4">
-                {template.isDefault && (
-                  <Badge className="absolute top-6 right-6 bg-gradient-to-r from-purple-600 to-cyan-600 text-white z-10">
-                    <Star className="w-3 h-3 mr-1 fill-white" />
-                    Default
-                  </Badge>
-                )}
-                
-                {/* Mini Invoice Preview with different layouts */}
-                <TemplatePreviewMini template={template} />
-              </div>
-
-              {/* Template Info */}
-              <div className="p-6 space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xl font-bold">{template.name}</h3>
-                    <Badge variant="outline" className="text-xs">
-                      {template.usedBy} vendors
+            Refresh Templates
+          </Button>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {templates.map((template, index) => (
+            <motion.div
+              key={template.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+            >
+              <Card className={cn(
+                "overflow-hidden transition-all hover:shadow-xl",
+                template.isDefault && "ring-2 ring-purple-500"
+              )}>
+                {/* Template Preview */}
+                <div className="relative h-80 bg-slate-50 dark:bg-slate-950 p-4">
+                  {template.isDefault && (
+                    <Badge className="absolute top-6 right-6 bg-gradient-to-r from-purple-600 to-cyan-600 text-white z-10">
+                      <Star className="w-3 h-3 mr-1 fill-white" />
+                      Default
                     </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{template.description}</p>
+                  )}
+                  
+                  {/* Mini Invoice Preview with different layouts */}
+                  <TemplatePreviewMini template={template} />
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={template.isActive}
-                      onCheckedChange={() => handleToggleActive(template.id)}
-                    />
-                    <span className="text-sm font-medium">
-                      {template.isActive ? 'Active' : 'Inactive'}
-                    </span>
+                {/* Template Info */}
+                <div className="p-6 space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xl font-bold">{template.name}</h3>
+                      <Badge variant="outline" className="text-xs">
+                        {template.usedBy} vendors
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{template.description}</p>
                   </div>
-                  <div className="flex gap-2">
-                    {!template.isDefault && template.isActive && (
+
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={template.isActive}
+                        onCheckedChange={() => handleToggleActive(template.id)}
+                      />
+                      <span className="text-sm font-medium">
+                        {template.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      {!template.isDefault && template.isActive && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSetDefault(template.id)}
+                        >
+                          <Star className="w-4 h-4 mr-2" />
+                          Set Default
+                        </Button>
+                      )}
                       <Button
-                        variant="outline"
                         size="sm"
-                        onClick={() => handleSetDefault(template.id)}
+                        onClick={() => setSelectedTemplate(template)}
+                        className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-700 hover:to-cyan-700"
                       >
-                        <Star className="w-4 h-4 mr-2" />
-                        Set Default
+                        <Eye className="w-4 h-4 mr-2" />
+                        Preview
                       </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      onClick={() => setSelectedTemplate(template)}
-                      className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-700 hover:to-cyan-700"
-                    >
-                      <Eye className="w-4 h-4 mr-2" />
-                      Preview
-                    </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       {/* Preview Modal */}
       <AnimatePresence>
@@ -314,7 +350,7 @@ export function AdminInvoiceTemplates() {
                     )}
                     <Button
                       className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white"
-                      onClick={() => toast.success('Template downloaded!')}
+                      onClick={() => showToast.success('Template downloaded!')}
                     >
                       <Download className="w-4 h-4 mr-2" />
                       Download PDF

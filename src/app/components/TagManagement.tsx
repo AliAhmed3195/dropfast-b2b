@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   Tag as TagIcon,
@@ -35,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
 
 // Predefined color options
@@ -50,52 +50,99 @@ const colorOptions = [
   { name: 'Indigo', value: '#6366f1', bgClass: 'bg-indigo-100 dark:bg-indigo-900/20', textClass: 'text-indigo-700 dark:text-indigo-400' },
 ];
 
-// Mock tags data
-const mockTags = [
-  {
-    id: '1',
-    name: 'Featured',
-    color: '#9333ea',
-    productCount: 45,
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Best Seller',
-    color: '#3b82f6',
-    productCount: 89,
-    createdAt: '2024-02-10',
-  },
-  {
-    id: '3',
-    name: 'New Arrival',
-    color: '#06b6d4',
-    productCount: 67,
-    createdAt: '2024-03-05',
-  },
-  {
-    id: '4',
-    name: 'Limited Edition',
-    color: '#ec4899',
-    productCount: 23,
-    createdAt: '2024-04-12',
-  },
-  {
-    id: '5',
-    name: 'On Sale',
-    color: '#f59e0b',
-    productCount: 156,
-    createdAt: '2024-05-20',
-  },
-];
-
 export function TagManagement() {
+  const [tags, setTags] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingTag, setEditingTag] = useState<any>(null);
+  const fetchingTagsRef = useRef(false);
 
-  const filteredTags = mockTags.filter(tag =>
-    tag.name.toLowerCase().includes(searchQuery.toLowerCase())
+  useEffect(() => {
+    // Prevent duplicate calls - check before setting
+    if (fetchingTagsRef.current) {
+      return;
+    }
+
+    let isMounted = true;
+    fetchingTagsRef.current = true;
+
+    const loadTags = async () => {
+      if (!isMounted) return;
+
+      try {
+        setLoading(true);
+        // Global interceptor handles duplicate prevention and AbortController
+        const response = await fetch('/api/admin/tags');
+        const data = await response.json();
+        
+        if (isMounted && response.ok) {
+          const tagsArray = data.tags || [];
+          setTags(tagsArray);
+          // Ensure loading is set to false after setting tags
+          setLoading(false);
+        } else if (isMounted && !response.ok) {
+          showToast.error(data.error || 'Failed to fetch tags');
+          setLoading(false);
+        }
+      } catch (error: any) {
+        // AbortError is expected from global interceptor's duplicate prevention
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch tags error:', error);
+          showToast.error('Failed to fetch tags');
+          setLoading(false);
+        }
+      } finally {
+        if (isMounted) {
+          fetchingTagsRef.current = false;
+        }
+      }
+    };
+
+    loadTags();
+
+    return () => {
+      isMounted = false;
+      fetchingTagsRef.current = false;
+    };
+  }, []);
+
+  const fetchTags = async () => {
+    // Prevent duplicate calls
+    if (fetchingTagsRef.current) {
+      return;
+    }
+
+    let isMounted = true;
+    fetchingTagsRef.current = true;
+
+    try {
+      setLoading(true);
+      // Global interceptor handles duplicate prevention and AbortController
+      const response = await fetch('/api/admin/tags');
+      const data = await response.json();
+      
+      if (isMounted && response.ok) {
+        setTags(data.tags || []);
+      } else if (isMounted && !response.ok) {
+        showToast.error(data.error || 'Failed to fetch tags');
+      }
+    } catch (error: any) {
+      // AbortError is expected from global interceptor's duplicate prevention
+      if (error.name !== 'AbortError' && isMounted) {
+        console.error('Fetch tags error:', error);
+        showToast.error('Failed to fetch tags');
+      }
+    } finally {
+      if (isMounted) {
+        setLoading(false);
+        fetchingTagsRef.current = false;
+      }
+    }
+  };
+
+  const filteredTags = tags.filter(tag =>
+    tag.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleEdit = (tag: any) => {
@@ -106,6 +153,27 @@ export function TagManagement() {
   const handleAddNew = () => {
     setEditingTag(null);
     setShowForm(true);
+  };
+
+  const handleDelete = async (tagId: string) => {
+    if (!confirm('Are you sure you want to delete this tag?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/tags/${tagId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await fetchTags();
+        showToast.success('Tag deleted successfully!');
+      } else {
+        const data = await response.json();
+        showToast.error(data.error || 'Failed to delete tag');
+      }
+    } catch (error) {
+      console.error('Delete tag error:', error);
+      showToast.error('Failed to delete tag');
+    }
   };
 
   const getColorClasses = (color: string) => {
@@ -143,7 +211,7 @@ export function TagManagement() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Tags</p>
-                  <p className="text-2xl font-bold">{mockTags.length}</p>
+                  <p className="text-2xl font-bold">{tags.length}</p>
                 </div>
               </div>
             </Card>
@@ -156,7 +224,7 @@ export function TagManagement() {
                 <div>
                   <p className="text-sm text-muted-foreground">Tagged Products</p>
                   <p className="text-2xl font-bold">
-                    {mockTags.reduce((sum, tag) => sum + tag.productCount, 0)}
+                    {tags.reduce((sum, tag) => sum + (tag.productCount || 0), 0)}
                   </p>
                 </div>
               </div>
@@ -169,7 +237,7 @@ export function TagManagement() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Active Tags</p>
-                  <p className="text-2xl font-bold">{mockTags.length}</p>
+                  <p className="text-2xl font-bold">{tags.length}</p>
                 </div>
               </div>
             </Card>
@@ -189,69 +257,111 @@ export function TagManagement() {
           </Card>
 
           {/* Tags Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTags.map((tag, index) => {
-              const colorClasses = getColorClasses(tag.color);
-              return (
+          {loading ? (
+            <Card className="p-12">
+              <div className="flex flex-col items-center gap-3">
                 <motion.div
-                  key={tag.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <Card className="p-6 hover:shadow-lg transition-shadow">
-                    <div className="flex items-start justify-between mb-4">
-                      <Badge className={`${colorClasses.bgClass} ${colorClasses.textClass} text-sm px-3 py-1`}>
-                        <TagIcon className="w-3 h-3 mr-1" />
-                        {tag.name}
-                      </Badge>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEdit(tag)}>
-                            <Edit className="w-4 h-4 mr-2" />
-                            Edit Tag
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => toast.success('Tag deleted')}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete Tag
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full"
+                />
+                <p className="text-muted-foreground">Loading tags...</p>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {filteredTags.length === 0 ? (
+                <Card className="p-12">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800">
+                      <TagIcon className="w-8 h-8 text-muted-foreground" />
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Color</span>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-6 h-6 rounded-full border-2 border-slate-200 dark:border-slate-700"
-                            style={{ backgroundColor: tag.color }}
-                          />
-                          <span className="font-mono text-xs">{tag.color}</span>
+                    <div className="text-center">
+                      <p className="font-semibold text-lg">No tags found</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {searchQuery
+                          ? 'Try adjusting your search or filters.'
+                          : 'No tags have been created yet. Click "Add Tag" to create your first tag.'}
+                      </p>
+                    </div>
+                    {!searchQuery && (
+                      <Button
+                        onClick={handleAddNew}
+                        className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white mt-2"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Tag
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredTags.map((tag, index) => {
+                const colorClasses = getColorClasses(tag.color);
+                return (
+                  <motion.div
+                    key={tag.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <Card className="p-6 hover:shadow-lg transition-shadow">
+                      <div className="flex items-start justify-between mb-4">
+                        <Badge className={`${colorClasses.bgClass} ${colorClasses.textClass} text-sm px-3 py-1`}>
+                          <TagIcon className="w-3 h-3 mr-1" />
+                          {tag.name}
+                        </Badge>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEdit(tag)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Edit Tag
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(tag.id)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete Tag
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Color</span>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-6 h-6 rounded-full border-2 border-slate-200 dark:border-slate-700"
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            <span className="font-mono text-xs">{tag.color}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Products</span>
+                          <span className="font-semibold text-purple-600">{tag.productCount || 0}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Created</span>
+                          <span className="text-xs">{new Date(tag.createdAt).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Products</span>
-                        <span className="font-semibold text-purple-600">{tag.productCount}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Created</span>
-                        <span className="text-xs">{new Date(tag.createdAt).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </div>
+              )}
+            </>
+          )}
         </>
       ) : (
         <TagForm
@@ -260,10 +370,11 @@ export function TagManagement() {
             setShowForm(false);
             setEditingTag(null);
           }}
-          onSuccess={() => {
+          onSuccess={async () => {
             setShowForm(false);
             setEditingTag(null);
-            toast.success(editingTag ? 'Tag updated successfully!' : 'Tag created successfully!');
+            await fetchTags();
+            // Success toast is already shown in TagForm
           }}
         />
       )}
@@ -309,9 +420,38 @@ function TagForm({ tag, onCancel, onSuccess }: TagFormProps) {
     if (!validateForm()) return;
 
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    onSuccess();
+    
+    try {
+      const url = tag ? `/api/admin/tags/${tag.id}` : '/api/admin/tags';
+      const method = tag ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          color: formData.color,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success(tag ? 'Tag updated successfully!' : 'Tag created successfully!');
+        onSuccess();
+      } else {
+        const errorMessage = data.error || 'Failed to save tag';
+        showToast.error(errorMessage);
+        setErrors({ submit: errorMessage });
+      }
+    } catch (error) {
+      console.error('Save tag error:', error);
+      const errorMessage = 'Failed to save tag';
+      showToast.error(errorMessage);
+      setErrors({ submit: errorMessage });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const selectedColor = colorOptions.find(opt => opt.value === formData.color) || colorOptions[0];
