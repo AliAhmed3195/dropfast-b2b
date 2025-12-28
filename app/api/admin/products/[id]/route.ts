@@ -1,5 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../../src/lib/prisma'
+import { ProductCondition } from '@prisma/client'
+
+// Map form condition values to Prisma enum values
+function mapProductCondition(condition: string): ProductCondition {
+  if (!condition) return ProductCondition.NEW
+  
+  const normalized = condition.toLowerCase().trim()
+  
+  // Map form values to Prisma enum values
+  if (normalized === 'new') return ProductCondition.NEW
+  if (normalized === 'refurbished') return ProductCondition.REFURBISHED
+  if (normalized === 'used' || normalized === 'used-like-new') return ProductCondition.USED_LIKE_NEW
+  if (normalized === 'used-good' || normalized === 'used_good') return ProductCondition.USED_GOOD
+  
+  // Fallback: try uppercase with underscore replacement
+  const upperCondition = condition.toUpperCase().replace(/-/g, '_')
+  if (upperCondition === 'NEW') return ProductCondition.NEW
+  if (upperCondition === 'REFURBISHED') return ProductCondition.REFURBISHED
+  if (upperCondition === 'USED_LIKE_NEW' || upperCondition === 'USED') return ProductCondition.USED_LIKE_NEW
+  if (upperCondition === 'USED_GOOD' || upperCondition === 'USEDGOOD') return ProductCondition.USED_GOOD
+  
+  return ProductCondition.NEW
+}
 
 // GET /api/admin/products/[id] - Get product by ID
 export async function GET(
@@ -147,7 +170,7 @@ export async function PUT(
     const updateData: any = {}
     if (productName) updateData.name = productName
     if (description !== undefined) updateData.description = description || null
-    if (brandName !== undefined) updateData.brandName = brandName || null
+    if (brandName !== undefined) updateData.brand = brandName || null // Map brandName to brand field
     if (sku) updateData.sku = sku
     if (barcode !== undefined) updateData.barcode = barcode || null
     if (productStatus) updateData.status = productStatus.toUpperCase()
@@ -159,7 +182,7 @@ export async function PUT(
     if (stockAlertThreshold !== undefined) updateData.stockAlertThreshold = stockAlertThreshold ? parseInt(stockAlertThreshold) : null
     if (categoryId !== undefined) updateData.categoryId = categoryId
     if (subcategory !== undefined) updateData.subcategory = subcategory || null
-    if (productCondition) updateData.condition = productCondition.toUpperCase()
+    if (productCondition) updateData.condition = mapProductCondition(productCondition)
     if (warrantyPeriod !== undefined) updateData.warrantyPeriod = warrantyPeriod || null
     if (leadTime !== undefined) updateData.leadTime = leadTime || null
     if (weight !== undefined) updateData.weight = weight ? parseFloat(weight) : null
@@ -203,12 +226,16 @@ export async function PUT(
 
       // Add new tags
       for (const tagName of tags) {
+        // Trim whitespace from tag name
+        const trimmedTagName = tagName.trim()
+        if (!trimmedTagName) continue // Skip empty tags
+        
         // Find or create tag
         let tag = await prisma.tag.findFirst({
           where: {
             OR: [
-              { name: { equals: tagName, mode: 'insensitive' } },
-              { slug: { equals: tagName.toLowerCase().replace(/\s+/g, '-'), mode: 'insensitive' } }
+              { name: { equals: trimmedTagName, mode: 'insensitive' } },
+              { slug: { equals: trimmedTagName.toLowerCase().replace(/\s+/g, '-'), mode: 'insensitive' } }
             ]
           },
         })
@@ -216,8 +243,8 @@ export async function PUT(
         if (!tag) {
           tag = await prisma.tag.create({
             data: {
-              name: tagName,
-              slug: tagName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+              name: trimmedTagName,
+              slug: trimmedTagName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
             },
           })
         }

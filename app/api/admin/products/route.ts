@@ -1,5 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../src/lib/prisma'
+import { ProductCondition } from '@prisma/client'
+
+// Map form condition values to Prisma enum values
+function mapProductCondition(condition: string): ProductCondition {
+  if (!condition) return ProductCondition.NEW
+  
+  const normalized = condition.toLowerCase().trim()
+  
+  // Map form values to Prisma enum values
+  if (normalized === 'new') return ProductCondition.NEW
+  if (normalized === 'refurbished') return ProductCondition.REFURBISHED
+  if (normalized === 'used' || normalized === 'used-like-new') return ProductCondition.USED_LIKE_NEW
+  if (normalized === 'used-good' || normalized === 'used_good') return ProductCondition.USED_GOOD
+  
+  // Fallback: try uppercase with underscore replacement
+  const upperCondition = condition.toUpperCase().replace(/-/g, '_')
+  if (upperCondition === 'NEW') return ProductCondition.NEW
+  if (upperCondition === 'REFURBISHED') return ProductCondition.REFURBISHED
+  if (upperCondition === 'USED_LIKE_NEW' || upperCondition === 'USED') return ProductCondition.USED_LIKE_NEW
+  if (upperCondition === 'USED_GOOD' || upperCondition === 'USEDGOOD') return ProductCondition.USED_GOOD
+  
+  return ProductCondition.NEW
+}
 
 // GET /api/admin/products - List all products
 export async function GET(request: NextRequest) {
@@ -101,6 +124,16 @@ export async function GET(request: NextRequest) {
             name: true,
           },
         },
+        tags: {
+          include: {
+            tag: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
         storeProducts: {
           include: {
             store: {
@@ -139,6 +172,7 @@ export async function GET(request: NextRequest) {
       addedByType: 'supplier',
       image: product.images[0] || '',
       description: product.description || '',
+      tags: product.tags.map(pt => pt.tag.name), // Extract tag names
       createdAt: product.createdAt.toISOString(),
     }))
 
@@ -159,7 +193,7 @@ export async function POST(request: NextRequest) {
     const {
       productName,
       description,
-      brandName,
+      brandName, // Will be mapped to 'brand' field
       sku,
       barcode,
       productStatus,
@@ -170,6 +204,7 @@ export async function POST(request: NextRequest) {
       moq,
       stockAlertThreshold,
       category,
+      categoryId: categoryIdFromBody, // Support both categoryId and category
       subcategory,
       tags,
       productCondition,
@@ -214,8 +249,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Find or create category
-    let categoryId = null
-    if (category) {
+    // Priority: Use categoryId if provided, otherwise find/create by category name
+    let categoryId = categoryIdFromBody || null
+    
+    if (!categoryId && category) {
       const categoryRecord = await prisma.category.findFirst({
         where: { 
           OR: [
@@ -243,7 +280,7 @@ export async function POST(request: NextRequest) {
     const productData: any = {
       name: productName,
       description: description || null,
-      brandName: brandName || null,
+      brand: brandName || null, // Map brandName to brand field
       sku,
       barcode: barcode || null,
       status: productStatus ? productStatus.toUpperCase() : 'DRAFT',
@@ -255,7 +292,7 @@ export async function POST(request: NextRequest) {
       stockAlertThreshold: stockAlertThreshold ? parseInt(stockAlertThreshold) : null,
       categoryId,
       subcategory: subcategory || null,
-      condition: productCondition ? productCondition.toUpperCase() : 'NEW',
+      condition: productCondition ? mapProductCondition(productCondition) : 'NEW',
       warrantyPeriod: warrantyPeriod || null,
       leadTime: leadTime || null,
       weight: weight ? parseFloat(weight) : null,
@@ -294,12 +331,16 @@ export async function POST(request: NextRequest) {
     // Handle tags if provided
     if (tags && Array.isArray(tags) && tags.length > 0) {
       for (const tagName of tags) {
+        // Trim whitespace from tag name
+        const trimmedTagName = tagName.trim()
+        if (!trimmedTagName) continue // Skip empty tags
+        
         // Find or create tag
         let tag = await prisma.tag.findFirst({
           where: {
             OR: [
-              { name: { equals: tagName, mode: 'insensitive' } },
-              { slug: { equals: tagName.toLowerCase().replace(/\s+/g, '-'), mode: 'insensitive' } }
+              { name: { equals: trimmedTagName, mode: 'insensitive' } },
+              { slug: { equals: trimmedTagName.toLowerCase().replace(/\s+/g, '-'), mode: 'insensitive' } }
             ]
           },
         })
@@ -307,8 +348,8 @@ export async function POST(request: NextRequest) {
         if (!tag) {
           tag = await prisma.tag.create({
             data: {
-              name: tagName,
-              slug: tagName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+              name: trimmedTagName,
+              slug: trimmedTagName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
             },
           })
         }

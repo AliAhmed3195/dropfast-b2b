@@ -184,6 +184,75 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     loadCategoriesAndTags();
   }, []);
 
+  // Populate form fields when product prop changes (for edit mode)
+  useEffect(() => {
+    if (product) {
+      // Basic Info
+      setProductName(product.name || '');
+      setDescription(product.description || '');
+      setBrandName(product.brand || '');
+      setSku(product.sku || '');
+      setBarcode(product.barcode || '');
+      setProductStatus(product.status?.toLowerCase() || 'draft');
+      
+      // Pricing - Map costPrice/sellingPrice to baseCostPrice/baseSellingPrice
+      setBaseCurrency(product.baseCurrency || 'USD');
+      // If baseCostPrice/baseSellingPrice exist, use them; otherwise use costPrice/sellingPrice
+      setBaseCostPrice(product.baseCostPrice?.toString() || product.costPrice?.toString() || '');
+      setBaseSellingPrice(product.baseSellingPrice?.toString() || product.sellingPrice?.toString() || '');
+      setUsdCostPrice(product.costPrice || 0);
+      setUsdSellingPrice(product.sellingPrice || 0);
+      
+      // Inventory
+      setStock(product.stock?.toString() || '');
+      setMoq(product.moq?.toString() || '');
+      setStockAlertThreshold(product.stockAlertThreshold?.toString() || '');
+      
+      // Classification
+      setCategory(product.category?.name || product.category || '');
+      setCategoryId(product.categoryId || product.category?.id || '');
+      setSubcategory(product.subcategory || '');
+      // Map tags from relation
+      const tagNames = product.tags?.map((pt: any) => pt.tag?.name || pt) || product.tags || [];
+      setProductTags(tagNames);
+      
+      // Product Details - Map condition enum to form value
+      let conditionValue = 'new';
+      if (product.condition) {
+        const conditionStr = product.condition.toString().toLowerCase();
+        if (conditionStr === 'used_like_new' || conditionStr === 'used-like-new') {
+          conditionValue = 'used';
+        } else if (conditionStr === 'used_good' || conditionStr === 'used-good') {
+          conditionValue = 'used-good';
+        } else if (conditionStr === 'refurbished') {
+          conditionValue = 'refurbished';
+        } else {
+          conditionValue = 'new';
+        }
+      }
+      setProductCondition(conditionValue);
+      setWarrantyPeriod(product.warrantyPeriod || product.warranty || '');
+      setLeadTime(product.leadTime || '');
+      
+      // Shipping
+      setWeight(product.weight?.toString() || '');
+      setWeightUnit(product.weightUnit || 'kg');
+      setLength(product.length?.toString() || '');
+      setWidth(product.width?.toString() || '');
+      setHeight(product.height?.toString() || '');
+      setDimensionUnit(product.dimensionUnit || 'cm');
+      setShippingCost(product.shippingCost?.toString() || '');
+      
+      // Variants & Images
+      setHasVariants(product.hasVariants || false);
+      setVariants(product.variants || []);
+      setProductImages(product.images || []);
+      
+      // Supplier
+      setSupplierId(product.supplierId || product.supplier?.id || '');
+    }
+  }, [product]);
+
   // Fetch suppliers list (for admin)
   useEffect(() => {
     if (!product) {
@@ -578,7 +647,10 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
 
       if (response.ok) {
         showToast.success(product ? 'Product updated successfully!' : 'Product added successfully!');
-        onClose();
+        // Small delay to ensure toast is visible before closing
+        setTimeout(() => {
+          onClose();
+        }, 100);
       } else {
         showToast.error(data.error || (product ? 'Failed to update product' : 'Failed to create product'));
       }

@@ -98,33 +98,33 @@ export function AdminInventoryProducts() {
     const loadProducts = async () => {
       if (!isMounted) return;
 
-      try {
-        setLoading(true);
-        const params = new URLSearchParams();
-        if (categoryFilter !== 'all') params.append('category', categoryFilter);
-        if (statusFilter !== 'all') params.append('status', statusFilter);
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (categoryFilter !== 'all') params.append('category', categoryFilter);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
         if (supplierFilter !== 'all') params.append('supplier', supplierFilter);
         if (vendorFilter !== 'all') params.append('vendor', vendorFilter);
         if (storeFilter !== 'all') params.append('store', storeFilter);
-        const url = `/api/admin/products${params.toString() ? '?' + params.toString() : ''}`;
+      const url = `/api/admin/products${params.toString() ? '?' + params.toString() : ''}`;
         const response = await fetch(url, {
           signal: abortController.signal,
         });
-        const data = await response.json();
-        
+      const data = await response.json();
+      
         if (isMounted && response.ok) {
-          setProducts(data.products || []);
+        setProducts(data.products || []);
         } else if (isMounted && !response.ok) {
           showToast.error(data.error || 'Failed to fetch products');
-        }
+      }
       } catch (error: any) {
         if (error.name !== 'AbortError' && isMounted) {
-          console.error('Fetch products error:', error);
+      console.error('Fetch products error:', error);
           showToast.error('Failed to fetch products');
         }
-      } finally {
+    } finally {
         if (isMounted) {
-          setLoading(false);
+      setLoading(false);
           fetchingProductsRef.current = false;
         }
       }
@@ -474,7 +474,7 @@ export function AdminInventoryProducts() {
                     className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
                   />
                   <div className="absolute top-2 right-2 flex flex-col gap-1">
-                    {product.tags.map(tag => (
+                    {product.tags && Array.isArray(product.tags) && product.tags.length > 0 && product.tags.map(tag => (
                       <Badge key={tag} className={getTagColor(tag)}>
                         {tag}
                       </Badge>
@@ -504,26 +504,38 @@ export function AdminInventoryProducts() {
                     <span className="truncate">{product.addedBy}</span>
                   </div>
                   <div className="flex gap-2">
-                    <Button
+                  <Button
                       className="flex-1"
-                      size="sm"
+                    size="sm"
                       variant="outline"
-                      onClick={() => setSelectedProduct(product)}
-                    >
-                      <Eye className="w-4 h-4 mr-2" />
+                    onClick={() => setSelectedProduct(product)}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
                       View
                     </Button>
                     <Button
                       className="flex-1"
                       size="sm"
-                      onClick={() => {
-                        setEditingProduct(product);
-                        setSelectedProduct(null);
+                      onClick={async () => {
+                        try {
+                          // Fetch full product details for editing
+                          const response = await fetch(`/api/admin/products/${product.id}`);
+                          const data = await response.json();
+                          if (response.ok && data.product) {
+                            setEditingProduct(data.product);
+                            setSelectedProduct(null);
+                          } else {
+                            showToast.error('Failed to load product details');
+                          }
+                        } catch (error) {
+                          console.error('Fetch product error:', error);
+                          showToast.error('Failed to load product details');
+                        }
                       }}
                     >
                       <Edit className="w-4 h-4 mr-2" />
                       Edit
-                    </Button>
+                  </Button>
                   </div>
                 </div>
               </Card>
@@ -566,13 +578,13 @@ export function AdminInventoryProducts() {
                 </TableRow>
               ) : (
                 filteredProducts.map((product, index) => (
-                  <motion.tr
-                    key={product.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="hover:bg-muted/50"
-                  >
+                <motion.tr
+                  key={product.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="hover:bg-muted/50"
+                >
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <img
@@ -583,7 +595,7 @@ export function AdminInventoryProducts() {
                       <div>
                         <p className="font-medium text-sm">{product.name}</p>
                         <div className="flex gap-1 mt-1">
-                          {product.tags.map(tag => (
+                          {product.tags && Array.isArray(product.tags) && product.tags.length > 0 && product.tags.map(tag => (
                             <Badge key={tag} className={`${getTagColor(tag)} text-[10px]`}>
                               {tag}
                             </Badge>
@@ -623,19 +635,31 @@ export function AdminInventoryProducts() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedProduct(product)}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => setSelectedProduct(product)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setEditingProduct(product);
-                          setSelectedProduct(null);
+                        onClick={async () => {
+                          try {
+                            // Fetch full product details for editing
+                            const response = await fetch(`/api/admin/products/${product.id}`);
+                            const data = await response.json();
+                            if (response.ok && data.product) {
+                              setEditingProduct(data.product);
+                              setSelectedProduct(null);
+                            } else {
+                              showToast.error('Failed to load product details');
+                            }
+                          } catch (error) {
+                            console.error('Fetch product error:', error);
+                            showToast.error('Failed to load product details');
+                          }
                         }}
                       >
                         <Edit className="w-4 h-4" />
@@ -691,7 +715,7 @@ export function AdminInventoryProducts() {
                       <div>
                         <h3 className="text-2xl font-bold mb-2">{selectedProduct.name}</h3>
                         <div className="flex gap-2 mb-4">
-                          {selectedProduct.tags.map((tag: string) => (
+                          {selectedProduct.tags && Array.isArray(selectedProduct.tags) && selectedProduct.tags.length > 0 && selectedProduct.tags.map((tag: string) => (
                             <Badge key={tag} className={getTagColor(tag)}>
                               {tag}
                             </Badge>
@@ -766,7 +790,7 @@ export function AdminInventoryProducts() {
                 setEditingProduct(null);
               }}
             >
-              <motion.div
+            <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
@@ -793,7 +817,7 @@ export function AdminInventoryProducts() {
                           const data = await response.json();
                           if (response.ok) {
                             setProducts(data.products || []);
-                            showToast.success(editingProduct ? 'Product updated successfully!' : 'Product added successfully!');
+                            // Toast is already shown in ProductForm, no need to duplicate
                           }
                         } catch (error) {
                           console.error('Refresh products error:', error);
@@ -801,13 +825,13 @@ export function AdminInventoryProducts() {
                       };
                       loadProducts();
                     }}
-                  />
-                </div>
+            />
+          </div>
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
       </AnimatePresence>
-    </div>
+          </div>
   );
 }
