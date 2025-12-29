@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   Package,
@@ -18,8 +18,9 @@ import {
   MapPin,
   Download,
   TrendingUp,
+  Loader2,
+  ShoppingCart,
 } from 'lucide-react';
-import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -55,27 +56,92 @@ import {
   TableRow,
 } from './ui/table';
 import { Separator } from './ui/separator';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 
 export function VendorOrders() {
-  const { orders, getOrdersByVendor, updateOrder } = useApp();
   const { user } = useAuth();
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const myOrders = user ? getOrdersByVendor(user.id) : [];
+  // Fetch orders
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
 
-  const filteredOrders = myOrders.filter(order => {
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchOrders = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.append('vendorId', user.id);
+        if (statusFilter !== 'all') params.append('status', statusFilter);
+
+        const response = await fetch(`/api/vendor/orders?${params.toString()}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setOrders(data.orders || []);
+        } else {
+          showToast.error(data.error || 'Failed to fetch orders');
+        }
+      } catch (error) {
+        console.error('Fetch orders error:', error);
+        showToast.error('Failed to fetch orders');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchOrders();
+  }, [user?.id, statusFilter]);
+
+  const filteredOrders = orders.filter(order => {
     const matchesSearch =
-      order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customerName.toLowerCase().includes(searchQuery.toLowerCase());
+      order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.customer?.email?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const handleUpdateStatus = (orderId: string, newStatus: any) => {
-    updateOrder(orderId, { status: newStatus });
-    toast.success(`Order status updated to ${newStatus}`);
+  const handleUpdateStatus = async (orderId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/admin/orders/${orderId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success(`Order status updated to ${newStatus}`);
+        // Refresh orders
+        fetchingRef.current = false;
+        setLoading(true);
+        const params = new URLSearchParams();
+        params.append('vendorId', user?.id || '');
+        if (statusFilter !== 'all') params.append('status', statusFilter);
+        const refreshResponse = await fetch(`/api/vendor/orders?${params.toString()}`);
+        const refreshData = await refreshResponse.json();
+        if (refreshResponse.ok) {
+          setOrders(refreshData.orders || []);
+        }
+        setLoading(false);
+      } else {
+        showToast.error(data.error || 'Failed to update order status');
+      }
+    } catch (error) {
+      console.error('Update order status error:', error);
+      showToast.error('Failed to update order status');
+    }
   };
 
   const getStatusConfig = (status: string) => {
@@ -114,13 +180,21 @@ export function VendorOrders() {
   };
 
   const stats = {
-    total: myOrders.length,
-    revenue: myOrders.reduce((sum, o) => sum + o.total, 0),
-    pending: myOrders.filter(o => o.status === 'pending').length,
-    processing: myOrders.filter(o => o.status === 'processing').length,
-    shipped: myOrders.filter(o => o.status === 'shipped').length,
-    delivered: myOrders.filter(o => o.status === 'delivered').length,
+    total: orders.length,
+    revenue: orders.reduce((sum, o) => sum + (o.total || 0), 0),
+    pending: orders.filter(o => o.status === 'pending').length,
+    processing: orders.filter(o => o.status === 'processing').length,
+    shipped: orders.filter(o => o.status === 'shipped').length,
+    delivered: orders.filter(o => o.status === 'delivered').length,
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -240,23 +314,23 @@ export function VendorOrders() {
                     transition={{ delay: index * 0.05 }}
                     className="hover:bg-muted/50"
                   >
-                    <TableCell className="font-medium">{order.id}</TableCell>
+                    <TableCell className="font-medium">{order.orderNumber || order.id}</TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{order.customerName}</p>
+                        <p className="font-medium">{order.customer?.name || 'Unknown'}</p>
                         <p className="text-xs text-muted-foreground">
-                          {order.customerEmail}
+                          {order.customer?.email || ''}
                         </p>
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {new Date(order.createdAt).toLocaleDateString()}
+                      {new Date(order.date || order.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                      {order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? 's' : ''}
                     </TableCell>
                     <TableCell className="font-semibold">
-                      ${order.total.toFixed(2)}
+                      ${(order.total || 0).toFixed(2)}
                     </TableCell>
                     <TableCell>
                       <Badge className={statusConfig.color}>
@@ -274,7 +348,7 @@ export function VendorOrders() {
                           </DialogTrigger>
                           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                             <DialogHeader>
-                              <DialogTitle>Order Details - {order.id}</DialogTitle>
+                              <DialogTitle>Order Details - {order.orderNumber || order.id}</DialogTitle>
                             </DialogHeader>
 
                             <div className="space-y-6">
@@ -285,10 +359,15 @@ export function VendorOrders() {
                                   Customer Information
                                 </h4>
                                 <div className="p-4 rounded-lg bg-muted space-y-2">
-                                  <p className="font-medium">{order.customerName}</p>
+                                  <p className="font-medium">{order.customer?.name || 'Unknown'}</p>
                                   <p className="text-sm text-muted-foreground">
-                                    {order.customerEmail}
+                                    {order.customer?.email || ''}
                                   </p>
+                                  {order.customer?.phone && (
+                                    <p className="text-sm text-muted-foreground">
+                                      {order.customer.phone}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
 
@@ -298,13 +377,13 @@ export function VendorOrders() {
                               <div>
                                 <h4 className="font-semibold mb-3">Order Items</h4>
                                 <div className="space-y-3">
-                                  {order.items.map((item, idx) => (
+                                  {(order.items || []).map((item: any, idx: number) => (
                                     <div key={idx} className="flex gap-3 p-3 rounded-lg bg-muted">
                                       <div className="w-16 h-16 rounded bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 flex items-center justify-center overflow-hidden">
-                                        {item.productImage ? (
+                                        {item.image || item.productImage ? (
                                           <img
-                                            src={item.productImage}
-                                            alt={item.productName}
+                                            src={item.image || item.productImage}
+                                            alt={item.name || item.productName}
                                             className="w-full h-full object-cover"
                                           />
                                         ) : (
@@ -312,13 +391,13 @@ export function VendorOrders() {
                                         )}
                                       </div>
                                       <div className="flex-1">
-                                        <p className="font-medium">{item.productName}</p>
+                                        <p className="font-medium">{item.name || item.productName}</p>
                                         <p className="text-sm text-muted-foreground">
-                                          Qty: {item.quantity} × ${item.price.toFixed(2)}
+                                          Qty: {item.quantity} × ${(item.price || 0).toFixed(2)}
                                         </p>
                                       </div>
                                       <p className="font-semibold">
-                                        ${(item.price * item.quantity).toFixed(2)}
+                                        ${((item.price || 0) * (item.quantity || 0)).toFixed(2)}
                                       </p>
                                     </div>
                                   ))}
@@ -328,30 +407,33 @@ export function VendorOrders() {
                               <Separator />
 
                               {/* Shipping */}
-                              <div>
-                                <h4 className="font-semibold mb-3 flex items-center gap-2">
-                                  <MapPin className="w-4 h-4" />
-                                  Shipping Address
-                                </h4>
-                                <div className="p-4 rounded-lg bg-muted">
-                                  <p className="font-medium">{order.shippingAddress.fullName}</p>
-                                  <p className="text-sm text-muted-foreground mt-1">
-                                    {order.shippingAddress.address}
-                                  </p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {order.shippingAddress.city}, {order.shippingAddress.state}{' '}
-                                    {order.shippingAddress.zipCode}
-                                  </p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {order.shippingAddress.country}
-                                  </p>
-                                  <p className="text-sm text-muted-foreground mt-2">
-                                    Phone: {order.shippingAddress.phone}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <Separator />
+                              {order.shippingAddress && (
+                                <>
+                                  <div>
+                                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                      <MapPin className="w-4 h-4" />
+                                      Shipping Address
+                                    </h4>
+                                    <div className="p-4 rounded-lg bg-muted">
+                                      <p className="font-medium">{order.shippingAddress.fullName}</p>
+                                      <p className="text-sm text-muted-foreground mt-1">
+                                        {order.shippingAddress.address}
+                                      </p>
+                                      <p className="text-sm text-muted-foreground">
+                                        {order.shippingAddress.city}, {order.shippingAddress.state}{' '}
+                                        {order.shippingAddress.zipCode}
+                                      </p>
+                                      <p className="text-sm text-muted-foreground">
+                                        {order.shippingAddress.country}
+                                      </p>
+                                      <p className="text-sm text-muted-foreground mt-2">
+                                        Phone: {order.shippingAddress.phone}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Separator />
+                                </>
+                              )}
 
                               {/* Payment */}
                               <div>
@@ -359,39 +441,43 @@ export function VendorOrders() {
                                 <div className="space-y-2">
                                   <div className="flex justify-between text-sm">
                                     <span className="text-muted-foreground">Subtotal</span>
-                                    <span className="font-medium">${order.subtotal.toFixed(2)}</span>
+                                    <span className="font-medium">${(order.subtotal || 0).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between text-sm">
                                     <span className="text-muted-foreground">Shipping</span>
-                                    <span className="font-medium">${order.shipping.toFixed(2)}</span>
+                                    <span className="font-medium">${(order.shipping || 0).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between text-sm">
                                     <span className="text-muted-foreground">Tax</span>
-                                    <span className="font-medium">${order.tax.toFixed(2)}</span>
+                                    <span className="font-medium">${(order.tax || 0).toFixed(2)}</span>
                                   </div>
                                   <Separator />
                                   <div className="flex justify-between">
                                     <span className="font-semibold">Total</span>
                                     <span className="font-bold text-lg">
-                                      ${order.total.toFixed(2)}
+                                      ${(order.total || 0).toFixed(2)}
                                     </span>
                                   </div>
-                                  <div className="flex justify-between text-sm pt-2">
-                                    <span className="text-muted-foreground">Payment Method</span>
-                                    <Badge variant="outline">{order.paymentMethod}</Badge>
-                                  </div>
-                                  <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">Payment Status</span>
-                                    <Badge
-                                      className={
-                                        order.paymentStatus === 'paid'
-                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                                          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
-                                      }
-                                    >
-                                      {order.paymentStatus}
-                                    </Badge>
-                                  </div>
+                                  {order.paymentMethod && (
+                                    <div className="flex justify-between text-sm pt-2">
+                                      <span className="text-muted-foreground">Payment Method</span>
+                                      <Badge variant="outline">{order.paymentMethod}</Badge>
+                                    </div>
+                                  )}
+                                  {order.paymentStatus && (
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Payment Status</span>
+                                      <Badge
+                                        className={
+                                          order.paymentStatus === 'paid'
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                                            : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                                        }
+                                      >
+                                        {order.paymentStatus}
+                                      </Badge>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -428,7 +514,7 @@ export function VendorOrders() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => toast.success('Invoice downloaded')}
+                              onClick={() => showToast.success('Invoice downloaded')}
                             >
                               <Download className="w-4 h-4 mr-2" />
                               Download Invoice
@@ -453,20 +539,50 @@ export function VendorOrders() {
           </Table>
         </Card>
       ) : (
-        <Card className="p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-500/10 to-cyan-500/10 flex items-center justify-center">
-              <Package className="w-10 h-10 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-bold mb-2">
-              {searchQuery || statusFilter !== 'all' ? 'No orders found' : 'No orders yet'}
-            </h3>
-            <p className="text-muted-foreground">
-              {searchQuery || statusFilter !== 'all'
-                ? 'Try adjusting your filters'
-                : 'Orders from your stores will appear here'}
-            </p>
-          </div>
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="font-semibold">Order ID</TableHead>
+                <TableHead className="font-semibold">Customer</TableHead>
+                <TableHead className="font-semibold">Date</TableHead>
+                <TableHead className="font-semibold">Items</TableHead>
+                <TableHead className="font-semibold">Total</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-16">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center justify-center"
+                  >
+                    <motion.div
+                      animate={{ y: [0, -10, 0] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <ShoppingCart className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                    </motion.div>
+                    <p className="text-lg font-medium text-muted-foreground mb-2">
+                      {searchQuery || statusFilter !== 'all' 
+                        ? 'No orders found'
+                        : 'No orders yet'
+                      }
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {searchQuery || statusFilter !== 'all'
+                        ? 'Try adjusting your search or filters'
+                        : 'Orders will appear here once customers place them'
+                      }
+                    </p>
+                  </motion.div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </Card>
       )}
     </div>

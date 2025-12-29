@@ -38,7 +38,6 @@ export function CustomerRouter() {
     case 'settings':
       return <Settings />;
     case 'browse':
-    case 'dashboard':
     default:
       return <CustomerBrowse />;
   }

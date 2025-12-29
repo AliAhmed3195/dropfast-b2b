@@ -65,6 +65,7 @@ model User {
 
   // Relations
   productsAsSupplier Product[] @relation("SupplierProducts")
+  productsAsCreator  Product[] @relation("ProductCreator")
   storesAsVendor     Store[]   @relation("VendorStores")
   ordersAsCustomer  Order[]   @relation("CustomerOrders")
   invoices          Invoice[]
@@ -142,14 +143,22 @@ model Product {
   updatedAt         DateTime @updatedAt
 
   // Relations
-  supplierId        String
-  supplier          User     @relation("SupplierProducts", fields: [supplierId], references: [id])
+  // Creator tracking (who created this product)
+  createdByUserId    String?
+  createdByUserType  UserType?
+  createdBy          User?    @relation("ProductCreator", fields: [createdByUserId], references: [id])
+  
+  // Supplier relationship (for supplier products OR admin-created products for suppliers)
+  supplierId        String?
+  supplier          User?    @relation("SupplierProducts", fields: [supplierId], references: [id])
   tags              ProductTag[]
   storeProducts     StoreProduct[]
   orderItems        OrderItem[]
   wishlist          Wishlist[]
 
   @@index([supplierId])
+  @@index([createdByUserId])
+  @@index([createdByUserType])
   @@index([categoryId])
   @@index([status])
   @@index([sku])

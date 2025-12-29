@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText,
@@ -19,7 +19,9 @@ import {
   Package,
   Store,
   Check,
+  Loader2,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -31,67 +33,107 @@ import {
   SelectValue,
 } from './ui/select';
 import { Label } from './ui/label';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
 
-// Mock stores
-const stores = [
-  { id: 1, name: 'TechHub Store' },
-  { id: 2, name: 'ElectroMart' },
-  { id: 3, name: 'GadgetZone' },
-];
-
-// EXACT SAME TEMPLATES AS ADMIN
-const invoiceTemplates = [
-  {
-    id: '1',
-    name: 'Modern Gradient',
-    description: 'Contemporary design with vibrant gradients and clean layout',
-    layout: 'gradient',
-    accentColor: 'from-purple-600 to-cyan-600',
-  },
-  {
-    id: '2',
-    name: 'Classic Professional',
-    description: 'Traditional corporate design with left sidebar',
-    layout: 'classic',
-    accentColor: 'from-blue-600 to-indigo-600',
-  },
-  {
-    id: '3',
-    name: 'Minimalist Clean',
-    description: 'Simple elegant design with subtle borders',
-    layout: 'minimal',
-    accentColor: 'from-slate-700 to-slate-900',
-  },
-  {
-    id: '4',
-    name: 'Bold Corporate',
-    description: 'Professional design with top banner and sections',
-    layout: 'corporate',
-    accentColor: 'from-green-600 to-teal-600',
-  },
-];
-
 export function VendorInvoiceTemplates() {
-  const [selectedStore, setSelectedStore] = useState<number>(1);
-  const [storeTemplates, setStoreTemplates] = useState<{ [key: number]: string }>({
-    1: '1',
-    2: '2',
-    3: '3',
-  });
+  const { user } = useAuth();
+  const [selectedStore, setSelectedStore] = useState<string>('');
+  const [stores, setStores] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [storeTemplates, setStoreTemplates] = useState<{ [key: string]: string }>({});
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
 
-  const handleSelectTemplate = (templateId: string) => {
-    setStoreTemplates({ ...storeTemplates, [selectedStore]: templateId });
-    const store = stores.find(s => s.id === selectedStore);
-    const template = invoiceTemplates.find(t => t.id === templateId);
-    toast.success('Template Selected!', {
-      description: `${template?.name} is now active for ${store?.name}`,
-    });
+  // Fetch templates and stores
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchData = async () => {
+      try {
+        const response = await fetch(`/api/vendor/invoice-templates?vendorId=${user.id}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setTemplates(data.templates || []);
+          setStores(data.stores || []);
+          
+          // Build storeTemplates map
+          const templateMap: { [key: string]: string } = {};
+          data.stores?.forEach((store: any) => {
+            if (store.templateId) {
+              templateMap[store.id] = store.templateId;
+            }
+          });
+          setStoreTemplates(templateMap);
+
+          // Set first store as selected if available
+          if (data.stores?.length > 0 && !selectedStore) {
+            setSelectedStore(data.stores[0].id);
+          }
+        } else {
+          showToast.error(data.error || 'Failed to fetch templates');
+        }
+      } catch (error) {
+        console.error('Fetch templates error:', error);
+        showToast.error('Failed to fetch templates');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchData();
+  }, [user?.id]);
+
+  const handleSelectTemplate = async (templateId: string) => {
+    if (!selectedStore) {
+      showToast.error('Please select a store first');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/vendor/invoice-templates', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          vendorId: user?.id,
+          storeId: selectedStore,
+          templateId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setStoreTemplates({ ...storeTemplates, [selectedStore]: templateId });
+        const store = stores.find(s => s.id === selectedStore);
+        const template = templates.find(t => t.id === templateId);
+        showToast.success(`${template?.name} is now active for ${store?.name}`);
+      } else {
+        showToast.error(data.error || 'Failed to assign template');
+      }
+    } catch (error) {
+      console.error('Assign template error:', error);
+      showToast.error('Failed to assign template');
+    }
   };
 
-  const currentTemplate = storeTemplates[selectedStore];
+  const currentTemplate = selectedStore ? storeTemplates[selectedStore] : null;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -107,7 +149,7 @@ export function VendorInvoiceTemplates() {
         </div>
         <Badge className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white px-4 py-2">
           <FileText className="w-4 h-4 mr-2" />
-          {invoiceTemplates.length} Templates Available
+          {templates.length} Templates Available
         </Badge>
       </div>
 
@@ -122,40 +164,71 @@ export function VendorInvoiceTemplates() {
               Select Store to Configure
             </Label>
             <Select
-              value={selectedStore.toString()}
-              onValueChange={(value) => setSelectedStore(parseInt(value))}
+              value={selectedStore}
+              onValueChange={(value) => setSelectedStore(value)}
+              disabled={stores.length === 0}
             >
               <SelectTrigger className="w-full md:w-80 h-12 border-2 bg-white dark:bg-slate-900">
-                <SelectValue />
+                <SelectValue placeholder={stores.length === 0 ? "No stores available" : "Select a store"} />
               </SelectTrigger>
               <SelectContent>
-                {stores.map(store => {
-                  const template = invoiceTemplates.find(t => t.id === storeTemplates[store.id]);
-                  return (
-                    <SelectItem key={store.id} value={store.id.toString()}>
-                      <div className="flex items-center gap-2">
-                        <Store className="w-4 h-4" />
-                        <span className="font-semibold">{store.name}</span>
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {template?.name}
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  );
-                })}
+                {stores.length === 0 ? (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    No stores available
+                  </div>
+                ) : (
+                  stores.map(store => {
+                    const template = templates.find(t => t.id === storeTemplates[store.id]);
+                    return (
+                      <SelectItem key={store.id} value={store.id}>
+                        <div className="flex items-center gap-2">
+                          <Store className="w-4 h-4" />
+                          <span className="font-semibold">{store.name}</span>
+                          {template && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              {template.name}
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })
+                )}
               </SelectContent>
             </Select>
           </div>
-          <Badge className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-2">
-            <CheckCircle2 className="w-4 h-4 mr-2" />
-            Active
-          </Badge>
+          {selectedStore && stores.length > 0 && (
+            <Badge className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-2">
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              Active
+            </Badge>
+          )}
         </div>
       </Card>
 
-      {/* Templates Grid - EXACT SAME AS ADMIN */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {invoiceTemplates.map((template, index) => (
+      {/* No Stores Warning */}
+      {stores.length === 0 && (
+        <Card className="p-6 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800">
+          <div className="flex items-center gap-3">
+            <Store className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+            <div>
+              <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">No Stores Available</h3>
+              <p className="text-sm text-yellow-700 dark:text-yellow-300">Create a store first to assign invoice templates. Templates are shown below for preview.</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Templates Grid */}
+      {templates.length === 0 ? (
+        <Card className="p-12 text-center">
+          <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+          <h3 className="text-xl font-semibold mb-2">No Templates Available</h3>
+          <p className="text-muted-foreground">No invoice templates are currently available</p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {templates.map((template, index) => (
           <motion.div
             key={template.id}
             initial={{ opacity: 0, y: 20 }}
@@ -202,6 +275,8 @@ export function VendorInvoiceTemplates() {
                       variant="outline"
                       className="flex-1"
                       onClick={() => handleSelectTemplate(template.id)}
+                      disabled={!selectedStore || stores.length === 0}
+                      title={!selectedStore || stores.length === 0 ? 'Please select a store first' : 'Select this template'}
                     >
                       <CheckCircle2 className="w-4 h-4 mr-2" />
                       Select Template
@@ -219,8 +294,9 @@ export function VendorInvoiceTemplates() {
               </div>
             </Card>
           </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Preview Modal - EXACT SAME AS ADMIN */}
       <AnimatePresence>
@@ -280,7 +356,7 @@ export function VendorInvoiceTemplates() {
                     )}
                     <Button
                       className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white"
-                      onClick={() => toast.success('Template downloaded!')}
+                      onClick={() => showToast.success('Template downloaded!')}
                     >
                       <Download className="w-4 h-4 mr-2" />
                       Download PDF

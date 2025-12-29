@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../src/lib/prisma'
-import { ProductCondition } from '@prisma/client'
+import { ProductCondition, UserType } from '@prisma/client'
 
 // Map form condition values to Prisma enum values
 function mapProductCondition(condition: string): ProductCondition {
@@ -217,8 +217,12 @@ export async function POST(request: NextRequest) {
       hasVariants,
       variants,
       productImages,
-      supplierId, // Required: which supplier is creating this product
+      supplierId: supplierIdFromBody, // Optional: which supplier this product belongs to (if admin selects supplier)
+      createdByUserId, // Required: who is creating this product (admin/supplier/vendor ID)
+      createdByUserType, // Required: type of user creating (ADMIN, SUPPLIER, VENDOR)
     } = body
+
+    let supplierId = supplierIdFromBody // Make it mutable for supplier case
 
     // Validation
     if (!productName || !sku || !baseSellingPrice) {
@@ -228,12 +232,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validation: supplierId is required
-    if (!supplierId) {
+    // Validation: createdByUserId and createdByUserType are required
+    if (!createdByUserId || !createdByUserType) {
       return NextResponse.json(
-        { error: 'Supplier ID is required. Please select a supplier.' },
+        { error: 'Created by user ID and user type are required' },
         { status: 400 }
       )
+    }
+
+    // Verify createdByUserType is valid (ADMIN, SUPPLIER, or VENDOR)
+    const validUserTypes = ['ADMIN', 'SUPPLIER', 'VENDOR']
+    const userTypeUpper = createdByUserType.toUpperCase()
+    if (!validUserTypes.includes(userTypeUpper)) {
+      return NextResponse.json(
+        { error: 'Invalid user type. Must be ADMIN, SUPPLIER, or VENDOR' },
+        { status: 400 }
+      )
+    }
+
+    // If supplier is creating, ensure supplierId matches their ID or set it
+    if (userTypeUpper === 'SUPPLIER') {
+      if (supplierId && supplierId !== createdByUserId) {
+        return NextResponse.json(
+          { error: 'Supplier ID must match the creator ID for supplier-created products' },
+          { status: 400 }
+        )
+      }
+      // Set supplierId to supplier's own ID
+      supplierId = createdByUserId
     }
 
     // Check if SKU already exists
@@ -305,7 +331,9 @@ export async function POST(request: NextRequest) {
       images: productImages && Array.isArray(productImages) ? productImages : [],
       hasVariants: hasVariants || false,
       variants: variants || null,
-      supplierId,
+      supplierId: supplierId || null, // Optional: if admin selects a supplier or supplier creates
+      createdByUserId,
+      createdByUserType: userTypeUpper as UserType,
     }
 
     // Create product

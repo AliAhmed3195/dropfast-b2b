@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   Users,
@@ -18,7 +18,9 @@ import {
   Star,
   Package,
   X,
+  Loader2,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -30,102 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-
-// Mock customer data - will come from Supabase in production
-const mockCustomers = [
-  {
-    id: 'CUST-001',
-    name: 'John Smith',
-    email: 'john.smith@email.com',
-    phone: '+1 (555) 123-4567',
-    location: 'New York, USA',
-    avatar: '',
-    joinDate: '2024-10-15',
-    lastOrder: '2024-12-24',
-    totalOrders: 12,
-    totalSpent: 1247.88,
-    status: 'active',
-    rating: 4.8,
-    orders: [
-      { id: 'ORD-001', date: '2024-12-24', total: 79.99, status: 'delivered', items: 2 },
-      { id: 'ORD-002', date: '2024-12-20', total: 149.99, status: 'delivered', items: 1 },
-      { id: 'ORD-003', date: '2024-12-15', total: 89.99, status: 'delivered', items: 3 },
-    ],
-  },
-  {
-    id: 'CUST-002',
-    name: 'Sarah Johnson',
-    email: 'sarah.j@email.com',
-    phone: '+1 (555) 234-5678',
-    location: 'Los Angeles, USA',
-    avatar: '',
-    joinDate: '2024-11-02',
-    lastOrder: '2024-12-23',
-    totalOrders: 8,
-    totalSpent: 892.45,
-    status: 'active',
-    rating: 5.0,
-    orders: [
-      { id: 'ORD-004', date: '2024-12-23', total: 199.99, status: 'shipped', items: 1 },
-      { id: 'ORD-005', date: '2024-12-18', total: 129.99, status: 'delivered', items: 2 },
-    ],
-  },
-  {
-    id: 'CUST-003',
-    name: 'Mike Wilson',
-    email: 'mike.wilson@email.com',
-    phone: '+1 (555) 345-6789',
-    location: 'Chicago, USA',
-    avatar: '',
-    joinDate: '2024-09-20',
-    lastOrder: '2024-12-22',
-    totalOrders: 15,
-    totalSpent: 2145.67,
-    status: 'vip',
-    rating: 4.9,
-    orders: [
-      { id: 'ORD-006', date: '2024-12-22', total: 299.99, status: 'processing', items: 4 },
-      { id: 'ORD-007', date: '2024-12-19', total: 189.99, status: 'delivered', items: 2 },
-      { id: 'ORD-008', date: '2024-12-16', total: 249.99, status: 'delivered', items: 3 },
-    ],
-  },
-  {
-    id: 'CUST-004',
-    name: 'Emily Brown',
-    email: 'emily.b@email.com',
-    phone: '+1 (555) 456-7890',
-    location: 'Miami, USA',
-    avatar: '',
-    joinDate: '2024-12-01',
-    lastOrder: '2024-12-21',
-    totalOrders: 3,
-    totalSpent: 267.97,
-    status: 'active',
-    rating: 4.5,
-    orders: [
-      { id: 'ORD-009', date: '2024-12-21', total: 45.99, status: 'delivered', items: 1 },
-      { id: 'ORD-010', date: '2024-12-18', total: 99.99, status: 'delivered', items: 2 },
-    ],
-  },
-  {
-    id: 'CUST-005',
-    name: 'David Lee',
-    email: 'david.lee@email.com',
-    phone: '+1 (555) 567-8901',
-    location: 'Seattle, USA',
-    avatar: '',
-    joinDate: '2024-08-10',
-    lastOrder: '2024-12-20',
-    totalOrders: 20,
-    totalSpent: 3567.89,
-    status: 'vip',
-    rating: 5.0,
-    orders: [
-      { id: 'ORD-011', date: '2024-12-20', total: 399.99, status: 'delivered', items: 5 },
-      { id: 'ORD-012', date: '2024-12-17', total: 279.99, status: 'delivered', items: 3 },
-    ],
-  },
-];
+import { showToast } from '../../lib/toast';
 
 const statusColors = {
   active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -141,28 +48,64 @@ const orderStatusColors = {
 };
 
 export function VendorCustomers() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
 
-  const filteredCustomers = mockCustomers.filter((customer) => {
-    const matchesSearch =
-      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.id.toLowerCase().includes(searchQuery.toLowerCase());
+  // Fetch customers
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
 
-    const matchesFilter =
-      filterStatus === 'all' || customer.status === filterStatus;
+    fetchingRef.current = true;
+    setLoading(true);
 
-    return matchesSearch && matchesFilter;
+    const fetchCustomers = async () => {
+      try {
+        const url = `/api/vendor/customers?vendorId=${user.id}${searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (response.ok) {
+          setCustomers(data.customers || []);
+        } else {
+          showToast.error(data.error || 'Failed to fetch customers');
+        }
+      } catch (error) {
+        console.error('Fetch customers error:', error);
+        showToast.error('Failed to fetch customers');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchCustomers();
+  }, [user?.id, searchQuery]);
+
+  const filteredCustomers = customers.filter((customer) => {
+    const matchesFilter = filterStatus === 'all' || customer.status === filterStatus;
+    return matchesFilter;
   });
 
   // Calculate stats
-  const totalCustomers = mockCustomers.length;
-  const activeCustomers = mockCustomers.filter((c) => c.status === 'active').length;
-  const vipCustomers = mockCustomers.filter((c) => c.status === 'vip').length;
-  const totalRevenue = mockCustomers.reduce((sum, c) => sum + c.totalSpent, 0);
-  const avgOrderValue = totalRevenue / mockCustomers.reduce((sum, c) => sum + c.totalOrders, 0);
+  const totalCustomers = customers.length;
+  const activeCustomers = customers.filter((c) => c.status === 'active').length;
+  const vipCustomers = customers.filter((c) => c.status === 'vip').length;
+  const totalRevenue = customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0);
+  const totalOrders = customers.reduce((sum, c) => sum + (c.orderCount || 0), 0);
+  const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   Store,
@@ -22,9 +22,9 @@ import {
   ArrowDownRight,
   Boxes,
   Activity,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useApp } from '../contexts/AppContext';
 import { useRouter } from 'next/navigation';
 import { getRoute } from '../../lib/routeMap';
 import { Card } from './ui/card';
@@ -46,104 +46,107 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-
-// Enhanced mock data
-const salesData = [
-  { date: 'Mon', sales: 2400, orders: 24, revenue: 2400 },
-  { date: 'Tue', sales: 3200, orders: 32, revenue: 3200 },
-  { date: 'Wed', sales: 2800, orders: 28, revenue: 2800 },
-  { date: 'Thu', sales: 4100, orders: 41, revenue: 4100 },
-  { date: 'Fri', sales: 3800, orders: 38, revenue: 3800 },
-  { date: 'Sat', sales: 5200, orders: 52, revenue: 5200 },
-  { date: 'Sun', sales: 4600, orders: 46, revenue: 4600 },
-];
-
-const categoryData = [
-  { name: 'Electronics', value: 35, color: '#6366f1' },
-  { name: 'Fashion', value: 25, color: '#8b5cf6' },
-  { name: 'Home', value: 20, color: '#06b6d4' },
-  { name: 'Sports', value: 12, color: '#10b981' },
-  { name: 'Others', value: 8, color: '#f59e0b' },
-];
-
-const topProducts = [
-  { name: 'Premium Headphones', sales: 234, revenue: 18720, rating: 4.8, trend: 12 },
-  { name: 'Smart Watch Pro', sales: 189, revenue: 37800, rating: 4.9, trend: 8 },
-  { name: 'Laptop Stand', sales: 156, revenue: 7176, rating: 4.6, trend: -3 },
-  { name: 'Wireless Mouse', sales: 145, revenue: 4350, rating: 4.7, trend: 15 },
-  { name: 'USB-C Hub', sales: 134, revenue: 4020, rating: 4.5, trend: 5 },
-];
-
-const recentActivity = [
-  { type: 'order', message: 'New order #ORD-1234 from John Smith', time: '5 min ago', icon: ShoppingCart },
-  { type: 'product', message: 'Low stock alert: Wireless Mouse', time: '12 min ago', icon: AlertCircle },
-  { type: 'review', message: 'New 5-star review on Smart Watch Pro', time: '1 hour ago', icon: Star },
-  { type: 'shipment', message: 'Order #ORD-1230 delivered', time: '2 hours ago', icon: CheckCircle },
-];
+import { showToast } from '../../lib/toast';
 
 export function VendorDashboard() {
   const { user } = useAuth();
-  const { stores, getStoresByVendor, getOrdersByVendor } = useApp();
   const router = useRouter();
-  const [timeRange, setTimeRange] = useState('7d');
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const fetchingRef = useRef(false);
 
-  const myStores = user ? getStoresByVendor(user.id) : [];
-  const myOrders = user ? getOrdersByVendor(user.id) : [];
-  const totalProducts = myStores.reduce((sum, store) => sum + store.products.length, 0);
+  // Fetch dashboard data
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
 
-  // Calculate stats
-  const totalSales = salesData.reduce((sum, day) => sum + day.sales, 0);
-  const avgOrderValue = totalSales / salesData.reduce((sum, day) => sum + day.orders, 0);
-  const totalRevenue = totalSales;
-  const pendingOrders = Math.floor(myOrders.length * 0.3);
+    fetchingRef.current = true;
+    setLoading(true);
 
-  const stats = [
+    const fetchDashboard = async () => {
+      try {
+        const response = await fetch(`/api/vendor/dashboard?vendorId=${user.id}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setDashboardData(data);
+        } else {
+          showToast.error(data.error || 'Failed to fetch dashboard data');
+        }
+      } catch (error) {
+        console.error('Fetch dashboard error:', error);
+        showToast.error('Failed to fetch dashboard data');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchDashboard();
+  }, [user?.id]);
+
+  // Check if vendor has stores
+  const hasStores = dashboardData?.stats?.totalStores > 0;
+
+  const stats = dashboardData?.stats ? [
     {
       title: 'Total Revenue',
-      value: `$${totalRevenue.toLocaleString()}`,
-      change: '+24.5%',
-      trend: 'up',
+      value: `$${dashboardData.stats.totalRevenue?.toLocaleString() || '0'}`,
+      change: '',
+      trend: 'neutral' as const,
       icon: DollarSign,
       color: 'from-green-500 to-emerald-600',
       bgColor: 'from-green-500/10 to-emerald-500/10',
     },
     {
       title: 'Total Orders',
-      value: salesData.reduce((sum, day) => sum + day.orders, 0).toString(),
-      change: '+12.3%',
-      trend: 'up',
+      value: (dashboardData.stats.totalOrders || 0).toString(),
+      change: '',
+      trend: 'neutral' as const,
       icon: ShoppingCart,
       color: 'from-blue-500 to-cyan-600',
       bgColor: 'from-blue-500/10 to-cyan-500/10',
     },
     {
       title: 'Active Products',
-      value: totalProducts.toString(),
-      change: `${myStores.length} stores`,
-      trend: 'neutral',
+      value: (dashboardData.stats.activeProducts || 0).toString(),
+      change: `${dashboardData.stats.totalStores || 0} stores`,
+      trend: 'neutral' as const,
       icon: Package,
       color: 'from-purple-500 to-pink-600',
       bgColor: 'from-purple-500/10 to-pink-500/10',
     },
     {
       title: 'Active Stores',
-      value: myStores.filter(s => s.status === 'active').length.toString(),
-      change: `${myStores.length} total`,
-      trend: 'neutral',
+      value: (dashboardData.stats.activeStores || 0).toString(),
+      change: `${dashboardData.stats.totalStores || 0} total`,
+      trend: 'neutral' as const,
       icon: Store,
       color: 'from-orange-500 to-red-600',
       bgColor: 'from-orange-500/10 to-red-500/10',
     },
-  ];
+  ] : [];
 
-  const performanceMetrics = [
-    { label: 'Conversion Rate', value: '3.8%', change: '+0.5%', trend: 'up' },
-    { label: 'Avg Order Value', value: `$${avgOrderValue.toFixed(2)}`, change: '+8.2%', trend: 'up' },
-    { label: 'Customer Rating', value: '4.7', change: '+0.2', trend: 'up' },
-    { label: 'Pending Orders', value: pendingOrders.toString(), change: '-5', trend: 'down' },
-  ];
+  const performanceMetrics = dashboardData?.stats ? [
+    { label: 'Conversion Rate', value: '0%', change: '', trend: 'neutral' as const },
+    { label: 'Avg Order Value', value: `$${dashboardData.stats.avgOrderValue?.toFixed(2) || '0.00'}`, change: '', trend: 'neutral' as const },
+    { label: 'Customer Rating', value: '0', change: '', trend: 'neutral' as const },
+    { label: 'Pending Orders', value: (dashboardData.stats.pendingOrders || 0).toString(), change: '', trend: 'neutral' as const },
+  ] : [];
 
-  if (myStores.length === 0) {
+  const salesData = dashboardData?.salesData || [];
+  const categoryData = dashboardData?.categoryData || [];
+  const topProducts = dashboardData?.topProducts || [];
+  const recentActivity = dashboardData?.recentActivity || [];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  if (!hasStores) {
     return (
       <div className="p-6">
         <motion.div
@@ -272,78 +275,98 @@ export function VendorDashboard() {
               </Button>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={salesData}>
-              <defs>
-                <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
-              <XAxis 
-                dataKey="date" 
-                stroke="#64748b" 
-                fontSize={12}
-                tickLine={false}
-              />
-              <YAxis 
-                stroke="#64748b" 
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '12px',
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="sales"
-                stroke="#6366f1"
-                strokeWidth={3}
-                fill="url(#salesGradient)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {salesData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={salesData}>
+                <defs>
+                  <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="#64748b" 
+                  fontSize={12}
+                  tickLine={false}
+                />
+                <YAxis 
+                  stroke="#64748b" 
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="sales"
+                  stroke="#6366f1"
+                  strokeWidth={3}
+                  fill="url(#salesGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="text-center">
+                <BarChart3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No sales data available</p>
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* Category Distribution */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Sales by Category</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie
-                data={categoryData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={2}
-                dataKey="value"
-              >
-                {categoryData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
+          {categoryData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {categoryData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-4 space-y-2">
+                {categoryData.map((cat) => (
+                  <div key={cat.name} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
+                      <span className="text-muted-foreground">{cat.name}</span>
+                    </div>
+                    <span className="font-semibold">{cat.value}%</span>
+                  </div>
                 ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-4 space-y-2">
-            {categoryData.map((cat) => (
-              <div key={cat.name} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
-                  <span className="text-muted-foreground">{cat.name}</span>
-                </div>
-                <span className="font-semibold">{cat.value}%</span>
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-[220px] text-muted-foreground">
+              <div className="text-center">
+                <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No category data available</p>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -359,12 +382,14 @@ export function VendorDashboard() {
             <Card className="p-6 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-muted-foreground">{metric.label}</span>
-                <div className={`flex items-center gap-1 text-xs font-semibold ${
-                  metric.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {metric.trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {metric.change}
-                </div>
+                {metric.change && metric.trend !== 'neutral' && (
+                  <div className={`flex items-center gap-1 text-xs font-semibold ${
+                    metric.trend === 'up' ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {metric.trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    {metric.change}
+                  </div>
+                )}
               </div>
               <p className="text-2xl font-bold">{metric.value}</p>
             </Card>
@@ -382,43 +407,54 @@ export function VendorDashboard() {
               View All
             </Button>
           </div>
-          <div className="space-y-4">
-            {topProducts.map((product, idx) => (
-              <motion.div
-                key={product.name}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6 + idx * 0.1 }}
-                className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-indigo-600 text-white font-bold text-sm">
-                    #{idx + 1}
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">{product.name}</h4>
-                    <div className="flex items-center gap-3 mt-1">
-                      <div className="flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                        <span className="text-sm text-muted-foreground">{product.rating}</span>
+          {topProducts.length > 0 ? (
+            <div className="space-y-4">
+              {topProducts.map((product, idx) => (
+                <motion.div
+                  key={product.name}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.6 + idx * 0.1 }}
+                  className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-indigo-600 text-white font-bold text-sm">
+                      #{idx + 1}
+                    </div>
+                    <div>
+                      <h4 className="font-semibold">{product.name}</h4>
+                      <div className="flex items-center gap-3 mt-1">
+                        <div className="flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm text-muted-foreground">{product.rating?.toFixed(1) || '0.0'}</span>
+                        </div>
+                        <span className="text-sm text-muted-foreground">•</span>
+                        <span className="text-sm text-muted-foreground">{product.sales} sales</span>
                       </div>
-                      <span className="text-sm text-muted-foreground">•</span>
-                      <span className="text-sm text-muted-foreground">{product.sales} sales</span>
                     </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-lg">${product.revenue.toLocaleString()}</p>
-                  <div className={`flex items-center gap-1 text-xs font-semibold ${
-                    product.trend > 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {product.trend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    {Math.abs(product.trend)}%
+                  <div className="text-right">
+                    <p className="font-bold text-lg">${product.revenue?.toLocaleString() || '0'}</p>
+                    {product.trend !== undefined && product.trend !== 0 && (
+                      <div className={`flex items-center gap-1 text-xs font-semibold ${
+                        product.trend > 0 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {product.trend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                        {Math.abs(product.trend)}%
+                      </div>
+                    )}
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="text-center">
+                <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No products data available</p>
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* Recent Activity */}
@@ -429,38 +465,47 @@ export function VendorDashboard() {
               Recent Activity
             </h3>
           </div>
-          <div className="space-y-4">
-            {recentActivity.map((activity, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.7 + idx * 0.1 }}
-                className="flex items-start gap-3 pb-4 border-b last:border-0"
-              >
-                <div className={`p-2 rounded-lg ${
-                  activity.type === 'order' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                  activity.type === 'product' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
-                  activity.type === 'review' ? 'bg-purple-100 dark:bg-purple-900/30' :
-                  'bg-green-100 dark:bg-green-900/30'
-                }`}>
-                  <activity.icon className={`w-4 h-4 ${
-                    activity.type === 'order' ? 'text-blue-600' :
-                    activity.type === 'product' ? 'text-yellow-600' :
-                    activity.type === 'review' ? 'text-purple-600' :
-                    'text-green-600'
-                  }`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium line-clamp-2">{activity.message}</p>
-                  <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                    <Clock className="w-3 h-3" />
-                    {activity.time}
+          {recentActivity.length > 0 ? (
+            <div className="space-y-4">
+              {recentActivity.map((activity, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.7 + idx * 0.1 }}
+                  className="flex items-start gap-3 pb-4 border-b last:border-0"
+                >
+                  <div className={`p-2 rounded-lg ${
+                    activity.type === 'order' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                    activity.type === 'product' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
+                    activity.type === 'review' ? 'bg-purple-100 dark:bg-purple-900/30' :
+                    'bg-green-100 dark:bg-green-900/30'
+                  }`}>
+                    <ShoppingCart className={`w-4 h-4 ${
+                      activity.type === 'order' ? 'text-blue-600' :
+                      activity.type === 'product' ? 'text-yellow-600' :
+                      activity.type === 'review' ? 'text-purple-600' :
+                      'text-green-600'
+                    }`} />
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium line-clamp-2">{activity.message}</p>
+                    <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                      <Clock className="w-3 h-3" />
+                      {activity.time}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-[200px] text-muted-foreground">
+              <div className="text-center">
+                <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No recent activity</p>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
 

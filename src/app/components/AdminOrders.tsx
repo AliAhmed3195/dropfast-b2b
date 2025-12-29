@@ -90,7 +90,7 @@ export function AdminOrders() {
     currentAbortControllerRef.current = abortController;
     fetchingOrdersRef.current = true;
 
-    const loadOrders = async () => {
+    const fetchOrders = async () => {
       if (!isMounted) return;
 
       try {
@@ -120,7 +120,7 @@ export function AdminOrders() {
       }
     };
 
-    loadOrders();
+    fetchOrders();
 
     return () => {
       isMounted = false;
@@ -171,7 +171,12 @@ export function AdminOrders() {
       const data = await response.json();
 
       if (response.ok) {
-        await fetchOrders();
+        // Refetch orders
+        const refetchResponse = await fetch('/api/admin/orders');
+        if (refetchResponse.ok) {
+          const refetchData = await refetchResponse.json();
+          setOrders(refetchData.orders || []);
+        }
         const statusLabel = statusOptions.find(s => s.value === statusValue)?.label || statusValue;
         showToast.success(`Order status updated to ${statusLabel}`);
         setShowStatusUpdate(false);

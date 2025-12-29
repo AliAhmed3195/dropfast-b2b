@@ -646,9 +646,11 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
         hasVariants,
         variants,
         productImages, // API will convert this to 'images' array
-        // For admin creating products, we need to get supplierId from the form or use a default
-        // In a real scenario, admin would select which supplier to create the product for
-        supplierId: finalSupplierId, // Required for new products
+        // Creator tracking
+        createdByUserId: user?.id || '',
+        createdByUserType: user?.role || 'admin', // admin, supplier, vendor
+        // Supplier relationship (optional - for supplier products or admin-created products for suppliers)
+        supplierId: finalSupplierId || null, // Optional: if admin selects supplier or supplier creates
       };
 
       const url = product ? `/api/admin/products/${product.id}` : '/api/admin/products';

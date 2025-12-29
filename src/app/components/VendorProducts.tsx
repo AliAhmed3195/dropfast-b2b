@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -22,7 +22,9 @@ import {
   Tag as TagIcon,
   Calendar,
   Box,
+  Loader2,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -50,164 +52,20 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
-import { toast } from 'sonner';
-
-// Mock imported products data
-const importedProducts = [
-  {
-    id: 1,
-    name: 'Wireless Bluetooth Headphones',
-    sku: 'WBH-2024-001',
-    store: 'TechHub Store',
-    storeId: 'store-1',
-    category: 'Electronics',
-    supplier: 'TechGear Supplies',
-    supplierPrice: 45.99,
-    retailPrice: 79.99,
-    margin: 42.5,
-    stock: 245,
-    status: 'active',
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
-    importedDate: '2024-12-20',
-    description: 'Premium wireless headphones with noise cancellation',
-    metaTitle: 'Wireless Bluetooth Headphones - Premium Audio',
-    metaDescription: 'Experience superior sound quality with our premium wireless headphones featuring active noise cancellation.',
-    metaKeywords: 'wireless, bluetooth, headphones, noise cancellation, audio',
-  },
-  {
-    id: 2,
-    name: 'Smart Watch Pro',
-    sku: 'SWP-2024-002',
-    store: 'TechHub Store',
-    storeId: 'store-1',
-    category: 'Wearables',
-    supplier: 'WearTech Inc',
-    supplierPrice: 129.99,
-    retailPrice: 199.99,
-    margin: 35.0,
-    stock: 89,
-    status: 'active',
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400',
-    importedDate: '2024-12-18',
-    description: 'Advanced smartwatch with health monitoring',
-    metaTitle: 'Smart Watch Pro - Health & Fitness Tracker',
-    metaDescription: 'Track your health and fitness goals with advanced monitoring features.',
-    metaKeywords: 'smartwatch, fitness, health, wearable, tracker',
-  },
-  {
-    id: 3,
-    name: 'USB-C Fast Charger',
-    sku: 'UFC-2024-003',
-    store: 'ElectroMart',
-    storeId: 'store-2',
-    category: 'Accessories',
-    supplier: 'PowerHub Supplies',
-    supplierPrice: 15.99,
-    retailPrice: 29.99,
-    margin: 46.7,
-    stock: 450,
-    status: 'active',
-    image: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400',
-    importedDate: '2024-12-15',
-    description: '65W fast charging adapter with multiple ports',
-    metaTitle: 'USB-C Fast Charger 65W - Multi-Port',
-    metaDescription: 'Fast charge multiple devices simultaneously with our 65W USB-C charger.',
-    metaKeywords: 'usb-c, fast charger, 65w, multi-port, adapter',
-  },
-  {
-    id: 4,
-    name: 'Laptop Stand Adjustable',
-    sku: 'LSA-2024-004',
-    store: 'GadgetZone',
-    storeId: 'store-3',
-    category: 'Office',
-    supplier: 'ErgoDesk Pro',
-    supplierPrice: 25.99,
-    retailPrice: 49.99,
-    margin: 48.0,
-    stock: 156,
-    status: 'active',
-    image: 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400',
-    importedDate: '2024-12-12',
-    description: 'Ergonomic laptop stand with adjustable height',
-    metaTitle: 'Adjustable Laptop Stand - Ergonomic Design',
-    metaDescription: 'Improve your posture with our ergonomic adjustable laptop stand.',
-    metaKeywords: 'laptop stand, ergonomic, adjustable, office, workspace',
-  },
-  {
-    id: 5,
-    name: 'Portable SSD 1TB',
-    sku: 'PSS-2024-005',
-    store: 'TechHub Store',
-    storeId: 'store-1',
-    category: 'Storage',
-    supplier: 'DataStore Solutions',
-    supplierPrice: 79.99,
-    retailPrice: 129.99,
-    margin: 38.5,
-    stock: 0,
-    status: 'out-of-stock',
-    image: 'https://images.unsplash.com/photo-1531492746076-161ca9bcad58?w=400',
-    importedDate: '2024-12-10',
-    description: 'Ultra-fast portable SSD with USB 3.2',
-    metaTitle: 'Portable SSD 1TB - High Speed Storage',
-    metaDescription: 'Ultra-fast portable storage solution with 1TB capacity.',
-    metaKeywords: 'ssd, portable, storage, 1tb, usb 3.2',
-  },
-  {
-    id: 6,
-    name: 'Gaming Mouse RGB',
-    sku: 'GMR-2024-006',
-    store: 'ElectroMart',
-    storeId: 'store-2',
-    category: 'Gaming',
-    supplier: 'GameGear Elite',
-    supplierPrice: 34.99,
-    retailPrice: 59.99,
-    margin: 41.7,
-    stock: 15,
-    status: 'low-stock',
-    image: 'https://images.unsplash.com/photo-1527814050087-3793815479db?w=400',
-    importedDate: '2024-12-08',
-    description: 'Professional gaming mouse with RGB lighting',
-    metaTitle: 'Gaming Mouse RGB - Pro Gaming Gear',
-    metaDescription: 'Elevate your gaming with our professional RGB gaming mouse.',
-    metaKeywords: 'gaming mouse, rgb, professional, gaming gear',
-  },
-  {
-    id: 7,
-    name: 'Mechanical Keyboard',
-    sku: 'MKB-2024-007',
-    store: 'TechHub Store',
-    storeId: 'store-1',
-    category: 'Gaming',
-    supplier: 'GameGear Elite',
-    supplierPrice: 89.99,
-    retailPrice: 149.99,
-    margin: 40.0,
-    stock: 75,
-    status: 'draft',
-    image: 'https://images.unsplash.com/photo-1595225476474-87563907a212?w=400',
-    importedDate: '2024-12-05',
-    description: 'Mechanical keyboard with customizable RGB lighting',
-    metaTitle: 'Mechanical Keyboard RGB - Gaming Keyboard',
-    metaDescription: 'Premium mechanical keyboard with customizable RGB lighting.',
-    metaKeywords: 'mechanical keyboard, rgb, gaming, customizable',
-  },
-];
-
-// Get unique values for filters
-const uniqueStores = Array.from(
-  new Map(importedProducts.map(p => [p.storeId, { id: p.storeId, name: p.store }])).values()
-);
-const uniqueCategories = Array.from(new Set(importedProducts.map(p => p.category)));
+import { showToast } from '../../lib/toast';
 
 export function VendorProducts() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [storeFilter, setStoreFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [products, setProducts] = useState<any[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
   
   // Modal states
   const [viewDetailProduct, setViewDetailProduct] = useState<any>(null);
@@ -221,8 +79,39 @@ export function VendorProducts() {
     metaKeywords: '',
   });
 
+  // Fetch products
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch(`/api/vendor/products?vendorId=${user.id}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setProducts(data.products || []);
+          setStores(data.stores || []);
+          setCategories(data.categories || []);
+        } else {
+          showToast.error(data.error || 'Failed to fetch products');
+        }
+      } catch (error) {
+        console.error('Fetch products error:', error);
+        showToast.error('Failed to fetch products');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchProducts();
+  }, [user?.id]);
+
   // Filter products
-  const filteredProducts = importedProducts.filter(product => {
+  const filteredProducts = products.filter(product => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.sku.toLowerCase().includes(searchQuery.toLowerCase());
@@ -235,11 +124,13 @@ export function VendorProducts() {
   });
 
   const stats = {
-    total: importedProducts.length,
-    active: importedProducts.filter(p => p.status === 'active').length,
-    lowStock: importedProducts.filter(p => p.status === 'low-stock').length,
-    outOfStock: importedProducts.filter(p => p.status === 'out-of-stock').length,
-    avgMargin: importedProducts.reduce((acc, p) => acc + p.margin, 0) / importedProducts.length,
+    total: products.length,
+    active: products.filter(p => p.status === 'active').length,
+    lowStock: products.filter(p => p.status === 'low-stock').length,
+    outOfStock: products.filter(p => p.status === 'out-of-stock').length,
+    avgMargin: products.length > 0
+      ? products.reduce((acc, p) => acc + p.margin, 0) / products.length
+      : 0,
   };
 
   const handleViewDetails = (product: any) => {
@@ -252,24 +143,88 @@ export function VendorProducts() {
       retailPrice: product.retailPrice.toString(),
       metaTitle: product.metaTitle || '',
       metaDescription: product.metaDescription || '',
-      metaKeywords: product.metaKeywords || '',
+      metaKeywords: Array.isArray(product.metaKeywords) 
+        ? product.metaKeywords.join(', ') 
+        : (product.metaKeywords || ''),
     });
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
+    if (!editingProduct) return;
+
     if (!editForm.retailPrice || parseFloat(editForm.retailPrice) <= editingProduct.supplierPrice) {
-      toast.error('Retail price must be higher than supplier price!');
+      showToast.error('Retail price must be higher than supplier price!');
       return;
     }
 
-    toast.success('Product updated successfully!', {
-      description: 'Price and SEO settings have been updated.',
-    });
-    setEditingProduct(null);
+    try {
+      const metaKeywordsArray = editForm.metaKeywords
+        ? editForm.metaKeywords.split(',').map((k: string) => k.trim()).filter(Boolean)
+        : [];
+
+      const response = await fetch('/api/vendor/products', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          storeProductId: editingProduct.id,
+          sellingPrice: editForm.retailPrice,
+          metaTitle: editForm.metaTitle || null,
+          metaDescription: editForm.metaDescription || null,
+          metaKeywords: metaKeywordsArray,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success('Product updated successfully!');
+        setEditingProduct(null);
+        
+        // Refresh products list
+        const refreshResponse = await fetch(`/api/vendor/products?vendorId=${user?.id}`);
+        const refreshData = await refreshResponse.json();
+        if (refreshResponse.ok) {
+          setProducts(refreshData.products || []);
+        }
+      } else {
+        showToast.error(data.error || 'Failed to update product');
+      }
+    } catch (error) {
+      console.error('Update product error:', error);
+      showToast.error('Failed to update product');
+    }
   };
 
-  const handleRemove = (productId: number) => {
-    toast.success('Product removed from store');
+  const handleRemove = async (productId: string) => {
+    if (!confirm('Are you sure you want to remove this product from your store?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/vendor/products/${productId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success('Product removed from store successfully');
+        
+        // Refresh products list
+        const refreshResponse = await fetch(`/api/vendor/products?vendorId=${user?.id}`);
+        const refreshData = await refreshResponse.json();
+        if (refreshResponse.ok) {
+          setProducts(refreshData.products || []);
+        }
+      } else {
+        showToast.error(data.error || 'Failed to remove product');
+      }
+    } catch (error) {
+      console.error('Remove product error:', error);
+      showToast.error('Failed to remove product');
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -297,6 +252,14 @@ export function VendorProducts() {
         return null;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -413,7 +376,7 @@ export function VendorProducts() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Stores</SelectItem>
-                {uniqueStores.map(store => (
+                {stores.map(store => (
                   <SelectItem key={store.id} value={store.id}>
                     {store.name}
                   </SelectItem>
@@ -428,7 +391,7 @@ export function VendorProducts() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                {uniqueCategories.map(category => (
+                {categories.map(category => (
                   <SelectItem key={category} value={category}>
                     {category}
                   </SelectItem>
@@ -472,7 +435,7 @@ export function VendorProducts() {
           <div className="flex items-center gap-2 flex-wrap">
             {storeFilter !== 'all' && (
               <Badge variant="secondary" className="gap-2">
-                Store: {uniqueStores.find(s => s.id === storeFilter)?.name}
+                Store: {stores.find(s => s.id === storeFilter)?.name}
                 <X 
                   className="w-3 h-3 cursor-pointer" 
                   onClick={() => setStoreFilter('all')}
@@ -502,7 +465,27 @@ export function VendorProducts() {
       </Card>
 
       {/* Products View */}
-      {viewMode === 'grid' ? (
+      {filteredProducts.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Package className="w-24 h-24 text-muted-foreground/30 mx-auto mb-4" />
+          </motion.div>
+          <h3 className="text-xl font-semibold mb-2">
+            {searchQuery || storeFilter !== 'all' || categoryFilter !== 'all' || statusFilter !== 'all'
+              ? 'No products match your filters'
+              : 'No products imported yet'}
+          </h3>
+          <p className="text-muted-foreground text-center mb-4">
+            {searchQuery || storeFilter !== 'all' || categoryFilter !== 'all' || statusFilter !== 'all'
+              ? 'Try adjusting your search or filters to find products'
+              : 'Import products from suppliers to start selling in your stores'}
+          </p>
+        </div>
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProducts.map((product, index) => (
             <motion.div
@@ -674,14 +657,6 @@ export function VendorProducts() {
         </Card>
       )}
 
-      {filteredProducts.length === 0 && (
-        <div className="text-center py-16">
-          <Package className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-          <p className="text-lg text-muted-foreground">No imported products found</p>
-          <p className="text-sm text-muted-foreground mt-2">Try adjusting your filters or import products from the Inventory page</p>
-        </div>
-      )}
-
       {/* View Details Modal */}
       <AnimatePresence>
         {viewDetailProduct && (
@@ -767,7 +742,7 @@ export function VendorProducts() {
                       </div>
                       <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
                         <p className="text-xs text-muted-foreground mb-1">Description</p>
-                        <p className="text-sm">{viewDetailProduct.description}</p>
+                        <p className="text-sm">{viewDetailProduct.description || 'No description'}</p>
                       </div>
                     </div>
                   </div>
@@ -817,7 +792,11 @@ export function VendorProducts() {
                     </div>
                     <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800">
                       <p className="text-xs text-muted-foreground mb-1">Meta Keywords</p>
-                      <p className="text-sm">{viewDetailProduct.metaKeywords || 'Not set'}</p>
+                      <p className="text-sm">
+                        {Array.isArray(viewDetailProduct.metaKeywords)
+                          ? viewDetailProduct.metaKeywords.join(', ')
+                          : (viewDetailProduct.metaKeywords || 'Not set')}
+                      </p>
                     </div>
                   </div>
                 </div>

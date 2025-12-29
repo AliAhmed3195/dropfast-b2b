@@ -333,30 +333,31 @@ export function AdminDashboard() {
             </div>
             <p className="text-sm text-muted-foreground mb-6 font-medium">Platform user breakdown</p>
             <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={userDistributionData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={120}
-                  paddingAngle={8}
-                  dataKey="value"
-                >
-                  {userDistributionData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="#fff" strokeWidth={3} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    border: '2px solid #e2e8f0',
-                    borderRadius: '12px',
-                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)',
-                    backdropFilter: 'blur(10px)',
-                    padding: '12px',
-                  }}
-                />
+              {userDistributionData.length > 0 ? (
+                <PieChart>
+                  <Pie
+                    data={userDistributionData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={80}
+                    outerRadius={120}
+                    paddingAngle={8}
+                    dataKey="value"
+                  >
+                    {userDistributionData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} stroke="#fff" strokeWidth={3} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                      border: '2px solid #e2e8f0',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)',
+                      backdropFilter: 'blur(10px)',
+                      padding: '12px',
+                    }}
+                  />
                   <Legend 
                     verticalAlign="bottom" 
                     height={36}

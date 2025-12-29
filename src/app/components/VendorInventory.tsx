@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -18,6 +18,7 @@ import {
   TrendingUp,
   User,
   ShoppingBag,
+  Loader2,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -32,135 +33,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { toast } from 'sonner';
 import { cn } from './ui/utils';
 import { ProductForm } from './ProductForm';
 import { UnifiedImportModal } from './UnifiedImportModal';
-
-// Mock data - Supplier Products
-const supplierProducts = [
-  {
-    id: 1,
-    name: 'Wireless Bluetooth Headphones',
-    sku: 'WBH-2024-001',
-    supplier: 'TechGear Supplies',
-    category: 'Electronics',
-    supplierPrice: 45.99,
-    moq: 10,
-    stock: 245,
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
-    description: 'Premium wireless headphones with noise cancellation',
-    type: 'supplier',
-  },
-  {
-    id: 2,
-    name: 'Smart Watch Pro',
-    sku: 'SWP-2024-002',
-    supplier: 'WearTech Inc',
-    category: 'Wearables',
-    supplierPrice: 129.99,
-    moq: 5,
-    stock: 89,
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400',
-    description: 'Advanced smartwatch with health monitoring',
-    type: 'supplier',
-  },
-  {
-    id: 3,
-    name: 'USB-C Fast Charger',
-    sku: 'UFC-2024-003',
-    supplier: 'PowerHub Supplies',
-    category: 'Accessories',
-    supplierPrice: 15.99,
-    moq: 20,
-    stock: 450,
-    image: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400',
-    description: '65W fast charging adapter with multiple ports',
-    type: 'supplier',
-  },
-  {
-    id: 4,
-    name: 'Laptop Stand Adjustable',
-    sku: 'LSA-2024-004',
-    supplier: 'ErgoDesk Pro',
-    category: 'Office',
-    supplierPrice: 25.99,
-    moq: 15,
-    stock: 156,
-    image: 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400',
-    description: 'Ergonomic laptop stand with adjustable height',
-    type: 'supplier',
-  },
-  {
-    id: 5,
-    name: 'Portable SSD 1TB',
-    sku: 'PSS-2024-005',
-    supplier: 'DataStore Solutions',
-    category: 'Storage',
-    supplierPrice: 79.99,
-    moq: 8,
-    stock: 95,
-    image: 'https://images.unsplash.com/photo-1531492746076-161ca9bcad58?w=400',
-    description: 'Ultra-fast portable SSD with USB 3.2',
-    type: 'supplier',
-  },
-  {
-    id: 6,
-    name: 'Gaming Mouse RGB',
-    sku: 'GMR-2024-006',
-    supplier: 'GameGear Elite',
-    category: 'Gaming',
-    supplierPrice: 34.99,
-    moq: 12,
-    stock: 200,
-    image: 'https://images.unsplash.com/photo-1527814050087-3793815479db?w=400',
-    description: 'Professional gaming mouse with RGB lighting',
-    type: 'supplier',
-  },
-];
-
-// Mock data - Vendor's own created products
-const myCreatedProducts = [
-  {
-    id: 101,
-    name: 'Custom Branded Laptop Bag',
-    sku: 'CLB-2024-001',
-    supplier: 'Self Created',
-    category: 'Accessories',
-    supplierPrice: 0,
-    moq: 1,
-    stock: 50,
-    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400',
-    description: 'Premium laptop bag with custom branding',
-    type: 'own',
-    retailPrice: 59.99,
-  },
-  {
-    id: 102,
-    name: 'Eco-Friendly Water Bottle',
-    sku: 'EWB-2024-002',
-    supplier: 'Self Created',
-    category: 'Lifestyle',
-    supplierPrice: 0,
-    moq: 1,
-    stock: 120,
-    image: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400',
-    description: 'Sustainable water bottle made from recycled materials',
-    type: 'own',
-    retailPrice: 24.99,
-  },
-];
-
-// Combine all products
-const allAvailableProducts = [...supplierProducts, ...myCreatedProducts];
-
-// Get unique suppliers
-const uniqueSuppliers = Array.from(new Set(supplierProducts.map(p => p.supplier)));
-
-// Get unique categories
-const uniqueCategories = Array.from(new Set(allAvailableProducts.map(p => p.category)));
+import { useAuth } from '../contexts/AuthContext';
+import { showToast } from '../../lib/toast';
 
 export function VendorInventory() {
+  const { user } = useAuth();
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [productTypeFilter, setProductTypeFilter] = useState<'all' | 'supplier' | 'own'>('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -168,86 +51,69 @@ export function VendorInventory() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'list' | 'create'>('list');
+  const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
-  // Import type selection
-  const [importType, setImportType] = useState<'my-products' | 'my-products-store'>('my-products');
+  // Fetch inventory products
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
 
-  // Unified import form state
-  const [importForm, setImportForm] = useState({
-    storeId: '',
-    sellingPrice: '',
-    metaTitle: '',
-    metaDescription: '',
-    metaKeywords: '',
-  });
+    fetchingRef.current = true;
+    setLoading(true);
 
-  // Filter products
-  const filteredProducts = allAvailableProducts.filter(product => {
+    const fetchInventory = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.append('vendorId', user.id);
+        if (productTypeFilter !== 'all') params.append('productType', productTypeFilter);
+        if (categoryFilter !== 'all') params.append('category', categoryFilter);
+        if (supplierFilter !== 'all') params.append('supplier', supplierFilter);
+        if (searchQuery) params.append('search', searchQuery);
+
+        const response = await fetch(`/api/vendor/inventory?${params.toString()}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setProducts(data.products || []);
+          if (data.filters) {
+            setAvailableSuppliers(data.filters.suppliers || []);
+            setAvailableCategories(data.filters.categories || []);
+          }
+        } else {
+          showToast.error(data.error || 'Failed to fetch inventory');
+        }
+      } catch (error) {
+        console.error('Fetch inventory error:', error);
+        showToast.error('Failed to fetch inventory');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchInventory();
+  }, [user?.id, productTypeFilter, categoryFilter, supplierFilter, searchQuery]);
+
+  // Filter products (client-side filtering for search since API already filters by category/supplier)
+  const filteredProducts = products.filter(product => {
     const matchesSearch =
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      searchQuery === '' ||
+      product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.sku?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesType = 
-      productTypeFilter === 'all' || product.type === productTypeFilter;
-    
-    const matchesCategory =
-      categoryFilter === 'all' || product.category === categoryFilter;
-    
-    const matchesSupplier =
-      supplierFilter === 'all' || product.supplier === supplierFilter;
-
-    return matchesSearch && matchesType && matchesCategory && matchesSupplier;
+    return matchesSearch;
   });
 
   const handleOpenImportModal = (product: any) => {
     setSelectedProduct(product);
     setImportModalOpen(true);
-    setImportType('my-products'); // Reset to default import type
-    setImportForm({
-      storeId: '',
-      sellingPrice: product.type === 'supplier' ? (product.supplierPrice * 1.5).toFixed(2) : product.retailPrice.toFixed(2),
-      metaTitle: product.name,
-      metaDescription: product.description,
-      metaKeywords: product.category,
-    });
-  };
-
-  const handleAddToMyProducts = () => {
-    // Set import type to 'my-products'
-    setImportType('my-products');
-  };
-
-  const handleAddToMyProductsAndStore = () => {
-    // Set import type to 'my-products-store'
-    setImportType('my-products-store');
-  };
-
-  const handleImportProduct = () => {
-    if (!importForm.storeId && importType === 'my-products-store') {
-      toast.error('Please select a store');
-      return;
-    }
-    if (!importForm.sellingPrice) {
-      toast.error('Please enter a selling price');
-      return;
-    }
-
-    if (selectedProduct.type === 'supplier' && parseFloat(importForm.sellingPrice) <= selectedProduct.supplierPrice) {
-      toast.error('Selling price must be higher than supplier price!');
-      return;
-    }
-
-    toast.success('Product added successfully!', {
-      description: 'Product has been added to My Products and your selected store.',
-    });
-    setImportModalOpen(false);
   };
 
   const stats = {
-    totalAvailable: allAvailableProducts.length,
-    supplierProducts: supplierProducts.length,
-    myProducts: myCreatedProducts.length,
-    totalSuppliers: uniqueSuppliers.length,
+    totalAvailable: products.length,
+    supplierProducts: products.filter(p => p.type === 'supplier').length,
+    myProducts: products.filter(p => p.type === 'own').length,
+    totalSuppliers: availableSuppliers.length,
   };
 
   // If in create mode, show ProductForm as full page
@@ -256,6 +122,14 @@ export function VendorInventory() {
       <ProductForm 
         onClose={() => setViewMode('list')}
       />
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
     );
   }
 
@@ -360,7 +234,7 @@ export function VendorInventory() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                {uniqueCategories.map(category => (
+                {availableCategories.map(category => (
                   <SelectItem key={category} value={category}>
                     {category}
                   </SelectItem>
@@ -375,7 +249,7 @@ export function VendorInventory() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Suppliers</SelectItem>
-                {uniqueSuppliers.map(supplier => (
+                {availableSuppliers.map(supplier => (
                   <SelectItem key={supplier} value={supplier}>
                     {supplier}
                   </SelectItem>
@@ -525,11 +399,32 @@ export function VendorInventory() {
       </div>
 
       {filteredProducts.length === 0 && (
-        <div className="text-center py-16">
-          <Package className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-          <p className="text-lg text-muted-foreground">No products found</p>
-          <p className="text-sm text-muted-foreground mt-2">Try adjusting your filters</p>
-        </div>
+        <Card className="p-12 text-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center"
+          >
+            <motion.div
+              animate={{ y: [0, -10, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Package className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+            </motion.div>
+            <p className="text-lg font-medium text-muted-foreground mb-2">
+              {searchQuery || categoryFilter !== 'all' || supplierFilter !== 'all' || productTypeFilter !== 'all'
+                ? 'No products found'
+                : 'No products available'
+              }
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {searchQuery || categoryFilter !== 'all' || supplierFilter !== 'all' || productTypeFilter !== 'all'
+                ? 'Try adjusting your search or filters'
+                : 'Products will appear here once suppliers add them'
+              }
+            </p>
+          </motion.div>
+        </Card>
       )}
 
       {/* Import Product Modal */}

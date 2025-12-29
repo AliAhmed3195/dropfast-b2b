@@ -1,6 +1,6 @@
-t'use client'
+'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText,
@@ -19,7 +19,9 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -39,141 +41,74 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
 
-// Mock invoices data
-const invoices = [
-  {
-    id: 'INV-2024-001',
-    orderNumber: 'ORD-5678',
-    customer: {
-      name: 'John Doe',
-      email: 'john.doe@email.com',
-    },
-    store: 'TechGear Store',
-    date: '2024-12-20',
-    dueDate: '2025-01-19',
-    amount: 403.77,
-    status: 'paid',
-    emailStatus: 'sent',
-    sentDate: '2024-12-20',
-    template: 'Modern Professional',
-    items: [
-      { name: 'Wireless Bluetooth Headphones', qty: 2, price: 79.99 },
-      { name: 'Smart Watch Pro', qty: 1, price: 199.99 },
-    ],
-  },
-  {
-    id: 'INV-2024-002',
-    orderNumber: 'ORD-5679',
-    customer: {
-      name: 'Sarah Smith',
-      email: 'sarah.smith@email.com',
-    },
-    store: 'Fashion Hub',
-    date: '2024-12-21',
-    dueDate: '2025-01-20',
-    amount: 289.50,
-    status: 'pending',
-    emailStatus: 'sent',
-    sentDate: '2024-12-21',
-    template: 'Classic Business',
-    items: [
-      { name: 'Designer Handbag', qty: 1, price: 189.99 },
-      { name: 'Leather Wallet', qty: 2, price: 49.99 },
-    ],
-  },
-  {
-    id: 'INV-2024-003',
-    orderNumber: 'ORD-5680',
-    customer: {
-      name: 'Mike Johnson',
-      email: 'mike.j@email.com',
-    },
-    store: 'Home Essentials',
-    date: '2024-12-22',
-    dueDate: '2025-01-21',
-    amount: 567.99,
-    status: 'overdue',
-    emailStatus: 'sent',
-    sentDate: '2024-12-22',
-    template: 'Minimalist Clean',
-    items: [
-      { name: 'Coffee Maker Deluxe', qty: 1, price: 299.99 },
-      { name: 'Premium Cookware Set', qty: 1, price: 267.99 },
-    ],
-  },
-  {
-    id: 'INV-2024-004',
-    orderNumber: 'ORD-5681',
-    customer: {
-      name: 'Emily Brown',
-      email: 'emily.b@email.com',
-    },
-    store: 'TechGear Store',
-    date: '2024-12-23',
-    dueDate: '2025-01-22',
-    amount: 149.99,
-    status: 'pending',
-    emailStatus: 'not_sent',
-    sentDate: null,
-    template: 'Modern Professional',
-    items: [
-      { name: 'USB-C Fast Charger', qty: 3, price: 29.99 },
-      { name: 'Phone Case Premium', qty: 2, price: 19.99 },
-    ],
-  },
-  {
-    id: 'INV-2024-005',
-    orderNumber: 'ORD-5682',
-    customer: {
-      name: 'David Wilson',
-      email: 'david.w@email.com',
-    },
-    store: 'Fashion Hub',
-    date: '2024-12-24',
-    dueDate: '2025-01-23',
-    amount: 799.99,
-    status: 'paid',
-    emailStatus: 'sent',
-    sentDate: '2024-12-24',
-    template: 'Classic Business',
-    items: [
-      { name: 'Designer Watch', qty: 1, price: 599.99 },
-      { name: 'Sunglasses Premium', qty: 1, price: 199.99 },
-    ],
-  },
-];
-
 export function VendorInvoices() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStore, setFilterStore] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [stores, setStores] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
+
+  // Fetch invoices
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchInvoices = async () => {
+      try {
+        const url = `/api/vendor/invoices?vendorId=${user.id}${filterStatus !== 'all' ? `&status=${filterStatus}` : ''}${filterStore !== 'all' ? `&store=${filterStore}` : ''}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (response.ok) {
+          setInvoices(data.invoices || []);
+          setStores(data.stores || []);
+        } else {
+          showToast.error(data.error || 'Failed to fetch invoices');
+        }
+      } catch (error) {
+        console.error('Fetch invoices error:', error);
+        showToast.error('Failed to fetch invoices');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchInvoices();
+  }, [user?.id, filterStatus, filterStore]);
 
   const handleViewInvoice = (invoice: any) => {
     setSelectedInvoice(invoice);
     setPreviewOpen(true);
   };
 
-  const handleSendEmail = (invoice: any) => {
-    toast.success('Invoice Sent!', {
-      description: `Invoice ${invoice.id} sent to ${invoice.customer.email}`,
-    });
+  const handleSendEmail = async (invoice: any) => {
+    try {
+      // TODO: Implement send email API
+      showToast.success(`Invoice ${invoice.invoiceNumber} sent to ${invoice.customer?.email || 'customer'}`);
+    } catch (error) {
+      console.error('Send email error:', error);
+      showToast.error('Failed to send invoice email');
+    }
   };
 
   const filteredInvoices = invoices.filter(invoice => {
     const matchesSearch = 
-      invoice.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.orderNumber.toLowerCase().includes(searchQuery.toLowerCase());
+      invoice.invoiceNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      invoice.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      invoice.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesStore = filterStore === 'all' || invoice.store === filterStore;
-    const matchesStatus = filterStatus === 'all' || invoice.status === filterStatus;
-    
-    return matchesSearch && matchesStore && matchesStatus;
+    return matchesSearch;
   });
 
   const stats = {
@@ -181,7 +116,7 @@ export function VendorInvoices() {
     paid: invoices.filter(i => i.status === 'paid').length,
     pending: invoices.filter(i => i.status === 'pending').length,
     overdue: invoices.filter(i => i.status === 'overdue').length,
-    totalAmount: invoices.reduce((sum, i) => sum + i.amount, 0),
+    totalAmount: invoices.reduce((sum, i) => sum + (i.amount || 0), 0),
   };
 
   const getStatusIcon = (status: string) => {
@@ -209,6 +144,14 @@ export function VendorInvoices() {
         return 'bg-slate-100 text-slate-700';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -308,9 +251,11 @@ export function VendorInvoices() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Stores</SelectItem>
-              <SelectItem value="TechGear Store">TechGear Store</SelectItem>
-              <SelectItem value="Fashion Hub">Fashion Hub</SelectItem>
-              <SelectItem value="Home Essentials">Home Essentials</SelectItem>
+              {stores.map(store => (
+                <SelectItem key={store} value={store}>
+                  {store}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -470,10 +415,10 @@ export function VendorInvoices() {
                     <div className="flex items-start justify-between">
                       <div>
                         <h1 className="text-4xl font-bold mb-2">INVOICE</h1>
-                        <p className="text-white/90">Invoice #: {selectedInvoice.id}</p>
-                        <p className="text-white/90">Order #: {selectedInvoice.orderNumber}</p>
-                        <p className="text-white/90">Date: {selectedInvoice.date}</p>
-                        <p className="text-white/90">Due Date: {selectedInvoice.dueDate}</p>
+                        <p className="text-white/90">Invoice #: {selectedInvoice.invoiceNumber || selectedInvoice.id}</p>
+                        <p className="text-white/90">Order #: {selectedInvoice.orderNumber || 'N/A'}</p>
+                        <p className="text-white/90">Date: {selectedInvoice.date || 'N/A'}</p>
+                        <p className="text-white/90">Due Date: {selectedInvoice.dueDate || 'N/A'}</p>
                       </div>
                       <div className="text-right">
                         <h2 className="text-2xl font-bold mb-2">{selectedInvoice.store}</h2>
@@ -490,8 +435,8 @@ export function VendorInvoices() {
                     <div className="grid grid-cols-2 gap-6">
                       <div>
                         <h3 className="font-bold text-purple-600 mb-2">BILL TO:</h3>
-                        <p className="font-semibold">{selectedInvoice.customer.name}</p>
-                        <p className="text-sm text-muted-foreground">{selectedInvoice.customer.email}</p>
+                        <p className="font-semibold">{selectedInvoice.customer?.name || 'N/A'}</p>
+                        <p className="text-sm text-muted-foreground">{selectedInvoice.customer?.email || 'N/A'}</p>
                       </div>
                       <div>
                         <h3 className="font-bold text-purple-600 mb-2">STATUS:</h3>
@@ -514,7 +459,8 @@ export function VendorInvoices() {
                           </tr>
                         </thead>
                         <tbody>
-                          {selectedInvoice.items.map((item: any, idx: number) => (
+                          {selectedInvoice.items && selectedInvoice.items.length > 0 ? (
+                            selectedInvoice.items.map((item: any, idx: number) => (
                             <tr key={idx} className="border-b border-slate-200 dark:border-slate-700">
                               <td className="py-4">
                                 <p className="font-semibold">{item.name}</p>
@@ -523,7 +469,14 @@ export function VendorInvoices() {
                               <td className="text-right">${item.price.toFixed(2)}</td>
                               <td className="text-right font-semibold">${(item.qty * item.price).toFixed(2)}</td>
                             </tr>
-                          ))}
+                          ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="text-center py-8 text-muted-foreground">
+                                No items found
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -533,15 +486,15 @@ export function VendorInvoices() {
                       <div className="w-80 space-y-2">
                         <div className="flex justify-between py-2">
                           <span className="text-muted-foreground">Subtotal:</span>
-                          <span className="font-semibold">${(selectedInvoice.amount / 1.08).toFixed(2)}</span>
+                          <span className="font-semibold">${selectedInvoice.amount ? (selectedInvoice.amount / 1.08).toFixed(2) : '0.00'}</span>
                         </div>
                         <div className="flex justify-between py-2">
                           <span className="text-muted-foreground">Tax (8%):</span>
-                          <span className="font-semibold">${(selectedInvoice.amount * 0.08 / 1.08).toFixed(2)}</span>
+                          <span className="font-semibold">${selectedInvoice.amount ? (selectedInvoice.amount * 0.08 / 1.08).toFixed(2) : '0.00'}</span>
                         </div>
                         <div className="flex justify-between py-4 text-xl font-bold border-t-2 border-purple-200">
                           <span>TOTAL:</span>
-                          <span className="text-purple-600">${selectedInvoice.amount.toFixed(2)}</span>
+                          <span className="text-purple-600">${selectedInvoice.amount ? selectedInvoice.amount.toFixed(2) : '0.00'}</span>
                         </div>
                       </div>
                     </div>
