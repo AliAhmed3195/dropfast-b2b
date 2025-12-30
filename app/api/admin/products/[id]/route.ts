@@ -126,6 +126,10 @@ export async function PUT(
       )
     }
 
+    // Note: createdByUserId, createdByUserType, and supplierId are immutable
+    // They represent who originally created the product and should not be changed on edit
+    // These fields are explicitly ignored in the destructuring above (prefixed with _)
+
     // Check if SKU is being changed and if it already exists
     if (sku && sku !== existingProduct.sku) {
       const skuExists = await prisma.product.findUnique({

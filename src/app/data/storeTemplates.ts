@@ -91,11 +91,26 @@ export const sectionLibrary: SectionConfig[] = [
         twitter: '',
       },
       showNewsletter: true,
+      quickLinks: [
+        { label: 'About Us', url: '/about' },
+        { label: 'Contact', url: '/contact' },
+        { label: 'Shipping Info', url: '/shipping' },
+        { label: 'Returns', url: '/returns' },
+      ],
+      customerServiceLinks: [
+        { label: 'FAQ', url: '/faq' },
+        { label: 'Privacy Policy', url: '/privacy' },
+        { label: 'Terms of Service', url: '/terms' },
+        { label: 'Track Order', url: '/track' },
+      ],
     },
     settings: [
       { name: 'companyName', type: 'text', label: 'Company Name' },
+      { name: 'address', type: 'text', label: 'Address' },
       { name: 'email', type: 'text', label: 'Email' },
       { name: 'phone', type: 'text', label: 'Phone' },
+      { name: 'quickLinks', type: 'links-array', label: 'Quick Links' },
+      { name: 'customerServiceLinks', type: 'links-array', label: 'Customer Service Links' },
       { name: 'showNewsletter', type: 'toggle', label: 'Show Newsletter Signup' },
     ],
   },
@@ -128,6 +143,7 @@ export const sectionLibrary: SectionConfig[] = [
     },
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
+      { name: 'testimonials', type: 'testimonials-array', label: 'Testimonials' },
     ],
   },
   {
@@ -148,6 +164,7 @@ export const sectionLibrary: SectionConfig[] = [
     },
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
+      { name: 'faqs', type: 'faqs-array', label: 'FAQs' },
     ],
   },
   {
@@ -186,7 +203,9 @@ export const sectionLibrary: SectionConfig[] = [
         { icon: 'headphones', text: '24/7 Support' },
       ],
     },
-    settings: [],
+    settings: [
+      { name: 'badges', type: 'badges-array', label: 'Trust Badges' },
+    ],
   },
   {
     id: 'announcement-bar',
@@ -296,6 +315,7 @@ export const sectionLibrary: SectionConfig[] = [
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
       { name: 'subheading', type: 'text', label: 'Subheading' },
+      { name: 'stats', type: 'stats-array', label: 'Statistics' },
       { name: 'layout', type: 'select', label: 'Layout', options: ['grid', 'row'] },
       { name: 'backgroundColor', type: 'color', label: 'Background Color' },
     ],
@@ -323,7 +343,7 @@ export const sectionLibrary: SectionConfig[] = [
       { name: 'heading', type: 'text', label: 'Main Heading' },
       { name: 'subheading', type: 'text', label: 'Subheading' },
       { name: 'ctaText', type: 'text', label: 'Button Text' },
-      { name: 'videoUrl', type: 'url', label: 'Video URL' },
+      { name: 'videoUrl', type: 'video', label: 'Video' },
       { name: 'overlayOpacity', type: 'range', label: 'Overlay Opacity', min: 0, max: 1, step: 0.1 },
       { name: 'height', type: 'range', label: 'Section Height (px)', min: 500, max: 900, step: 50 },
     ],
@@ -363,6 +383,7 @@ export const sectionLibrary: SectionConfig[] = [
     },
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
+      { name: 'features', type: 'features-array', label: 'Features' },
     ],
   },
   {
@@ -376,13 +397,14 @@ export const sectionLibrary: SectionConfig[] = [
     defaultProps: {
       heading: 'How It Works',
       steps: [
-        { number: 1, title: 'Order', description: 'Place your order in seconds' },
-        { number: 2, title: 'Receive', description: 'Get it delivered to your door' },
-        { number: 3, title: 'Enjoy', description: 'Start using immediately' },
+        { title: 'Order', description: 'Place your order in seconds' },
+        { title: 'Receive', description: 'Get it delivered to your door' },
+        { title: 'Enjoy', description: 'Start using immediately' },
       ],
     },
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
+      { name: 'steps', type: 'steps-array', label: 'Steps' },
     ],
   },
   {
@@ -416,15 +438,29 @@ export const sectionLibrary: SectionConfig[] = [
     thumbnail: '/sections/comparison.png',
     defaultProps: {
       heading: 'How We Compare',
-      competitors: [
-        { name: 'Our Product', features: ['✓', '✓', '✓', '✓'], highlight: true },
-        { name: 'Competitor A', features: ['✓', '✓', '✗', '✗'], highlight: false },
-        { name: 'Competitor B', features: ['✓', '✗', '✗', '✗'], highlight: false },
+      columns: [
+        {
+          name: 'Our Product',
+          features: { feature1: true, feature2: true, feature3: true, feature4: true },
+          isHighlighted: true,
+        },
+        {
+          name: 'Competitor A',
+          features: { feature1: true, feature2: false, feature3: false, feature4: true },
+          isHighlighted: false,
+        },
+        {
+          name: 'Competitor B',
+          features: { feature1: true, feature2: true, feature3: false, feature4: false },
+          isHighlighted: false,
+        },
       ],
-      featureNames: ['Feature 1', 'Feature 2', 'Feature 3', 'Feature 4'],
+      featureRows: ['Premium Quality', 'Free Shipping', '24/7 Support', 'Money-back Guarantee'],
     },
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
+      { name: 'featureRows', type: 'features-list', label: 'Features' },
+      { name: 'columns', type: 'comparison-columns', label: 'Comparison Columns' },
     ],
   },
 
@@ -533,16 +569,20 @@ export const sectionLibrary: SectionConfig[] = [
     applicableFor: ['multi-product'],
     thumbnail: '/sections/promo-banner.png',
     defaultProps: {
-      text: 'Free Shipping on Orders Over $50!',
+      heading: 'Special Offer!',
+      subheading: 'Get 50% off on all products this week',
       ctaText: 'Shop Now',
       ctaLink: '/products',
       backgroundColor: '#6366f1',
       textColor: '#ffffff',
     },
     settings: [
-      { name: 'text', type: 'text', label: 'Banner Text' },
+      { name: 'heading', type: 'text', label: 'Banner Heading' },
+      { name: 'subheading', type: 'text', label: 'Banner Subheading' },
       { name: 'ctaText', type: 'text', label: 'Button Text' },
+      { name: 'ctaLink', type: 'url', label: 'Button Link' },
       { name: 'backgroundColor', type: 'color', label: 'Background Color' },
+      { name: 'textColor', type: 'color', label: 'Text Color' },
     ],
   },
   {
@@ -563,6 +603,7 @@ export const sectionLibrary: SectionConfig[] = [
     },
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
+      { name: 'collections', type: 'collections-array', label: 'Collections' },
       { name: 'layout', type: 'select', label: 'Layout Style', options: ['split', 'cards'] },
     ],
   },

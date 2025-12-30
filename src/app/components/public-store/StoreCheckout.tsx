@@ -20,7 +20,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import { toast } from 'sonner';
+import { showToast } from '../../../lib/toast';
 import { CartItem } from '../../contexts/AppContext';
 
 interface CheckoutFormData {
@@ -77,12 +77,12 @@ export function StoreCheckout({
   const handleSubmit = () => {
     // Validate form
     if (!formData.fullName || !formData.email || !formData.phone || !formData.address) {
-      toast.error('Please fill in all required fields');
+      showToast.error('Please fill in all required fields');
       return;
     }
 
     onPlaceOrder(formData);
-    toast.success('Order placed successfully!');
+    // Order success handled by parent (PublicStore)
   };
 
   const steps = [

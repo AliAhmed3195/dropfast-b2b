@@ -9,6 +9,7 @@ import {
   DollarSign,
   CheckCircle2,
   ShoppingBag,
+  Loader2,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -21,7 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
+import { useAuth } from '../contexts/AuthContext';
 import { cn } from './ui/utils';
 
 interface Product {
@@ -45,7 +47,10 @@ interface UnifiedImportModalProps {
 }
 
 export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps) {
+  const { user } = useAuth();
   const [importType, setImportType] = useState<'my-products' | 'my-products-store'>('my-products');
+  const [loading, setLoading] = useState(false);
+  const [stores, setStores] = useState<any[]>([]);
   
   const [importForm, setImportForm] = useState({
     storeId: '',
@@ -54,6 +59,25 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
     metaDescription: '',
     metaKeywords: '',
   });
+
+  // Fetch vendor stores
+  useEffect(() => {
+    const fetchStores = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const response = await fetch(`/api/vendor/stores?vendorId=${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setStores(data.stores || []);
+        }
+      } catch (error) {
+        console.error('Fetch stores error:', error);
+      }
+    };
+
+    fetchStores();
+  }, [user?.id]);
 
   useEffect(() => {
     // Initialize form with product data
@@ -68,33 +92,63 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
     });
   }, [product]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!user?.id) {
+      showToast.error('User not authenticated');
+      return;
+    }
+
     // Validation
     if (importType === 'my-products-store') {
       if (!importForm.storeId) {
-        toast.error('Please select a store');
+        showToast.error('Please select a store');
         return;
       }
       if (!importForm.sellingPrice) {
-        toast.error('Please enter a selling price');
+        showToast.error('Please enter a selling price');
         return;
       }
 
-      if (product.type === 'supplier' && parseFloat(importForm.sellingPrice) <= product.supplierPrice!) {
-        toast.error('Selling price must be higher than supplier price!');
+      if (product.type === 'supplier' && parseFloat(importForm.sellingPrice) <= (product.supplierPrice || 0)) {
+        showToast.error('Selling price must be higher than supplier price!');
         return;
       }
 
-      toast.success('Product added successfully!', {
-        description: 'Product has been added to My Products and your selected store.',
-      });
+      try {
+        setLoading(true);
+        const response = await fetch('/api/vendor/products/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productId: String(product.id),
+            storeId: importForm.storeId,
+            vendorId: user.id,
+            sellingPrice: parseFloat(importForm.sellingPrice),
+            metaTitle: importForm.metaTitle || null,
+            metaDescription: importForm.metaDescription || null,
+            metaKeywords: importForm.metaKeywords ? importForm.metaKeywords.split(',').map(k => k.trim()) : [],
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to import product');
+        }
+
+        showToast.success('Product imported successfully to store!');
+        onClose();
+      } catch (error: any) {
+        console.error('Import product error:', error);
+        showToast.error(error.message || 'Failed to import product');
+      } finally {
+        setLoading(false);
+      }
     } else {
-      toast.success('Product added to My Products!', {
-        description: 'Product has been added to your catalog with SEO settings.',
-      });
+      // For "My Products" only (without store), we might not need to create StoreProduct
+      // This could be for a future "My Products" catalog feature
+      showToast.info('Product added to My Products catalog');
+      onClose();
     }
-
-    onClose();
   };
 
   return (
@@ -262,9 +316,15 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
                       <SelectValue placeholder="Choose a store" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="store-1">TechHub Store</SelectItem>
-                      <SelectItem value="store-2">ElectroMart</SelectItem>
-                      <SelectItem value="store-3">GadgetZone</SelectItem>
+                      {stores.length === 0 ? (
+                        <SelectItem value="" disabled>No stores available</SelectItem>
+                      ) : (
+                        stores.map((store) => (
+                          <SelectItem key={store.id} value={store.id}>
+                            {store.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -343,10 +403,20 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
             </Button>
             <Button
               onClick={handleSubmit}
+              disabled={loading}
               className="flex-1 bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-700 hover:to-cyan-700"
             >
-              <CheckCircle2 className="w-5 h-5 mr-2" />
-              {importType === 'my-products' ? 'Add to My Products' : 'Add to Products + Store'}
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-5 h-5 mr-2" />
+                  {importType === 'my-products' ? 'Add to My Products' : 'Add to Products + Store'}
+                </>
+              )}
             </Button>
           </div>
         </div>

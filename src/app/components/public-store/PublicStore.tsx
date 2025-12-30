@@ -1,13 +1,12 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StoreLandingPage } from './StoreLandingPage';
 import { ProductDetailPage } from './ProductDetailPage';
 import { StoreCart } from './StoreCart';
 import { StoreCheckout } from './StoreCheckout';
-import { useApp } from '../../contexts/AppContext';
-import { Product, CartItem } from '../../contexts/AppContext';
-import { toast } from 'sonner';
+import { showToast } from '../../../lib/toast';
+import { Loader2 } from 'lucide-react';
 
 interface PublicStoreProps {
   storeData: any;
@@ -20,22 +19,83 @@ type PublicStoreView =
   | { type: 'cart' }
   | { type: 'checkout' };
 
+interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  price: number;
+  images?: string[];
+  image?: string;
+  category?: string;
+  stock?: number;
+  status?: string;
+  rating?: number;
+  brand?: string;
+  condition?: string;
+  sku?: string;
+  inStock?: boolean;
+  reviews?: number;
+}
+
+interface CartItem {
+  productId: string;
+  productName: string;
+  productImage: string;
+  quantity: number;
+  price: number;
+  storeId: string;
+  storeName: string;
+}
+
 export function PublicStore({ storeData, onClose }: PublicStoreProps) {
-  const { products, addOrder } = useApp();
   const [currentView, setCurrentView] = useState<PublicStoreView>({ type: 'landing' });
   const [storeCart, setStoreCart] = useState<CartItem[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [store, setStore] = useState<any>(storeData);
+
+  // Fetch store and products from API
+  useEffect(() => {
+    const fetchStoreData = async () => {
+      if (!storeData.slug) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Fetch store data
+        const storeResponse = await fetch(`/api/public/store/${storeData.slug}`);
+        if (storeResponse.ok) {
+          const storeData = await storeResponse.json();
+          setStore(storeData.store);
+        }
+
+        // Fetch products
+        const productsResponse = await fetch(`/api/public/store/${storeData.slug}/products`);
+        if (productsResponse.ok) {
+          const productsData = await productsResponse.json();
+          setProducts(productsData.products || []);
+        }
+      } catch (error) {
+        console.error('Fetch store data error:', error);
+        showToast.error('Failed to load store data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStoreData();
+  }, [storeData.slug]);
 
   // Get store theme
-  const storeTheme = storeData.theme || {
+  const storeTheme = store?.theme || storeData.theme || {
     primaryColor: '#4F46E5',
     secondaryColor: '#06B6D4',
     fontFamily: 'Inter',
   };
 
-  // Get store's products
-  const storeProducts = products.filter((p) =>
-    storeData.products?.includes(p.id) && p.status === 'active'
-  );
+  // Store products (from API)
+  const storeProducts = products;
 
   // Handle add to cart
   const handleAddToCart = (product: Product, quantity: number) => {
@@ -55,11 +115,11 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
         {
           productId: product.id,
           productName: product.name,
-          productImage: product.images[0] || '',
+          productImage: product.image || product.images?.[0] || '',
           quantity,
           price: product.price,
-          storeId: storeData.id,
-          storeName: storeData.name,
+          storeId: store?.id || storeData.id,
+          storeName: store?.name || storeData.name,
         },
       ]);
     }
@@ -80,51 +140,62 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
   };
 
   // Handle place order
-  const handlePlaceOrder = (formData: any) => {
+  const handlePlaceOrder = async (formData: any) => {
+    if (!store?.id) {
+      showToast.error('Store not found');
+      return;
+    }
+
     const subtotal = storeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const shipping = 10;
     const tax = subtotal * 0.1;
     const total = subtotal + shipping + tax;
 
-    const order = {
-      id: `ORD-${Date.now()}`,
-      customerId: 'guest',
-      customerName: formData.fullName,
-      customerEmail: formData.email,
-      storeId: storeData.id,
-      storeName: storeData.name,
-      items: storeCart.map((item) => ({
-        productId: item.productId,
-        productName: item.productName,
-        productImage: item.productImage,
-        quantity: item.quantity,
-        price: item.price,
-        supplierId: products.find((p) => p.id === item.productId)?.supplierId || '',
-      })),
-      subtotal,
-      shipping,
-      tax,
-      total,
-      status: 'pending' as const,
-      shippingAddress: {
-        fullName: formData.fullName,
-        address: formData.address,
-        city: formData.city,
-        state: formData.state,
-        zipCode: formData.zipCode,
-        country: formData.country,
-        phone: formData.phone,
-      },
-      paymentMethod: formData.paymentMethod,
-      paymentStatus: 'pending' as const,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      const response = await fetch('/api/public/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId: store.id,
+          customerEmail: formData.email,
+          customerPhone: formData.phone,
+          customerName: formData.fullName,
+          shippingFullName: formData.fullName,
+          shippingAddress: formData.address,
+          shippingCity: formData.city,
+          shippingState: formData.state,
+          shippingZipCode: formData.zipCode,
+          shippingCountry: formData.country,
+          shippingPhone: formData.phone,
+          paymentMethod: formData.paymentMethod || 'credit_card',
+          items: storeCart.map((item) => ({
+            productId: item.productId,
+            productName: item.productName,
+            productImage: item.productImage,
+            quantity: item.quantity,
+            price: item.price,
+            supplierId: null, // Will be fetched from product if needed
+          })),
+          subtotal,
+          shipping,
+          tax,
+          total,
+        }),
+      });
 
-    addOrder(order);
-    setStoreCart([]);
-    setCurrentView({ type: 'landing' });
-    toast.success('Order placed successfully! Thank you for your purchase.');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to place order');
+      }
+
+      const data = await response.json();
+      setStoreCart([]);
+      setCurrentView({ type: 'landing' });
+      showToast.success(`Order placed successfully! Order #${data.order.orderNumber}`);
+    } catch (error: any) {
+      console.error('Place order error:', error);
+      showToast.error(error.message || 'Failed to place order');
+    }
   };
 
   // Render current view
@@ -134,18 +205,19 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
         return (
           <StoreLandingPage
             storeConfig={{
-              name: storeData.name,
-              slug: storeData.slug,
-              template: storeData.template,
+              name: store?.name || storeData.name,
+              slug: store?.slug || storeData.slug,
+              template: store?.template || storeData.template || 'modern',
               theme: storeTheme,
-              sections: storeData.template?.sections || [],
+              sections: store?.sections || storeData.sections || storeData.template?.sections || [],
             }}
+            products={storeProducts}
             onProductClick={(productId) => setCurrentView({ type: 'product', productId })}
           />
         );
 
       case 'product':
-        const product = products.find((p) => p.id === currentView.productId);
+        const product = storeProducts.find((p) => p.id === currentView.productId);
         if (!product) {
           return <div>Product not found</div>;
         }
@@ -191,6 +263,14 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-white overflow-auto">
       {/* Store Header/Navigation */}
@@ -199,11 +279,11 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
           <div className="flex items-center justify-between h-16">
             {/* Store Logo/Name */}
             <div className="flex items-center gap-3">
-              {storeData.logo && (
-                <img src={storeData.logo} alt={storeData.name} className="h-10 w-10 object-cover rounded" />
+              {(store?.logo || storeData.logo) && (
+                <img src={store?.logo || storeData.logo} alt={store?.name || storeData.name} className="h-10 w-10 object-cover rounded" />
               )}
               <h1 className="text-xl font-bold" style={{ color: storeTheme.primaryColor }}>
-                {storeData.name}
+                {store?.name || storeData.name}
               </h1>
             </div>
 
@@ -229,12 +309,14 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
                   </span>
                 )}
               </button>
-              <button
-                onClick={onClose}
-                className="text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-100"
-              >
-                Close Preview
-              </button>
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-100"
+                >
+                  Close Preview
+                </button>
+              )}
             </div>
           </div>
         </div>

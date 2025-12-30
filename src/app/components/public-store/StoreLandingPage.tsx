@@ -22,10 +22,11 @@ interface StoreLandingPageProps {
       props: any;
     }>;
   };
+  products?: any[]; // Products for sections that need them
   onProductClick?: (productId: string) => void;
 }
 
-export function StoreLandingPage({ storeConfig, onProductClick }: StoreLandingPageProps) {
+export function StoreLandingPage({ storeConfig, products = [], onProductClick }: StoreLandingPageProps) {
   // Filter only enabled sections and sort by order
   const enabledSections = storeConfig.sections
     .filter((section) => section.enabled)
@@ -42,6 +43,18 @@ export function StoreLandingPage({ storeConfig, onProductClick }: StoreLandingPa
           return null;
         }
 
+        // Pass products to sections that need them
+        const sectionProps: any = {
+          ...section.props,
+          theme: storeConfig.theme,
+          onProductClick,
+        };
+
+        // Add products to sections that display products
+        if (section.type === 'products-grid' || section.type === 'featured-products') {
+          sectionProps.products = products;
+        }
+
         return (
           <motion.div
             key={section.id}
@@ -49,11 +62,7 @@ export function StoreLandingPage({ storeConfig, onProductClick }: StoreLandingPa
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
           >
-            <SectionComponent 
-              {...section.props} 
-              theme={storeConfig.theme}
-              onProductClick={onProductClick}
-            />
+            <SectionComponent {...sectionProps} />
           </motion.div>
         );
       })}

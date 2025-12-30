@@ -22,18 +22,17 @@ import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { toast } from 'sonner';
-import { Product } from '../../contexts/AppContext';
+import { showToast } from '../../../lib/toast';
 
 interface ProductDetailPageProps {
-  product: Product;
+  product: any; // Product from API
   storeTheme: {
     primaryColor: string;
     secondaryColor: string;
     fontFamily: string;
   };
-  relatedProducts: Product[];
-  onAddToCart: (product: Product, quantity: number) => void;
+  relatedProducts: any[]; // Products from API
+  onAddToCart: (product: any, quantity: number) => void;
   onBack: () => void;
 }
 
@@ -47,19 +46,21 @@ export function ProductDetailPage({
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  
+  const productImages = product.images || (product.image ? [product.image] : []);
 
   const handleAddToCart = () => {
     onAddToCart(product, quantity);
-    toast.success(`Added ${quantity} item(s) to cart`);
+    showToast.success(`Added ${quantity} item(s) to cart`);
   };
 
   const handleToggleWishlist = () => {
     setIsWishlisted(!isWishlisted);
-    toast.success(isWishlisted ? 'Removed from wishlist' : 'Added to wishlist');
+    showToast.success(isWishlisted ? 'Removed from wishlist' : 'Added to wishlist');
   };
 
   const incrementQuantity = () => {
-    if (quantity < product.stock) {
+    if (quantity < (product.stock || 0)) {
       setQuantity(quantity + 1);
     }
   };
@@ -71,11 +72,15 @@ export function ProductDetailPage({
   };
 
   const nextImage = () => {
-    setSelectedImage((prev) => (prev + 1) % product.images.length);
+    if (productImages.length > 0) {
+      setSelectedImage((prev) => (prev + 1) % productImages.length);
+    }
   };
 
   const prevImage = () => {
-    setSelectedImage((prev) => (prev - 1 + product.images.length) % product.images.length);
+    if (productImages.length > 0) {
+      setSelectedImage((prev) => (prev - 1 + productImages.length) % productImages.length);
+    }
   };
 
   return (
@@ -99,11 +104,11 @@ export function ProductDetailPage({
             <Card className="overflow-hidden relative">
               <div className="aspect-square bg-gray-100 flex items-center justify-center">
                 <img
-                  src={product.images[selectedImage] || 'https://via.placeholder.com/600'}
+                  src={productImages[selectedImage] || product.image || 'https://via.placeholder.com/600'}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
-                {product.images.length > 1 && (
+                {productImages.length > 1 && (
                   <>
                     <button
                       onClick={prevImage}
@@ -125,7 +130,7 @@ export function ProductDetailPage({
             {/* Thumbnail Gallery */}
             {product.images.length > 1 && (
               <div className="grid grid-cols-4 gap-2">
-                {product.images.map((image, index) => (
+                {productImages.map((image, index) => (
                   <button
                     key={index}
                     onClick={() => setSelectedImage(index)}

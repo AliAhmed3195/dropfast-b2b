@@ -14,7 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
-import { toast } from 'sonner';
+import { showToast } from '../../../lib/toast';
 import { CartItem } from '../../contexts/AppContext';
 
 interface StoreCartProps {
@@ -51,7 +51,7 @@ export function StoreCart({
 
   const handleRemove = (productId: string) => {
     onRemoveItem(productId);
-    toast.success('Item removed from cart');
+    showToast.success('Item removed from cart');
   };
 
   if (cartItems.length === 0) {

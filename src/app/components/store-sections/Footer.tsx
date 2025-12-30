@@ -5,6 +5,11 @@ import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from 'lucide-react'
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 
+interface FooterLink {
+  label: string;
+  url: string;
+}
+
 interface FooterProps {
   companyName?: string;
   address?: string;
@@ -16,6 +21,8 @@ interface FooterProps {
     twitter?: string;
   };
   showNewsletter?: boolean;
+  quickLinks?: FooterLink[];
+  customerServiceLinks?: FooterLink[];
 }
 
 export function Footer({
@@ -25,6 +32,18 @@ export function Footer({
   phone = '+1 (555) 123-4567',
   socialLinks = {},
   showNewsletter = true,
+  quickLinks = [
+    { label: 'About Us', url: '/about' },
+    { label: 'Contact', url: '/contact' },
+    { label: 'Shipping Info', url: '/shipping' },
+    { label: 'Returns', url: '/returns' },
+  ],
+  customerServiceLinks = [
+    { label: 'FAQ', url: '/faq' },
+    { label: 'Privacy Policy', url: '/privacy' },
+    { label: 'Terms of Service', url: '/terms' },
+    { label: 'Track Order', url: '/track' },
+  ],
 }: FooterProps) {
   return (
     <footer className="bg-slate-900 text-white mt-20">
@@ -54,26 +73,36 @@ export function Footer({
           </div>
 
           {/* Quick Links */}
-          <div>
-            <h4 className="font-bold mb-4">Quick Links</h4>
-            <ul className="space-y-2 text-sm text-slate-300">
-              <li><a href="/about" className="hover:text-purple-400 transition-colors">About Us</a></li>
-              <li><a href="/contact" className="hover:text-purple-400 transition-colors">Contact</a></li>
-              <li><a href="/shipping" className="hover:text-purple-400 transition-colors">Shipping Info</a></li>
-              <li><a href="/returns" className="hover:text-purple-400 transition-colors">Returns</a></li>
-            </ul>
-          </div>
+          {quickLinks && quickLinks.length > 0 && (
+            <div>
+              <h4 className="font-bold mb-4">Quick Links</h4>
+              <ul className="space-y-2 text-sm text-slate-300">
+                {quickLinks.map((link, idx) => (
+                  <li key={idx}>
+                    <a href={link.url} className="hover:text-purple-400 transition-colors">
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Customer Service */}
-          <div>
-            <h4 className="font-bold mb-4">Customer Service</h4>
-            <ul className="space-y-2 text-sm text-slate-300">
-              <li><a href="/faq" className="hover:text-purple-400 transition-colors">FAQ</a></li>
-              <li><a href="/privacy" className="hover:text-purple-400 transition-colors">Privacy Policy</a></li>
-              <li><a href="/terms" className="hover:text-purple-400 transition-colors">Terms of Service</a></li>
-              <li><a href="/track" className="hover:text-purple-400 transition-colors">Track Order</a></li>
-            </ul>
-          </div>
+          {customerServiceLinks && customerServiceLinks.length > 0 && (
+            <div>
+              <h4 className="font-bold mb-4">Customer Service</h4>
+              <ul className="space-y-2 text-sm text-slate-300">
+                {customerServiceLinks.map((link, idx) => (
+                  <li key={idx}>
+                    <a href={link.url} className="hover:text-purple-400 transition-colors">
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Newsletter */}
           {showNewsletter && (

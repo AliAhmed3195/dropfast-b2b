@@ -101,12 +101,15 @@ export function ProductsGrid({
   columns = 4,
   rows = 2,
   showFilters = true,
-  products = mockProducts,
+  products,
   onProductClick,
   theme,
 }: ProductsGridProps) {
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const displayProducts = products.slice(0, columns * rows);
+  
+  // Use provided products or empty array (don't use mockProducts)
+  const productsToDisplay = products && products.length > 0 ? products : [];
+  const displayProducts = productsToDisplay.slice(0, columns * rows);
   
   // Use theme colors or defaults
   const primaryColor = theme?.primaryColor || '#6366f1';
@@ -151,25 +154,30 @@ export function ProductsGrid({
         <div
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
         >
-          {displayProducts.map((product, index) => (
-            <motion.div
-              key={product.id}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <Card className="overflow-hidden group hover:shadow-2xl transition-all duration-300 h-full flex flex-col">
-                {/* Product Image */}
-                <div
-                  className="relative overflow-hidden aspect-square bg-slate-200 dark:bg-slate-800 cursor-pointer"
-                  onClick={() => onProductClick?.(String(product.id))}
-                >
-                  <img
-                    src={product.image}
-                    alt={product.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
+          {displayProducts.length === 0 ? (
+            <div className="col-span-full text-center py-16">
+              <p className="text-muted-foreground">No products available</p>
+            </div>
+          ) : (
+            displayProducts.map((product, index) => (
+              <motion.div
+                key={product.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.05 }}
+              >
+                <Card className="overflow-hidden group hover:shadow-2xl transition-all duration-300 h-full flex flex-col">
+                  {/* Product Image */}
+                  <div
+                    className="relative overflow-hidden aspect-square bg-slate-200 dark:bg-slate-800 cursor-pointer"
+                    onClick={() => onProductClick?.(String(product.id))}
+                  >
+                    <img
+                      src={product.image || product.images?.[0] || '/placeholder-image.jpg'}
+                      alt={product.name}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
 
                   {/* Quick Actions */}
                   <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -198,7 +206,7 @@ export function ProductsGrid({
                   </div>
 
                   {/* Stock Badge */}
-                  {!product.inStock && (
+                  {(product.stock === 0 || product.status === 'out_of_stock' || (!product.stock && product.status !== 'active')) && (
                     <Badge className="absolute top-3 left-3 bg-red-500 text-white">
                       Out of Stock
                     </Badge>
@@ -215,23 +223,27 @@ export function ProductsGrid({
                   </h3>
 
                   {/* Rating */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="flex items-center gap-1">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`w-4 h-4 ${
-                            i < Math.floor(product.rating)
-                              ? 'fill-yellow-400 text-yellow-400'
-                              : 'text-slate-300'
-                          }`}
-                        />
-                      ))}
+                  {(product.rating || product.reviews) && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-1">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`w-4 h-4 ${
+                              i < Math.floor(product.rating || 0)
+                                ? 'fill-yellow-400 text-yellow-400'
+                                : 'text-slate-300'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      {product.reviews && (
+                        <span className="text-sm text-muted-foreground">
+                          ({product.reviews})
+                        </span>
+                      )}
                     </div>
-                    <span className="text-sm text-muted-foreground">
-                      ({product.reviews})
-                    </span>
-                  </div>
+                  )}
 
                   {/* Price */}
                   <div className="mt-auto">
@@ -239,7 +251,7 @@ export function ProductsGrid({
                       className="text-2xl font-bold mb-3"
                       style={{ color: primaryColor }}
                     >
-                      ${product.price}
+                      ${product.price || 0}
                     </p>
 
                     {/* Add to Cart */}
@@ -248,16 +260,21 @@ export function ProductsGrid({
                       style={{ 
                         background: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` 
                       }}
-                      disabled={!product.inStock}
+                      disabled={product.stock === 0 || product.status !== 'active'}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onProductClick?.(String(product.id));
+                      }}
                     >
                       <ShoppingCart className="w-4 h-4 mr-2" />
-                      {product.inStock ? 'Add to Cart' : 'Out of Stock'}
+                      {(product.stock === 0 || product.status !== 'active') ? 'Out of Stock' : 'Add to Cart'}
                     </Button>
                   </div>
                 </div>
               </Card>
             </motion.div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </section>

@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
 import { StoreType, storeTemplates } from '../data/storeTemplates';
 
@@ -51,13 +51,13 @@ export function StoreCreationWizard({ onClose, onComplete }: StoreCreationWizard
     // Validation
     if (currentStep === 1) {
       if (!storeData.name || !storeData.storeType || !storeData.industry) {
-        toast.error('Please fill in all required fields');
+        showToast.error('Please fill in all required fields');
         return;
       }
     }
     if (currentStep === 2) {
       if (!storeData.templateId) {
-        toast.error('Please select a template');
+        showToast.error('Please select a template');
         return;
       }
     }
@@ -85,19 +85,14 @@ export function StoreCreationWizard({ onClose, onComplete }: StoreCreationWizard
 
     const completeStoreData = {
       ...storeData,
-      url: `${storeUrl}.fastdrop.com`,
+      url: `/store/${storeUrl}`,
       template: selectedTemplate,
       createdAt: new Date().toISOString(),
       status: 'draft',
     };
 
-    toast.success('Store created successfully!', {
-      description: 'Redirecting to store builder...',
-    });
-
-    setTimeout(() => {
-      onComplete(completeStoreData);
-    }, 1000);
+    // Call onComplete - parent will handle API call
+    onComplete(completeStoreData);
   };
 
   const industries = [
@@ -206,7 +201,7 @@ export function StoreCreationWizard({ onClose, onComplete }: StoreCreationWizard
                     <p className="text-sm text-muted-foreground mt-2">
                       Your store will be available at:{' '}
                       <strong className="text-purple-600">
-                        {storeData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}.fastdrop.com
+                        /store/{storeData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}
                       </strong>
                     </p>
                   )}
@@ -438,7 +433,7 @@ export function StoreCreationWizard({ onClose, onComplete }: StoreCreationWizard
                       <div>
                         <p className="text-sm text-muted-foreground mb-1">Store URL</p>
                         <p className="font-semibold text-purple-600">
-                          {storeData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}.fastdrop.com
+                          /store/{storeData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}
                         </p>
                       </div>
                       <div>
