@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
+import { useRouter, useParams } from 'next/navigation';
 import { Search, ShoppingCart, Menu, X, User } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,6 +15,8 @@ interface HeaderNavigationProps {
   showCart?: boolean;
   menuItems?: Array<{ label: string; url: string }>;
   storeName?: string;
+  cartCount?: number;
+  storeSlug?: string;
 }
 
 export function HeaderNavigation({
@@ -22,7 +25,12 @@ export function HeaderNavigation({
   showCart = true,
   menuItems = [],
   storeName = 'Store',
+  cartCount = 0,
+  storeSlug,
 }: HeaderNavigationProps) {
+  const router = useRouter();
+  const params = useParams();
+  const slug = storeSlug || (params.slug as string);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -78,11 +86,18 @@ export function HeaderNavigation({
 
             {/* Cart */}
             {showCart && (
-              <Button variant="ghost" size="sm" className="relative">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="relative"
+                onClick={() => slug && router.push(`/store/${slug}/cart`)}
+              >
                 <ShoppingCart className="w-5 h-5" />
-                <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-gradient-to-r from-purple-600 to-cyan-600 text-white text-xs">
-                  0
-                </Badge>
+                {cartCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-gradient-to-r from-purple-600 to-cyan-600 text-white text-xs">
+                    {cartCount}
+                  </Badge>
+                )}
               </Button>
             )}
 

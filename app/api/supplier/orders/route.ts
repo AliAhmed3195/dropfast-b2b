@@ -99,6 +99,10 @@ export async function GET(request: NextRequest) {
         quantity: item.quantity,
         price: item.price,
         product: item.product,
+        // Price breakdown (USD)
+        supplierPrice: item.supplierPrice,
+        stripeFeeSupplier: item.stripeFeeSupplier,
+        netAmount: item.supplierPrice ? (item.supplierPrice - (item.stripeFeeSupplier || 0)) * item.quantity : item.price * item.quantity,
       })
       order.total += item.price * item.quantity
     })

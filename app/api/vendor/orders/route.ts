@@ -107,6 +107,13 @@ export async function GET(request: NextRequest) {
         quantity: item.quantity,
         price: item.price,
         image: item.productImage || item.product?.images?.[0] || '',
+        // Profit breakdown (USD)
+        vendorPrice: item.vendorPrice,
+        supplierPrice: item.supplierPrice,
+        vendorProfit: item.vendorProfit,
+        stripeFeeVendor: item.stripeFeeVendor,
+        platformFee: item.platformFee,
+        netProfit: item.vendorProfit ? (item.vendorProfit - (item.stripeFeeVendor || 0) - (item.platformFee || 0)) * item.quantity : 0,
       })),
       subtotal: order.subtotal,
       shipping: order.shipping,

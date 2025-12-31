@@ -16,7 +16,7 @@ export interface SectionConfig {
 
 export interface SectionSetting {
   name: string;
-  type: 'text' | 'textarea' | 'image' | 'url' | 'select' | 'range' | 'color' | 'toggle';
+  type: 'text' | 'textarea' | 'image' | 'url' | 'select' | 'range' | 'color' | 'toggle' | 'video' | 'testimonials-array' | 'badges-array' | 'features-array' | 'faqs-array' | 'stats-array' | 'collections-array' | 'features-list' | 'comparison-columns' | 'steps-array' | 'links-array' | 'slides-array' | 'categories-array';
   label: string;
   options?: string[];
   min?: number;
@@ -492,10 +492,23 @@ export const sectionLibrary: SectionConfig[] = [
       ],
       autoplay: true,
       interval: 5000,
+      height: 600,
+      overlayOpacity: 0.4,
+      textAlignment: 'center',
+      showArrows: true,
+      showDots: true,
+      animationType: 'fade',
     },
     settings: [
+      { name: 'slides', type: 'slides-array', label: 'Carousel Slides' },
+      { name: 'height', type: 'range', label: 'Carousel Height (px)', min: 400, max: 900, step: 50 },
+      { name: 'overlayOpacity', type: 'range', label: 'Overlay Opacity', min: 0, max: 1, step: 0.1 },
+      { name: 'textAlignment', type: 'select', label: 'Text Alignment', options: ['left', 'center', 'right'] },
+      { name: 'showArrows', type: 'toggle', label: 'Show Navigation Arrows' },
+      { name: 'showDots', type: 'toggle', label: 'Show Slide Indicators' },
       { name: 'autoplay', type: 'toggle', label: 'Auto-play Slides' },
       { name: 'interval', type: 'range', label: 'Slide Interval (ms)', min: 3000, max: 10000, step: 1000 },
+      { name: 'animationType', type: 'select', label: 'Animation Type', options: ['fade', 'slide', 'zoom'] },
     ],
   },
   {
@@ -508,15 +521,30 @@ export const sectionLibrary: SectionConfig[] = [
     thumbnail: '/sections/products-grid.png',
     defaultProps: {
       heading: 'Our Products',
+      subheading: '',
       columns: 4,
       rows: 2,
+      productCount: 8,
       showFilters: true,
+      showRating: true,
+      showQuickActions: true,
+      showStockBadge: true,
+      backgroundColor: '',
+      textAlignment: 'center',
       productSource: 'all', // all, featured, category, manual
     },
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
-      { name: 'columns', type: 'range', label: 'Columns', min: 2, max: 5, step: 1 },
+      { name: 'subheading', type: 'text', label: 'Section Subheading' },
+      { name: 'columns', type: 'range', label: 'Grid Columns', min: 2, max: 6, step: 1 },
+      { name: 'rows', type: 'range', label: 'Number of Rows', min: 1, max: 5, step: 1 },
+      { name: 'productCount', type: 'range', label: 'Max Products to Show', min: 4, max: 30, step: 2 },
       { name: 'showFilters', type: 'toggle', label: 'Show Filters' },
+      { name: 'showRating', type: 'toggle', label: 'Show Product Rating' },
+      { name: 'showQuickActions', type: 'toggle', label: 'Show Quick Actions (Wishlist, View)' },
+      { name: 'showStockBadge', type: 'toggle', label: 'Show Stock Badge' },
+      { name: 'backgroundColor', type: 'color', label: 'Background Color' },
+      { name: 'textAlignment', type: 'select', label: 'Text Alignment', options: ['left', 'center', 'right'] },
     ],
   },
   {
@@ -532,11 +560,24 @@ export const sectionLibrary: SectionConfig[] = [
       subheading: 'Our most popular products',
       productCount: 8,
       layout: 'grid', // grid, carousel
+      columns: 4,
+      showRating: true,
+      showQuickActions: true,
+      showStockBadge: true,
+      backgroundColor: '',
+      textAlignment: 'center',
     },
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
+      { name: 'subheading', type: 'text', label: 'Section Subheading' },
       { name: 'productCount', type: 'range', label: 'Number of Products', min: 4, max: 12, step: 2 },
       { name: 'layout', type: 'select', label: 'Layout', options: ['grid', 'carousel'] },
+      { name: 'columns', type: 'range', label: 'Grid Columns', min: 2, max: 6, step: 1 },
+      { name: 'showRating', type: 'toggle', label: 'Show Product Rating' },
+      { name: 'showQuickActions', type: 'toggle', label: 'Show Quick Actions (Wishlist, View)' },
+      { name: 'showStockBadge', type: 'toggle', label: 'Show Stock Badge' },
+      { name: 'backgroundColor', type: 'color', label: 'Background Color' },
+      { name: 'textAlignment', type: 'select', label: 'Text Alignment', options: ['left', 'center', 'right'] },
     ],
   },
   {
@@ -550,14 +591,19 @@ export const sectionLibrary: SectionConfig[] = [
     defaultProps: {
       heading: 'Shop by Category',
       categories: [
-        { name: 'Electronics', image: '', productCount: 145 },
-        { name: 'Fashion', image: '', productCount: 230 },
-        { name: 'Home & Garden', image: '', productCount: 89 },
-        { name: 'Sports', image: '', productCount: 67 },
+        { name: 'Electronics', image: '', productCount: 145, link: '/category/electronics' },
+        { name: 'Fashion', image: '', productCount: 230, link: '/category/fashion' },
+        { name: 'Home & Garden', image: '', productCount: 89, link: '/category/home-garden' },
+        { name: 'Sports', image: '', productCount: 67, link: '/category/sports' },
       ],
+      columns: 6,
+      showProductCount: true,
     },
     settings: [
       { name: 'heading', type: 'text', label: 'Section Heading' },
+      { name: 'categories', type: 'categories-array', label: 'Categories' },
+      { name: 'columns', type: 'range', label: 'Grid Columns', min: 2, max: 6, step: 1 },
+      { name: 'showProductCount', type: 'toggle', label: 'Show Product Count' },
     ],
   },
   {

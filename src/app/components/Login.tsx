@@ -31,8 +31,12 @@ export function Login() {
     try {
       const loggedInUser = await login(email, password);
       if (loggedInUser && loggedInUser.role) {
-        // Direct role-based redirect
-        router.push(`/dashboard/${loggedInUser.role}/overview`);
+        // Role-based redirect
+        if (loggedInUser.role === 'customer') {
+          router.push('/dashboard/customer/browse');
+        } else {
+          router.push(`/dashboard/${loggedInUser.role}/overview`);
+        }
       } else {
         setError('Invalid email or password');
         setIsLoading(false);
@@ -59,8 +63,12 @@ export function Login() {
     try {
       const loggedInUser = await login(cred.email, cred.password);
       if (loggedInUser && loggedInUser.role) {
-        // Direct role-based redirect
-        router.push(`/dashboard/${loggedInUser.role}/overview`);
+        // Role-based redirect
+        if (loggedInUser.role === 'customer') {
+          router.push('/dashboard/customer/browse');
+        } else {
+          router.push(`/dashboard/${loggedInUser.role}/overview`);
+        }
       } else {
         setError('Login failed');
         setIsLoading(false);

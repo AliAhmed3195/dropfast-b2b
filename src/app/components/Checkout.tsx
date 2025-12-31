@@ -17,7 +17,6 @@ import {
   Building,
   Globe,
 } from 'lucide-react';
-import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
@@ -26,7 +25,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 
 interface CheckoutFormData {
   fullName: string;
@@ -41,7 +40,6 @@ interface CheckoutFormData {
 }
 
 export function Checkout() {
-  const { cart, getCartTotal, clearCart, addOrder } = useApp();
   const { user } = useAuth();
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
@@ -58,6 +56,19 @@ export function Checkout() {
   });
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Get cart from localStorage
+  const [cart, setCart] = useState<any[]>(() => {
+    if (typeof window !== 'undefined' && user?.id) {
+      const saved = localStorage.getItem(`cart_${user.id}`);
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+
+  const getCartTotal = () => {
+    return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  };
+
   const subtotal = getCartTotal();
   const shipping = cart.length > 0 ? 10 : 0;
   const tax = subtotal * 0.1;
@@ -69,11 +80,11 @@ export function Checkout() {
 
   const validateStep1 = () => {
     if (!formData.fullName || !formData.email || !formData.phone) {
-      toast.error('Please fill in all contact information');
+      showToast.error('Please fill in all contact information');
       return false;
     }
     if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      toast.error('Please enter a valid email address');
+      showToast.error('Please enter a valid email address');
       return false;
     }
     return true;
@@ -81,7 +92,7 @@ export function Checkout() {
 
   const validateStep2 = () => {
     if (!formData.address || !formData.city || !formData.state || !formData.zipCode || !formData.country) {
-      toast.error('Please fill in all shipping address fields');
+      showToast.error('Please fill in all shipping address fields');
       return false;
     }
     return true;
@@ -95,71 +106,107 @@ export function Checkout() {
     }
   };
 
+  // Redirect if cart is empty
+  useEffect(() => {
+    if (cart.length === 0 && typeof window !== 'undefined') {
+      showToast.error('Your cart is empty');
+      router.push('/dashboard/customer/cart');
+    }
+  }, [cart.length, router]);
+
   const handlePlaceOrder = async () => {
-    if (!user) return;
+    if (!user) {
+      showToast.error('Please login to place an order');
+      return;
+    }
+
+    if (cart.length === 0) {
+      showToast.error('Your cart is empty');
+      return;
+    }
 
     setIsProcessing(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      // Group items by store
+      const storeOrders = cart.reduce((acc: any, item: any) => {
+        if (!acc[item.storeId]) {
+          acc[item.storeId] = {
+            storeId: item.storeId,
+            storeName: item.storeName,
+            items: [],
+          };
+        }
+        acc[item.storeId].items.push({
+          productId: item.productId,
+          storeProductId: item.storeProductId || item.productId, // Use storeProductId if available
+          productName: item.productName,
+          productImage: item.productImage,
+          quantity: item.quantity,
+          price: item.price,
+        });
+        return acc;
+      }, {} as Record<string, any>);
 
-    // Group items by store
-    const storeOrders = cart.reduce((acc, item) => {
-      if (!acc[item.storeId]) {
-        acc[item.storeId] = {
-          storeId: item.storeId,
-          storeName: item.storeName,
-          items: [],
-        };
+      // Create orders for each store via API
+      const orderPromises = Object.values(storeOrders).map(async (storeOrder: any) => {
+        const orderSubtotal = storeOrder.items.reduce(
+          (sum: number, item: any) => sum + item.price * item.quantity,
+          0
+        );
+        const orderShipping = shipping / Object.keys(storeOrders).length;
+        const orderTax = orderSubtotal * 0.1;
+        const orderTotal = orderSubtotal + orderShipping + orderTax;
+
+        const response = await fetch('/api/public/orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            storeId: storeOrder.storeId,
+            customerEmail: formData.email,
+            customerPhone: formData.phone,
+            customerName: formData.fullName,
+            shippingFullName: formData.fullName,
+            shippingAddress: formData.address,
+            shippingCity: formData.city,
+            shippingState: formData.state,
+            shippingZipCode: formData.zipCode,
+            shippingCountry: formData.country,
+            shippingPhone: formData.phone,
+            paymentMethod: formData.paymentMethod,
+            items: storeOrder.items,
+            subtotal: orderSubtotal,
+            shipping: orderShipping,
+            tax: orderTax,
+            total: orderTotal,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to create order');
+        }
+
+        return response.json();
+      });
+
+      await Promise.all(orderPromises);
+
+      // Clear cart
+      setCart([]);
+      if (user?.id && typeof window !== 'undefined') {
+        localStorage.setItem(`cart_${user.id}`, JSON.stringify([]));
       }
-      acc[item.storeId].items.push({
-        productId: item.productId,
-        productName: item.productName,
-        productImage: item.productImage,
-        quantity: item.quantity,
-        price: item.price,
-        supplierId: '2', // In real app, get from product data
-      });
-      return acc;
-    }, {} as Record<string, any>);
-
-    // Create orders for each store
-    Object.values(storeOrders).forEach((storeOrder: any) => {
-      const orderSubtotal = storeOrder.items.reduce(
-        (sum: number, item: any) => sum + item.price * item.quantity,
-        0
-      );
-
-      addOrder({
-        customerId: user.id,
-        customerName: formData.fullName,
-        customerEmail: formData.email,
-        storeId: storeOrder.storeId,
-        storeName: storeOrder.storeName,
-        items: storeOrder.items,
-        subtotal: orderSubtotal,
-        shipping: shipping / Object.keys(storeOrders).length,
-        tax: orderSubtotal * 0.1,
-        total: orderSubtotal + shipping / Object.keys(storeOrders).length + orderSubtotal * 0.1,
-        status: 'pending',
-        shippingAddress: {
-          fullName: formData.fullName,
-          address: formData.address,
-          city: formData.city,
-          state: formData.state,
-          zipCode: formData.zipCode,
-          country: formData.country,
-          phone: formData.phone,
-        },
-        paymentMethod: formData.paymentMethod,
-        paymentStatus: 'paid',
-      });
-    });
-
-    clearCart();
-    setIsProcessing(false);
-    toast.success('Order placed successfully!');
-    router.push('/dashboard/customer/orders');
+      
+      setIsProcessing(false);
+      showToast.success('Order placed successfully!');
+      router.push('/dashboard/customer/orders');
+    } catch (error: any) {
+      setIsProcessing(false);
+      showToast.error(error.message || 'Failed to place order. Please try again.');
+    }
   };
 
   const steps = [

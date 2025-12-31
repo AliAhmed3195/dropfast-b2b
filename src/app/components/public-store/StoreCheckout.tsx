@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowLeft,
@@ -22,6 +22,11 @@ import { Separator } from '../ui/separator';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { showToast } from '../../../lib/toast';
 import { CartItem } from '../../contexts/AppContext';
+import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+
+// Initialize Stripe
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
 
 interface CheckoutFormData {
   fullName: string;
@@ -43,7 +48,7 @@ interface StoreCheckoutProps {
     fontFamily: string;
   };
   onBack: () => void;
-  onPlaceOrder: (formData: CheckoutFormData) => void;
+  onPlaceOrder: (formData: CheckoutFormData, paymentIntentId?: string) => void;
 }
 
 export function StoreCheckout({
@@ -53,6 +58,8 @@ export function StoreCheckout({
   onPlaceOrder,
 }: StoreCheckoutProps) {
   const [currentStep, setCurrentStep] = useState(1);
+  const [paymentIntentId, setPaymentIntentId] = useState<string | undefined>();
+  const [clientSecret, setClientSecret] = useState<string | undefined>();
   const [formData, setFormData] = useState<CheckoutFormData>({
     fullName: '',
     email: '',
@@ -74,24 +81,187 @@ export function StoreCheckout({
     setFormData({ ...formData, [field]: value });
   };
 
-  const handleSubmit = () => {
-    // Validate form
-    if (!formData.fullName || !formData.email || !formData.phone || !formData.address) {
-      showToast.error('Please fill in all required fields');
-      return;
-    }
-
-    onPlaceOrder(formData);
-    // Order success handled by parent (PublicStore)
-  };
-
   const steps = [
     { number: 1, title: 'Shipping', icon: Truck },
     { number: 2, title: 'Payment', icon: CreditCard },
     { number: 3, title: 'Review', icon: CheckCircle2 },
   ];
 
-  return (
+  // Create payment intent when moving to payment step
+  useEffect(() => {
+    if (currentStep === 2 && formData.paymentMethod === 'credit_card' && !clientSecret) {
+      const createPaymentIntent = async () => {
+        try {
+          const response = await fetch('/api/public/create-payment-intent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: total,
+              currency: 'USD',
+              metadata: {
+                customerEmail: formData.email,
+                customerName: formData.fullName,
+              },
+            }),
+          });
+
+          if (response.ok) {
+            const { clientSecret: secret, paymentIntentId: id } = await response.json();
+            setClientSecret(secret);
+            setPaymentIntentId(id);
+          }
+        } catch (error) {
+          console.error('Failed to create payment intent:', error);
+        }
+      };
+
+      createPaymentIntent();
+    }
+  }, [currentStep, formData.paymentMethod, formData.email, formData.fullName, total, clientSecret]);
+
+  const getElementsOptions = (): StripeElementsOptions => ({
+    mode: 'payment',
+    amount: Math.round(total * 100),
+    currency: 'usd',
+    ...(clientSecret && { clientSecret }),
+  });
+
+  const CheckoutForm = () => {
+    const PaymentStepComponent = ({
+      formData,
+      clientSecret,
+      storeTheme,
+      onPaymentMethodChange,
+      onBack,
+      onSuccess,
+    }: {
+      formData: CheckoutFormData;
+      clientSecret: string | undefined;
+      storeTheme: { primaryColor: string; secondaryColor: string; fontFamily: string };
+      onPaymentMethodChange: (method: CheckoutFormData['paymentMethod']) => void;
+      onBack: () => void;
+      onSuccess: () => void;
+    }) => {
+      const stripe = useStripe();
+      const elements = useElements();
+      const [isProcessing, setIsProcessing] = useState(false);
+
+      const handlePayment = async () => {
+        if (!stripe || !elements || !clientSecret) {
+          showToast.error('Payment not ready. Please wait...');
+          return;
+        }
+
+        setIsProcessing(true);
+        try {
+          const { error: confirmError } = await stripe.confirmPayment({
+            elements,
+            clientSecret,
+            confirmParams: {
+              return_url: window.location.href,
+            },
+            redirect: 'if_required',
+          });
+
+          if (confirmError) {
+            throw new Error(confirmError.message || 'Payment failed');
+          }
+          onSuccess();
+        } catch (error: any) {
+          console.error('Payment error:', error);
+          showToast.error(error.message || 'Payment failed. Please try again.');
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5" style={{ color: storeTheme.primaryColor }} />
+              Payment Method
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <RadioGroup
+              value={formData.paymentMethod}
+              onValueChange={(value) =>
+                onPaymentMethodChange(value as CheckoutFormData['paymentMethod'])
+              }
+            >
+              <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:border-current transition-colors">
+                <RadioGroupItem value="credit_card" id="credit_card" />
+                <Label htmlFor="credit_card" className="flex-1 cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Credit/Debit Card</span>
+                    <CreditCard className="w-5 h-5 text-gray-400" />
+                  </div>
+                </Label>
+              </div>
+              <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:border-current transition-colors">
+                <RadioGroupItem value="paypal" id="paypal" />
+                <Label htmlFor="paypal" className="flex-1 cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">PayPal</span>
+                    <span className="text-sm text-gray-500">Pay with PayPal</span>
+                  </div>
+                </Label>
+              </div>
+              <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:border-current transition-colors">
+                <RadioGroupItem value="bank_transfer" id="bank_transfer" />
+                <Label htmlFor="bank_transfer" className="flex-1 cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Bank Transfer</span>
+                    <span className="text-sm text-gray-500">Direct bank transfer</span>
+                  </div>
+                </Label>
+              </div>
+            </RadioGroup>
+
+            {formData.paymentMethod === 'credit_card' && (
+              <div className="space-y-4 pt-4 border-t">
+                <div className="space-y-2">
+                  <Label>Card Details</Label>
+                  <div className="p-3 border rounded-md">
+                    {clientSecret ? (
+                      <PaymentElement />
+                    ) : (
+                      <div className="text-sm text-gray-500">Loading payment form...</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={onBack} className="flex-1">
+                Back
+              </Button>
+              {formData.paymentMethod === 'credit_card' ? (
+                <Button
+                  className="flex-1 text-white"
+                  onClick={handlePayment}
+                  disabled={isProcessing}
+                  style={{ backgroundColor: storeTheme.primaryColor }}
+                >
+                  {isProcessing ? 'Processing...' : 'Process Payment'}
+                </Button>
+              ) : (
+                <Button
+                  className="flex-1 text-white"
+                  onClick={onSuccess}
+                  style={{ backgroundColor: storeTheme.primaryColor }}
+                >
+                  Review Order
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      );
+    };
+    return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b">
@@ -286,82 +456,14 @@ export function StoreCheckout({
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
               >
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <CreditCard className="w-5 h-5" style={{ color: storeTheme.primaryColor }} />
-                      Payment Method
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <RadioGroup
-                      value={formData.paymentMethod}
-                      onValueChange={(value) =>
-                        handleInputChange('paymentMethod', value as CheckoutFormData['paymentMethod'])
-                      }
-                    >
-                      <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:border-current transition-colors">
-                        <RadioGroupItem value="credit_card" id="credit_card" />
-                        <Label htmlFor="credit_card" className="flex-1 cursor-pointer">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">Credit/Debit Card</span>
-                            <CreditCard className="w-5 h-5 text-gray-400" />
-                          </div>
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:border-current transition-colors">
-                        <RadioGroupItem value="paypal" id="paypal" />
-                        <Label htmlFor="paypal" className="flex-1 cursor-pointer">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">PayPal</span>
-                            <span className="text-sm text-gray-500">Pay with PayPal</span>
-                          </div>
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:border-current transition-colors">
-                        <RadioGroupItem value="bank_transfer" id="bank_transfer" />
-                        <Label htmlFor="bank_transfer" className="flex-1 cursor-pointer">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">Bank Transfer</span>
-                            <span className="text-sm text-gray-500">Direct bank transfer</span>
-                          </div>
-                        </Label>
-                      </div>
-                    </RadioGroup>
-
-                    {formData.paymentMethod === 'credit_card' && (
-                      <div className="space-y-4 pt-4 border-t">
-                        <div className="space-y-2">
-                          <Label htmlFor="cardNumber">Card Number</Label>
-                          <Input id="cardNumber" placeholder="1234 5678 9012 3456" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="expiry">Expiry Date</Label>
-                            <Input id="expiry" placeholder="MM/YY" />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="cvv">CVV</Label>
-                            <Input id="cvv" placeholder="123" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex gap-3">
-                      <Button variant="outline" onClick={() => setCurrentStep(1)} className="flex-1">
-                        Back
-                      </Button>
-                      <Button
-                        className="flex-1 text-white"
-                        onClick={() => setCurrentStep(3)}
-                        style={{ backgroundColor: storeTheme.primaryColor }}
-                      >
-                        Review Order
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                <PaymentStepComponent
+                  formData={formData}
+                  clientSecret={clientSecret}
+                  storeTheme={storeTheme}
+                  onPaymentMethodChange={(method) => handleInputChange('paymentMethod', method)}
+                  onBack={() => setCurrentStep(1)}
+                  onSuccess={() => setCurrentStep(3)}
+                />
               </motion.div>
             )}
 
@@ -427,7 +529,7 @@ export function StoreCheckout({
                       </Button>
                       <Button
                         className="flex-1 text-white gap-2"
-                        onClick={handleSubmit}
+                        onClick={() => onPlaceOrder(formData, paymentIntentId)}
                         style={{ backgroundColor: storeTheme.primaryColor }}
                       >
                         <Lock className="w-4 h-4" />
@@ -486,5 +588,19 @@ export function StoreCheckout({
         </div>
       </div>
     </div>
-  );
+    );
+  };
+
+  if (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+    return (
+      <Elements 
+        stripe={stripePromise} 
+        options={getElementsOptions()}
+        key={clientSecret || 'initial'}
+      >
+        <CheckoutForm />
+      </Elements>
+    );
+  }
+  return <CheckoutForm />;
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   Package,
@@ -15,9 +15,10 @@ import {
   Search,
   Filter,
   XCircle,
+  Loader2,
 } from 'lucide-react';
-import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -37,15 +38,51 @@ import {
   DialogTrigger,
 } from './ui/dialog';
 import { Separator } from './ui/separator';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 
 export function CustomerOrders() {
-  const { orders, getOrdersByCustomer } = useApp();
   const { user } = useAuth();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
 
-  const myOrders = user ? getOrdersByCustomer(user.id) : [];
+  // Fetch orders
+  useEffect(() => {
+    if (!user?.id || fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchOrders = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.append('customerId', user.id);
+        if (statusFilter !== 'all') params.append('status', statusFilter);
+
+        const response = await fetch(`/api/customer/orders?${params.toString()}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          setOrders(data.orders || []);
+        } else {
+          showToast.error(data.error || 'Failed to fetch orders');
+        }
+      } catch (error) {
+        console.error('Fetch orders error:', error);
+        showToast.error('Failed to fetch orders');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchOrders();
+  }, [user?.id, statusFilter]);
+
+  const myOrders = orders;
 
   const filteredOrders = myOrders.filter(order => {
     const matchesSearch = 
@@ -97,7 +134,7 @@ export function CustomerOrders() {
   };
 
   const handleDownloadInvoice = (orderId: string) => {
-    toast.success(`Invoice for order ${orderId} downloaded`);
+    showToast.success(`Invoice for order ${orderId} downloaded`);
   };
 
   const stats = {
@@ -196,7 +233,11 @@ export function CustomerOrders() {
       </Card>
 
       {/* Orders List */}
-      {filteredOrders.length > 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : filteredOrders.length > 0 ? (
         <div className="space-y-4">
           {filteredOrders.map((order, index) => {
             const statusConfig = getStatusConfig(order.status);
@@ -393,19 +434,23 @@ export function CustomerOrders() {
         </div>
       ) : (
         <Card className="p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-500/10 to-cyan-500/10 flex items-center justify-center">
-              <Package className="w-10 h-10 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-bold mb-2">
-              {searchQuery || statusFilter !== 'all' ? 'No orders found' : 'No orders yet'}
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              {searchQuery || statusFilter !== 'all'
-                ? 'Try adjusting your filters'
-                : 'Start shopping to see your orders here'}
-            </p>
-          </div>
+          <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-xl font-bold mb-2">
+            {searchQuery || statusFilter !== 'all' ? 'No orders found' : 'No orders yet'}
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            {searchQuery || statusFilter !== 'all'
+              ? 'Try adjusting your filters'
+              : 'Start shopping to see your orders here'}
+          </p>
+          {!searchQuery && statusFilter === 'all' && (
+            <Button
+              onClick={() => router.push('/dashboard/customer/browse')}
+              className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white"
+            >
+              Browse Products
+            </Button>
+          )}
         </Card>
       )}
     </div>

@@ -60,7 +60,7 @@ export function ProductDetailPage({
   };
 
   const incrementQuantity = () => {
-    if (quantity < (product.stock || 0)) {
+    if (quantity < (product.stock || 0) && product.inStock) {
       setQuantity(quantity + 1);
     }
   };
@@ -168,11 +168,11 @@ export function ProductDetailPage({
                     />
                   ))}
                   <span className="ml-2 text-sm text-gray-600">
-                    {product.rating} ({product.reviews} reviews)
+                    {product.rating || 0} {product.reviews > 0 ? `(${product.reviews} reviews)` : '(No reviews yet)'}
                   </span>
                 </div>
-                <Badge variant={product.stock > 0 ? 'default' : 'secondary'}>
-                  {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
+                <Badge variant={(product.inStock && (product.stock || 0) > 0) ? 'default' : 'secondary'}>
+                  {(product.inStock && (product.stock || 0) > 0) ? 'In Stock' : 'Out of Stock'}
                 </Badge>
               </div>
             </div>
@@ -227,13 +227,13 @@ export function ProductDetailPage({
                     variant="ghost"
                     size="sm"
                     onClick={incrementQuantity}
-                    disabled={quantity >= product.stock}
+                    disabled={quantity >= (product.stock || 0) || !product.inStock}
                   >
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
                 <span className="text-sm text-gray-500">
-                  {product.stock} available
+                  {product.inStock && (product.stock || 0) > 0 ? `${product.stock} available` : 'Out of Stock'}
                 </span>
               </div>
 
@@ -242,7 +242,7 @@ export function ProductDetailPage({
                   className="flex-1 text-white"
                   size="lg"
                   onClick={handleAddToCart}
-                  disabled={product.stock === 0}
+                  disabled={!product.inStock || (product.stock || 0) <= 0}
                   style={{ backgroundColor: storeTheme.primaryColor }}
                 >
                   <ShoppingCart className="w-5 h-5 mr-2" />
@@ -309,7 +309,7 @@ export function ProductDetailPage({
                 Product Details
               </TabsTrigger>
               <TabsTrigger value="reviews" className="rounded-none data-[state=active]:border-b-2" style={{ borderColor: storeTheme.primaryColor }}>
-                Reviews ({product.reviews})
+                Reviews {product.reviews > 0 ? `(${product.reviews})` : ''}
               </TabsTrigger>
               <TabsTrigger value="shipping" className="rounded-none data-[state=active]:border-b-2" style={{ borderColor: storeTheme.primaryColor }}>
                 Shipping Info
@@ -329,7 +329,11 @@ export function ProductDetailPage({
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Availability</p>
-                    <p className="font-medium">{product.stock} units in stock</p>
+                    <p className="font-medium">
+                      {product.inStock && (product.stock || 0) > 0 
+                        ? `${product.stock} units in stock` 
+                        : 'Out of stock'}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Supplier</p>
@@ -419,9 +423,11 @@ export function ProductDetailPage({
                           style={{ color: storeTheme.primaryColor }}
                         />
                       ))}
-                      <span className="text-xs text-gray-500 ml-1">
-                        ({relatedProduct.reviews})
-                      </span>
+                      {relatedProduct.reviews > 0 && (
+                        <span className="text-xs text-gray-500 ml-1">
+                          ({relatedProduct.reviews})
+                        </span>
+                      )}
                     </div>
                     <p className="font-bold" style={{ color: storeTheme.primaryColor }}>
                       ${relatedProduct.price.toFixed(2)}

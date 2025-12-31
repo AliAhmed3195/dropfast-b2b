@@ -15,63 +15,64 @@ datasource db {
 // ============================================
 
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  password          String   // Hashed with bcrypt
-  name              String
-  role              UserType
-  avatar            String?
-  phone             String?
-  dateOfBirth       DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id          String    @id @default(cuid())
+  email       String    @unique
+  password    String // Hashed with bcrypt
+  name        String
+  role        UserType
+  avatar      String?
+  phone       String?
+  dateOfBirth DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Business Information (Optional)
-  businessName      String?
-  businessType     String?  // individual, company, partnership, corporation
+  businessName       String?
+  businessType       String? // individual, company, partnership, corporation
   registrationNumber String?
-  vatNumber        String?
-  taxId            String?
-  country          String?
-  currency         String?  // For UI display (USD stored in DB)
-  
+  vatNumber          String?
+  taxId              String?
+  country            String?
+  currency           String? // For UI display (USD stored in DB)
+  baseCurrency       String? // Supplier/Vendor base currency (e.g., "USD", "EUR", "GBP")
+
   // Address
-  streetAddress    String?
-  city             String?
-  stateProvince    String?
-  zipCode          String?
-  addressCountry   String?
+  streetAddress  String?
+  city           String?
+  stateProvince  String?
+  zipCode        String?
+  addressCountry String?
 
   // Supplier Specific
-  productCategories String?  // Comma-separated
+  productCategories String? // Comma-separated
   shippingLocations String? // Comma-separated
   minimumOrderValue Float?
 
   // Vendor Specific
-  commissionRate   Float?   @default(15.0)
+  commissionRate Float? @default(15.0)
 
   // Stripe Connect (for payouts)
-  stripeAccountId  String?
-  stripeKycStatus  String?  // pending, verified, rejected
+  stripeAccountId          String?
+  stripeKycStatus          String? // pending, verified, rejected
   stripeOnboardingComplete Boolean @default(false)
-  stripeChargesEnabled Boolean @default(false)
-  stripePayoutsEnabled Boolean @default(false)
+  stripeChargesEnabled     Boolean @default(false)
+  stripePayoutsEnabled     Boolean @default(false)
 
   // Notification Preferences (JSON)
-  notificationPreferences Json?  // { emailNotifications, orderUpdates, promotionalEmails, weeklyReports, securityAlerts }
+  notificationPreferences Json? // { emailNotifications, orderUpdates, promotionalEmails, weeklyReports, securityAlerts }
 
   // Account Status
-  isActive          Boolean  @default(true) // Account active/inactive status
+  isActive Boolean @default(true) // Account active/inactive status
 
   // Relations
-  productsAsSupplier Product[] @relation("SupplierProducts")
-  productsAsCreator  Product[] @relation("ProductCreator")
-  storesAsVendor     Store[]   @relation("VendorStores")
-  ordersAsCustomer  Order[]   @relation("CustomerOrders")
-  invoices          Invoice[]
-  payouts           Payout[]
-  wishlist          Wishlist[]
-  reports           Report[]
+  productsAsSupplier Product[]  @relation("SupplierProducts")
+  productsAsCreator  Product[]  @relation("ProductCreator")
+  storesAsVendor     Store[]    @relation("VendorStores")
+  ordersAsCustomer   Order[]    @relation("CustomerOrders")
+  invoices           Invoice[]
+  payouts            Payout[]
+  wishlist           Wishlist[]
+  reports            Report[]
 
   @@map("users")
 }
@@ -88,73 +89,73 @@ enum UserType {
 // ============================================
 
 model Product {
-  id                String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Basic Information
-  name              String
-  description       String?  @db.Text
-  brand             String?
-  sku               String   @unique
-  barcode           String?
-  status            ProductStatus @default(DRAFT)
-  
+  name        String
+  description String?       @db.Text
+  brand       String?
+  sku         String        @unique
+  barcode     String?
+  status      ProductStatus @default(DRAFT)
+
   // Pricing (All stored in USD)
-  baseCurrency      String   @default("USD") // For UI reference
-  costPrice         Float    // USD
-  sellingPrice      Float   // USD
-  originalPrice     Float?  // For discounts
-  
+  baseCurrency  String @default("USD") // For UI reference
+  costPrice     Float // USD
+  sellingPrice  Float // USD
+  originalPrice Float? // For discounts
+
   // Inventory
-  stock             Int      @default(0)
-  moq               Int      @default(1) // Minimum Order Quantity
-  stockAlertThreshold Int?   // Alert when stock <= this
-  
+  stock               Int  @default(0)
+  moq                 Int  @default(1) // Minimum Order Quantity
+  stockAlertThreshold Int? // Alert when stock <= this
+
   // Classification
-  categoryId        String?
-  category          Category? @relation(fields: [categoryId], references: [id])
-  subcategory       String?
-  condition         ProductCondition @default(NEW)
-  warrantyPeriod    String?  // e.g., "1-year", "2-years"
-  leadTime          String?  // e.g., "3-5-days"
-  
+  categoryId     String?
+  category       Category?        @relation(fields: [categoryId], references: [id])
+  subcategory    String?
+  condition      ProductCondition @default(NEW)
+  warrantyPeriod String? // e.g., "1-year", "2-years"
+  leadTime       String? // e.g., "3-5-days"
+
   // Shipping
-  weight            Float?
-  weightUnit        String?  @default("kg") // kg, g, lb, oz
-  length            Float?
-  width             Float?
-  height            Float?
-  dimensionUnit     String?  @default("cm") // cm, in, m
-  shippingCost      Float?   @default(0)
-  
+  weight        Float?
+  weightUnit    String? @default("kg") // kg, g, lb, oz
+  length        Float?
+  width         Float?
+  height        Float?
+  dimensionUnit String? @default("cm") // cm, in, m
+  shippingCost  Float?  @default(0)
+
   // Media
-  images            String[] @default([]) // Array of image URLs
-  
+  images String[] @default([]) // Array of image URLs
+
   // Ratings & Reviews
-  rating            Float    @default(0)
-  reviews           Int      @default(0)
-  featured          Boolean  @default(false)
-  
+  rating   Float   @default(0)
+  reviews  Int     @default(0)
+  featured Boolean @default(false)
+
   // Variants (stored as JSON)
-  hasVariants       Boolean  @default(false)
-  variants          Json?    // Array of variant objects
-  
+  hasVariants Boolean @default(false)
+  variants    Json? // Array of variant objects
+
   // Timestamps
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   // Creator tracking (who created this product)
-  createdByUserId    String?
-  createdByUserType  UserType?
-  createdBy          User?    @relation("ProductCreator", fields: [createdByUserId], references: [id])
-  
+  createdByUserId   String?
+  createdByUserType UserType?
+  createdBy         User?     @relation("ProductCreator", fields: [createdByUserId], references: [id])
+
   // Supplier relationship (for supplier products OR admin-created products for suppliers)
-  supplierId        String?
-  supplier          User?    @relation("SupplierProducts", fields: [supplierId], references: [id])
-  tags              ProductTag[]
-  storeProducts     StoreProduct[]
-  orderItems        OrderItem[]
-  wishlist          Wishlist[]
+  supplierId    String?
+  supplier      User?          @relation("SupplierProducts", fields: [supplierId], references: [id])
+  tags          ProductTag[]
+  storeProducts StoreProduct[]
+  orderItems    OrderItem[]
+  wishlist      Wishlist[]
 
   @@index([supplierId])
   @@index([createdByUserId])
@@ -184,42 +185,42 @@ enum ProductCondition {
 // ============================================
 
 model Category {
-  id                String   @id @default(cuid())
-  name              String   @unique
-  slug              String   @unique
-  description       String?  @db.Text
-  image             String?
-  displayOrder      Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String   @unique
+  slug         String   @unique
+  description  String?  @db.Text
+  image        String?
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  products          Product[]
+  products Product[]
 
   @@map("categories")
 }
 
 model Tag {
-  id                String   @id @default(cuid())
-  name              String   @unique
-  slug              String   @unique
-  color             String?  // Hex color code
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  color     String? // Hex color code
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  products          ProductTag[]
+  products ProductTag[]
 
   @@map("tags")
 }
 
 // Many-to-Many: Product <-> Tag
 model ProductTag {
-  id                String   @id @default(cuid())
-  productId         String
-  tagId             String
-  createdAt         DateTime @default(now())
+  id        String   @id @default(cuid())
+  productId String
+  tagId     String
+  createdAt DateTime @default(now())
 
-  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  tag               Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([productId, tagId])
   @@map("product_tags")
@@ -230,47 +231,47 @@ model ProductTag {
 // ============================================
 
 model Store {
-  id                String   @id @default(cuid())
-  name              String
-  slug              String   @unique
-  description       String?  @db.Text
-  industry          String?  // Electronics, Fashion, etc.
-  storeType         StoreType @default(MULTI_PRODUCT)
-  
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?   @db.Text
+  industry    String? // Electronics, Fashion, etc.
+  storeType   StoreType @default(MULTI_PRODUCT)
+
   // Branding
-  logo              String?
-  banner            String?
-  template          StoreTemplate @default(MODERN)
-  primaryColor      String   @default("#6366f1")
-  secondaryColor    String   @default("#06b6d4")
-  fontFamily        String   @default("Inter")
-  
+  logo           String?
+  banner         String?
+  template       StoreTemplate @default(MODERN)
+  primaryColor   String        @default("#6366f1")
+  secondaryColor String        @default("#06b6d4")
+  fontFamily     String        @default("Inter")
+
   // Custom Content
-  heroTitle         String?
-  heroSubtitle      String?
-  aboutText         String?  @db.Text
-  contactEmail      String?
-  facebook          String?
-  twitter           String?
-  instagram         String?
-  
+  heroTitle    String?
+  heroSubtitle String?
+  aboutText    String? @db.Text
+  contactEmail String?
+  facebook     String?
+  twitter      String?
+  instagram    String?
+
   // StoreBuilder Sections (Drag & Drop)
-  sections          Json?    // Array of section configurations
-  
+  sections Json? // Array of section configurations
+
   // Status
-  status            StoreStatus @default(DRAFT)
-  
+  status StoreStatus @default(DRAFT)
+
   // Timestamps
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  vendorId          String
-  vendor            User     @relation("VendorStores", fields: [vendorId], references: [id])
-  storeProducts     StoreProduct[]
-  orders            Order[]
-  wishlist          Wishlist[]
-  invoiceTemplate   StoreInvoiceTemplate?
+  vendorId        String
+  vendor          User                  @relation("VendorStores", fields: [vendorId], references: [id])
+  storeProducts   StoreProduct[]
+  orders          Order[]
+  wishlist        Wishlist[]
+  invoiceTemplate StoreInvoiceTemplate?
 
   @@index([vendorId])
   @@index([slug])
@@ -301,28 +302,28 @@ enum StoreStatus {
 // ============================================
 
 model StoreProduct {
-  id                String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Vendor's pricing (markup from supplier price)
-  sellingPrice      Float    // Vendor's selling price in USD
-  
+  sellingPrice Float // Vendor's selling price in USD
+
   // SEO Settings
-  metaTitle         String?
-  metaDescription   String?  @db.Text
-  metaKeywords      String[] @default([])
-  
+  metaTitle       String?
+  metaDescription String?  @db.Text
+  metaKeywords    String[] @default([])
+
   // Status
-  status            String   @default("active") // active, inactive
-  
+  status String @default("active") // active, inactive
+
   // Timestamps
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  storeId           String
-  productId         String
-  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storeId   String
+  productId String
+  store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, productId])
   @@index([storeId])
@@ -335,49 +336,52 @@ model StoreProduct {
 // ============================================
 
 model Order {
-  id                String   @id @default(cuid())
-  orderNumber       String   @unique // Auto-generated: ORD-YYYYMMDD-XXXXX
-  
+  id          String @id @default(cuid())
+  orderNumber String @unique // Auto-generated: ORD-YYYYMMDD-XXXXX
+
   // Pricing
-  subtotal          Float
-  shipping          Float
-  tax               Float
-  total             Float
-  
+  subtotal Float
+  shipping Float
+  tax      Float
+  total    Float
+
   // Status
-  status            OrderStatus @default(PENDING)
-  paymentMethod        String   // credit_card, paypal, bank_transfer
-  paymentStatus     PaymentStatus @default(PENDING)
-  
+  status        OrderStatus   @default(PENDING)
+  paymentMethod String // credit_card, paypal, bank_transfer
+  paymentStatus PaymentStatus @default(PENDING)
+
   // Shipping Address
-  shippingFullName  String
-  shippingAddress   String
-  shippingCity      String
-  shippingState     String
-  shippingZipCode   String
-  shippingCountry   String
-  shippingPhone     String
-  
+  shippingFullName String
+  shippingAddress  String
+  shippingCity     String
+  shippingState    String
+  shippingZipCode  String
+  shippingCountry  String
+  shippingPhone    String
+
   // Contact Info
-  customerEmail     String
-  customerPhone     String?
-  
+  customerEmail String
+  customerPhone String?
+
+  // Currency Info (for display only)
+  customerCurrency String? // Customer's currency preference
+
   // Tracking
-  trackingNumber    String?
-  shippedAt         DateTime?
-  deliveredAt       DateTime?
-  
+  trackingNumber String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+
   // Timestamps
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  customerId        String
-  customer          User     @relation("CustomerOrders", fields: [customerId], references: [id])
-  storeId           String
-  store             Store    @relation(fields: [storeId], references: [id])
-  items             OrderItem[]
-  invoices          Invoice[]
+  customerId String
+  customer   User        @relation("CustomerOrders", fields: [customerId], references: [id])
+  storeId    String
+  store      Store       @relation(fields: [storeId], references: [id])
+  items      OrderItem[]
+  invoices   Invoice[]
 
   @@index([customerId])
   @@index([storeId])
@@ -402,24 +406,38 @@ enum PaymentStatus {
 }
 
 model OrderItem {
-  id                String   @id @default(cuid())
-  quantity          Int
-  price             Float    // Price at time of order
-  productName       String
-  productImage      String?
-  supplierId        String?  // For tracking supplier
-  
+  id           String  @id @default(cuid())
+  quantity     Int
+  price        Float // Price at time of order (USD)
+  productName  String
+  productImage String?
+  supplierId   String? // For tracking supplier
+
+  // Price Breakdown (USD)
+  storeProductId    String? // Track which StoreProduct was purchased
+  supplierPrice     Float? // Supplier's price snapshot (USD)
+  vendorPrice       Float? // Vendor's selling price snapshot (USD)
+  vendorProfit      Float? // Calculated profit (USD)
+  stripeFeeSupplier Float? // Supplier's Stripe fee portion (USD)
+  stripeFeeVendor   Float? // Vendor's Stripe fee portion (USD)
+  platformFee       Float? // Platform fee (USD, vendor profit only)
+
+  // Currency Info (for display only)
+  customerCurrency String? // Customer's currency (e.g., "EUR", "GBP")
+  exchangeRate     Float? // Exchange rate used at order time
+
   // Timestamps
-  createdAt         DateTime @default(now())
+  createdAt DateTime @default(now())
 
   // Relations
-  orderId           String
-  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId         String?
-  product           Product? @relation(fields: [productId], references: [id])
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
 
   @@index([orderId])
   @@index([productId])
+  @@index([supplierId])
   @@map("order_items")
 }
 
@@ -428,28 +446,28 @@ model OrderItem {
 // ============================================
 
 model Invoice {
-  id                String   @id @default(cuid())
-  invoiceNumber     String   @unique // Auto-generated: INV-YYYYMMDD-XXXXX
-  amount            Float
-  status            InvoiceStatus @default(PENDING)
-  dueDate           DateTime?
-  paidAt            DateTime?
-  
+  id            String        @id @default(cuid())
+  invoiceNumber String        @unique // Auto-generated: INV-YYYYMMDD-XXXXX
+  amount        Float
+  status        InvoiceStatus @default(PENDING)
+  dueDate       DateTime?
+  paidAt        DateTime?
+
   // Email Tracking
-  emailStatus       String?  // sent, not_sent
-  sentDate          DateTime?
-  
+  emailStatus String? // sent, not_sent
+  sentDate    DateTime?
+
   // Timestamps
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  vendorId          String
-  vendor            User     @relation(fields: [vendorId], references: [id])
-  orderId           String?
-  order             Order?   @relation(fields: [orderId], references: [id])
-  templateId        String?
-  template          InvoiceTemplate? @relation(fields: [templateId], references: [id])
+  vendorId   String
+  vendor     User             @relation(fields: [vendorId], references: [id])
+  orderId    String?
+  order      Order?           @relation(fields: [orderId], references: [id])
+  templateId String?
+  template   InvoiceTemplate? @relation(fields: [templateId], references: [id])
 
   @@index([vendorId])
   @@index([status])
@@ -469,24 +487,33 @@ enum InvoiceStatus {
 // ============================================
 
 model Payout {
-  id                String   @id @default(cuid())
-  amount            Float
-  status            PayoutStatus @default(PENDING)
-  method            String   // stripe, bank_transfer, paypal
-  accountDetails    Json?    // Encrypted bank/payment details
-  processedAt       DateTime?
-  
+  id             String       @id @default(cuid())
+  amount         Float // Legacy field (use netAmount)
+  status         PayoutStatus @default(PENDING)
+  method         String // stripe, bank_transfer, paypal
+  accountDetails Json? // Encrypted bank/payment details
+  processedAt    DateTime?
+
+  // Payout Details (USD)
+  orderIds          String[] @default([]) // Array of order IDs
+  payoutType        String // 'supplier' or 'vendor'
+  baseAmount        Float // Before fees (USD)
+  stripeFee         Float? // Stripe fee deducted (USD)
+  platformFee       Float? // Platform fee (USD, vendor only)
+  netAmount         Float // Final payout amount (USD)
+  recipientCurrency String? // Recipient's base currency (for display only)
+
   // Display Fields (denormalized for performance)
-  recipientName    String?  // Denormalized from User
-  recipientType    String?  // supplier, vendor
-  
+  recipientName String? // Denormalized from User
+  recipientType String? // supplier, vendor
+
   // Timestamps
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  userId            String
-  user              User     @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -501,20 +528,34 @@ enum PayoutStatus {
 }
 
 // ============================================
+// PLATFORM CONFIG
+// ============================================
+
+model PlatformConfig {
+  id                    String   @id @default(cuid())
+  platformFeePercentage Float    @default(2.5) // e.g., 2.5%
+  stripeFeePercentage   Float    @default(2.9) // Stripe fee percentage (2.9%)
+  updatedAt             DateTime @updatedAt
+  createdAt             DateTime @default(now())
+
+  @@map("platform_config")
+}
+
+// ============================================
 // WISHLIST
 // ============================================
 
 model Wishlist {
-  id                String   @id @default(cuid())
-  createdAt         DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   // Relations
-  userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productId         String
-  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  storeId           String?
-  store             Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storeId   String?
+  store     Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
   @@index([userId])
@@ -528,21 +569,21 @@ model Wishlist {
 // ============================================
 
 model Report {
-  id                String   @id @default(cuid())
-  reportNumber      String   @unique // Auto-generated: RPT-YYYYMMDD-XXXXX
-  type              ReportType
-  dateFrom          DateTime
-  dateTo            DateTime
-  format            ReportFormat
-  status            ReportStatus @default(GENERATING)
-  fileUrl           String?
-  fileSize          String?  // e.g., "2.4 MB"
-  generatedAt       DateTime?
-  createdAt         DateTime @default(now())
+  id           String       @id @default(cuid())
+  reportNumber String       @unique // Auto-generated: RPT-YYYYMMDD-XXXXX
+  type         ReportType
+  dateFrom     DateTime
+  dateTo       DateTime
+  format       ReportFormat
+  status       ReportStatus @default(GENERATING)
+  fileUrl      String?
+  fileSize     String? // e.g., "2.4 MB"
+  generatedAt  DateTime?
+  createdAt    DateTime     @default(now())
 
   // Relations
-  userId            String?
-  user              User?    @relation(fields: [userId], references: [id])
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -576,38 +617,37 @@ enum ReportStatus {
 // ============================================
 
 model InvoiceTemplate {
-  id                String   @id @default(cuid())
-  name              String
-  description       String?  @db.Text
-  template          String   @db.Text // HTML/JSON template
-  layout            String?  // gradient, classic, minimal, corporate
-  accentColor       String?  // CSS gradient class (e.g., "from-purple-600 to-cyan-600")
-  isDefault         Boolean  @default(false)
-  isActive          Boolean  @default(true)
-  usedBy            Int      @default(0) // Count of stores using this template
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  template    String   @db.Text // HTML/JSON template
+  layout      String? // gradient, classic, minimal, corporate
+  accentColor String? // CSS gradient class (e.g., "from-purple-600 to-cyan-600")
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  usedBy      Int      @default(0) // Count of stores using this template
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations
-  invoices         Invoice[]
-  storeTemplates   StoreInvoiceTemplate[]
+  invoices       Invoice[]
+  storeTemplates StoreInvoiceTemplate[]
 
   @@map("invoice_templates")
 }
 
 // Store-Template Relation (which template each store uses)
 model StoreInvoiceTemplate {
-  id                String   @id @default(cuid())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  storeId           String   @unique
-  templateId        String
-  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  template          InvoiceTemplate @relation(fields: [templateId], references: [id])
+  storeId    String          @unique
+  templateId String
+  store      Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  template   InvoiceTemplate @relation(fields: [templateId], references: [id])
 
   @@index([storeId])
   @@index([templateId])
   @@map("store_invoice_templates")
 }
-

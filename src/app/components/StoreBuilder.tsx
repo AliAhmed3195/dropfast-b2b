@@ -2261,6 +2261,414 @@ export function StoreBuilder({ storeData, onBack }: StoreBuilderProps) {
                           )}
                         </div>
                       )}
+
+                      {setting.type === 'slides-array' && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm text-muted-foreground">
+                              Manage carousel slides
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const currentSlides = selectedSection.props.slides || [];
+                                const newSlide = {
+                                  image: '',
+                                  heading: 'New Slide',
+                                  subheading: 'Slide description',
+                                  ctaText: 'Shop Now',
+                                  ctaLink: '/products',
+                                };
+                                handleUpdateSection(selectedSection.id, {
+                                  slides: [...currentSlides, newSlide],
+                                });
+                              }}
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              Add Slide
+                            </Button>
+                          </div>
+                          
+                          {(selectedSection.props.slides || []).map((slide: any, index: number) => (
+                            <Card key={index} className="p-4 space-y-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-semibold">Slide {index + 1}</span>
+                                <div className="flex items-center gap-2">
+                                  {index > 0 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        const currentSlides = selectedSection.props.slides || [];
+                                        const updated = [...currentSlides];
+                                        const temp = updated[index];
+                                        updated[index] = updated[index - 1];
+                                        updated[index - 1] = temp;
+                                        handleUpdateSection(selectedSection.id, {
+                                          slides: updated,
+                                        });
+                                      }}
+                                    >
+                                      <ChevronUp className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  {index < (selectedSection.props.slides || []).length - 1 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        const currentSlides = selectedSection.props.slides || [];
+                                        const updated = [...currentSlides];
+                                        const temp = updated[index];
+                                        updated[index] = updated[index + 1];
+                                        updated[index + 1] = temp;
+                                        handleUpdateSection(selectedSection.id, {
+                                          slides: updated,
+                                        });
+                                      }}
+                                    >
+                                      <ChevronDown className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      const currentSlides = selectedSection.props.slides || [];
+                                      handleUpdateSection(selectedSection.id, {
+                                        slides: currentSlides.filter((_: any, i: number) => i !== index),
+                                      });
+                                    }}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs mb-1 block">Slide Image</Label>
+                                <div className="flex items-center gap-2">
+                                  {slide.image && (
+                                    <img src={slide.image} alt={slide.heading} className="w-20 h-20 object-cover rounded" />
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    ref={(el) => {
+                                      if (el) {
+                                        const fileInputs = (window as any).__slideFileInputs || {};
+                                        fileInputs[`${selectedSection.id}-${index}`] = el;
+                                        (window as any).__slideFileInputs = fileInputs;
+                                      }
+                                    }}
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (event) => {
+                                          const base64 = event.target?.result as string;
+                                          const currentSlides = selectedSection.props.slides || [];
+                                          const updated = [...currentSlides];
+                                          updated[index] = { ...updated[index], image: base64 };
+                                          handleUpdateSection(selectedSection.id, {
+                                            slides: updated,
+                                          });
+                                        };
+                                        reader.readAsDataURL(file);
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const fileInputs = (window as any).__slideFileInputs || {};
+                                      const input = fileInputs[`${selectedSection.id}-${index}`];
+                                      input?.click();
+                                    }}
+                                  >
+                                    <ImageIcon className="w-4 h-4 mr-2" />
+                                    {slide.image ? 'Change Image' : 'Upload Image'}
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs mb-1 block">Heading</Label>
+                                <Input
+                                  value={slide.heading || ''}
+                                  onChange={(e) => {
+                                    const currentSlides = selectedSection.props.slides || [];
+                                    const updated = [...currentSlides];
+                                    updated[index] = { ...updated[index], heading: e.target.value };
+                                    handleUpdateSection(selectedSection.id, {
+                                      slides: updated,
+                                    });
+                                  }}
+                                  placeholder="Slide heading..."
+                                  className="w-full"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs mb-1 block">Subheading</Label>
+                                <Input
+                                  value={slide.subheading || ''}
+                                  onChange={(e) => {
+                                    const currentSlides = selectedSection.props.slides || [];
+                                    const updated = [...currentSlides];
+                                    updated[index] = { ...updated[index], subheading: e.target.value };
+                                    handleUpdateSection(selectedSection.id, {
+                                      slides: updated,
+                                    });
+                                  }}
+                                  placeholder="Slide subheading..."
+                                  className="w-full"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs mb-1 block">Button Text</Label>
+                                <Input
+                                  value={slide.ctaText || ''}
+                                  onChange={(e) => {
+                                    const currentSlides = selectedSection.props.slides || [];
+                                    const updated = [...currentSlides];
+                                    updated[index] = { ...updated[index], ctaText: e.target.value };
+                                    handleUpdateSection(selectedSection.id, {
+                                      slides: updated,
+                                    });
+                                  }}
+                                  placeholder="e.g., Shop Now"
+                                  className="w-full"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs mb-1 block">Button Link</Label>
+                                <Input
+                                  value={slide.ctaLink || ''}
+                                  onChange={(e) => {
+                                    const currentSlides = selectedSection.props.slides || [];
+                                    const updated = [...currentSlides];
+                                    updated[index] = { ...updated[index], ctaLink: e.target.value };
+                                    handleUpdateSection(selectedSection.id, {
+                                      slides: updated,
+                                    });
+                                  }}
+                                  placeholder="/products"
+                                  className="w-full"
+                                />
+                              </div>
+                            </Card>
+                          ))}
+                          
+                          {(selectedSection.props.slides || []).length === 0 && (
+                            <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed rounded-lg">
+                              No slides yet. Click "Add Slide" to add one.
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {setting.type === 'categories-array' && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm text-muted-foreground">
+                              Manage categories
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const currentCategories = selectedSection.props.categories || [];
+                                const newCategory = {
+                                  name: 'New Category',
+                                  image: '',
+                                  productCount: 0,
+                                  link: '/category/new-category',
+                                };
+                                handleUpdateSection(selectedSection.id, {
+                                  categories: [...currentCategories, newCategory],
+                                });
+                              }}
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              Add Category
+                            </Button>
+                          </div>
+                          
+                          {(selectedSection.props.categories || []).map((category: any, index: number) => (
+                            <Card key={index} className="p-4 space-y-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-semibold">Category {index + 1}</span>
+                                <div className="flex items-center gap-2">
+                                  {index > 0 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        const currentCategories = selectedSection.props.categories || [];
+                                        const updated = [...currentCategories];
+                                        const temp = updated[index];
+                                        updated[index] = updated[index - 1];
+                                        updated[index - 1] = temp;
+                                        handleUpdateSection(selectedSection.id, {
+                                          categories: updated,
+                                        });
+                                      }}
+                                    >
+                                      <ChevronUp className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  {index < (selectedSection.props.categories || []).length - 1 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        const currentCategories = selectedSection.props.categories || [];
+                                        const updated = [...currentCategories];
+                                        const temp = updated[index];
+                                        updated[index] = updated[index + 1];
+                                        updated[index + 1] = temp;
+                                        handleUpdateSection(selectedSection.id, {
+                                          categories: updated,
+                                        });
+                                      }}
+                                    >
+                                      <ChevronDown className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      const currentCategories = selectedSection.props.categories || [];
+                                      handleUpdateSection(selectedSection.id, {
+                                        categories: currentCategories.filter((_: any, i: number) => i !== index),
+                                      });
+                                    }}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs mb-1 block">Category Image</Label>
+                                <div className="flex items-center gap-2">
+                                  {category.image && (
+                                    <img src={category.image} alt={category.name} className="w-20 h-20 object-cover rounded" />
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    ref={(el) => {
+                                      if (el) {
+                                        const fileInputs = (window as any).__categoryFileInputs || {};
+                                        fileInputs[`${selectedSection.id}-${index}`] = el;
+                                        (window as any).__categoryFileInputs = fileInputs;
+                                      }
+                                    }}
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (event) => {
+                                          const base64 = event.target?.result as string;
+                                          const currentCategories = selectedSection.props.categories || [];
+                                          const updated = [...currentCategories];
+                                          updated[index] = { ...updated[index], image: base64 };
+                                          handleUpdateSection(selectedSection.id, {
+                                            categories: updated,
+                                          });
+                                        };
+                                        reader.readAsDataURL(file);
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const fileInputs = (window as any).__categoryFileInputs || {};
+                                      const input = fileInputs[`${selectedSection.id}-${index}`];
+                                      input?.click();
+                                    }}
+                                  >
+                                    <ImageIcon className="w-4 h-4 mr-2" />
+                                    {category.image ? 'Change Image' : 'Upload Image'}
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs mb-1 block">Category Name</Label>
+                                <Input
+                                  value={category.name || ''}
+                                  onChange={(e) => {
+                                    const currentCategories = selectedSection.props.categories || [];
+                                    const updated = [...currentCategories];
+                                    updated[index] = { ...updated[index], name: e.target.value };
+                                    handleUpdateSection(selectedSection.id, {
+                                      categories: updated,
+                                    });
+                                  }}
+                                  placeholder="Category name..."
+                                  className="w-full"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs mb-1 block">Product Count</Label>
+                                <Input
+                                  type="number"
+                                  value={category.productCount !== undefined ? category.productCount : ''}
+                                  onChange={(e) => {
+                                    const currentCategories = selectedSection.props.categories || [];
+                                    const updated = [...currentCategories];
+                                    updated[index] = { ...updated[index], productCount: parseInt(e.target.value) || 0 };
+                                    handleUpdateSection(selectedSection.id, {
+                                      categories: updated,
+                                    });
+                                  }}
+                                  placeholder="0"
+                                  className="w-full"
+                                  min="0"
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs mb-1 block">Category Link</Label>
+                                <Input
+                                  value={category.link || ''}
+                                  onChange={(e) => {
+                                    const currentCategories = selectedSection.props.categories || [];
+                                    const updated = [...currentCategories];
+                                    updated[index] = { ...updated[index], link: e.target.value };
+                                    handleUpdateSection(selectedSection.id, {
+                                      categories: updated,
+                                    });
+                                  }}
+                                  placeholder="/category/category-name"
+                                  className="w-full"
+                                />
+                              </div>
+                            </Card>
+                          ))}
+                          
+                          {(selectedSection.props.categories || []).length === 0 && (
+                            <div className="text-center py-8 text-sm text-muted-foreground border-2 border-dashed rounded-lg">
+                              No categories yet. Click "Add Category" to add one.
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

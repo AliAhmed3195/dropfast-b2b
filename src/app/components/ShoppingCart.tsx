@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import {
   ShoppingCart,
@@ -11,16 +11,56 @@ import {
   CreditCard,
   Package,
 } from 'lucide-react';
-import { useApp } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
+import { EmptyState } from './ui/EmptyState';
 
 export function ShoppingCartComponent() {
-  const { cart, updateCartItem, removeFromCart, clearCart, getCartTotal } = useApp();
+  const { user } = useAuth();
   const router = useRouter();
+  
+  // Get cart from localStorage
+  const [cart, setCart] = useState<any[]>(() => {
+    if (typeof window !== 'undefined' && user?.id) {
+      const saved = localStorage.getItem(`cart_${user.id}`);
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+
+  const getCartTotal = () => {
+    return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  };
+
+  const updateCartItem = (productId: string, quantity: number) => {
+    const updated = cart.map((item: any) =>
+      item.productId === productId ? { ...item, quantity } : item
+    ).filter((item: any) => item.quantity > 0);
+    setCart(updated);
+    if (user?.id && typeof window !== 'undefined') {
+      localStorage.setItem(`cart_${user.id}`, JSON.stringify(updated));
+    }
+  };
+
+  const removeFromCart = (productId: string) => {
+    const updated = cart.filter((item: any) => item.productId !== productId);
+    setCart(updated);
+    if (user?.id && typeof window !== 'undefined') {
+      localStorage.setItem(`cart_${user.id}`, JSON.stringify(updated));
+    }
+  };
+
+  const clearCart = () => {
+    setCart([]);
+    if (user?.id && typeof window !== 'undefined') {
+      localStorage.setItem(`cart_${user.id}`, JSON.stringify([]));
+    }
+    showToast.success('Cart cleared');
+  };
 
   const subtotal = getCartTotal();
   const shipping = cart.length > 0 ? 10 : 0;
@@ -35,12 +75,12 @@ export function ShoppingCartComponent() {
 
   const handleRemove = (productId: string) => {
     removeFromCart(productId);
-    toast.success('Item removed from cart');
+    showToast.success('Item removed from cart');
   };
 
   const handleCheckout = () => {
     if (cart.length === 0) {
-      toast.error('Your cart is empty');
+      showToast.error('Your cart is empty');
       return;
     }
     router.push('/dashboard/customer/checkout');
@@ -53,23 +93,15 @@ export function ShoppingCartComponent() {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Shopping
         </Button>
-        <Card className="p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-500/10 to-cyan-500/10 flex items-center justify-center">
-              <ShoppingCart className="w-10 h-10 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-bold mb-2">Your cart is empty</h3>
-            <p className="text-muted-foreground mb-6">
-              Add some products to get started
-            </p>
-            <Button
-              onClick={() => router.push('/dashboard/customer/browse')}
-              className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white"
-            >
-              Browse Products
-            </Button>
-          </div>
-        </Card>
+        <EmptyState
+          icon={ShoppingCart}
+          title="Your cart is empty"
+          description="Add some products to get started"
+          action={{
+            label: 'Browse Products',
+            onClick: () => router.push('/dashboard/customer/browse'),
+          }}
+        />
       </div>
     );
   }
@@ -94,7 +126,7 @@ export function ShoppingCartComponent() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Cart Items */}
         <div className="lg:col-span-2 space-y-4">
-          {cart.map((item, index) => (
+          {cart.map((item: any, index: number) => (
             <motion.div
               key={item.productId}
               initial={{ opacity: 0, y: 20 }}

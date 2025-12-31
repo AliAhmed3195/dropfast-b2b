@@ -14,9 +14,13 @@ export default function DashboardPage() {
       return
     }
 
-    // Redirect to role-specific overview
+    // Redirect to role-specific dashboard
     if (user?.role) {
-      router.push(`/dashboard/${user.role}/overview`)
+      if (user.role === 'customer') {
+        router.push('/dashboard/customer/browse')
+      } else {
+        router.push(`/dashboard/${user.role}/overview`)
+      }
     }
   }, [isAuthenticated, user, router])
 

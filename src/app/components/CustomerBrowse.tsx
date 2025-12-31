@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
   Store,
@@ -12,10 +12,10 @@ import {
   ExternalLink,
   Plus,
   Filter,
+  Loader2,
 } from 'lucide-react';
-import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigation } from '../contexts/NavigationContext';
+import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -27,56 +27,122 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 
 export function CustomerBrowse() {
-  const { stores, products, addToCart, getProductById } = useApp();
   const { user } = useAuth();
-  const { setView, setViewParams } = useNavigation();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [stores, setStores] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
   
   // Wishlist state (in real app, this would be in context/database)
   const [wishlistIds, setWishlistIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem(`wishlist_${user?.id}`);
-    return saved ? JSON.parse(saved) : [];
+    if (typeof window !== 'undefined' && user?.id) {
+      const saved = localStorage.getItem(`wishlist_${user.id}`);
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
   });
 
-  const activeStores = stores.filter(s => s.status === 'active');
+  // Fetch stores and products
+  useEffect(() => {
+    if (fetchingRef.current) return;
 
-  const allProducts = products.filter(p => p.status === 'active');
-  const categories = ['all', ...Array.from(new Set(allProducts.map(p => p.category)))];
+    fetchingRef.current = true;
+    setLoading(true);
 
-  const filteredProducts = allProducts.filter(p => {
-    const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+    const fetchData = async () => {
+      try {
+        const [storesRes, productsRes] = await Promise.all([
+          fetch('/api/customer/stores'),
+          fetch('/api/customer/products'),
+        ]);
 
-  const handleAddToCart = (productId: string) => {
-    const product = getProductById(productId);
-    if (!product) return;
+        const storesData = await storesRes.json();
+        const productsData = await productsRes.json();
 
-    // Find store that has this product
-    const store = stores.find(s => s.products.includes(productId));
-    if (!store) {
-      toast.error('Product not available in any store');
+        if (storesRes.ok) {
+          setStores(storesData.stores || []);
+        } else {
+          showToast.error(storesData.error || 'Failed to fetch stores');
+        }
+
+        if (productsRes.ok) {
+          setProducts(productsData.products || []);
+        } else {
+          showToast.error(productsData.error || 'Failed to fetch products');
+        }
+      } catch (error) {
+        console.error('Fetch error:', error);
+        showToast.error('Failed to fetch data');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const activeStores = stores.filter((s: any) => s.status === 'active');
+  const allProducts = products.filter((p: any) => p.status === 'active');
+  const categories = useMemo(() => {
+    const cats = Array.from(new Set(allProducts.map((p: any) => p.category))).filter(Boolean);
+    return ['all', ...cats];
+  }, [allProducts]);
+
+  const filteredProducts = useMemo(() => {
+    return allProducts.filter((p: any) => {
+      const matchesSearch =
+        p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [allProducts, searchQuery, selectedCategory]);
+
+  const handleAddToCart = async (productId: string) => {
+    const product = products.find((p: any) => p.id === productId);
+    if (!product) {
+      showToast.error('Product not found');
       return;
     }
 
-    addToCart({
-      productId: product.id,
-      productName: product.name,
-      productImage: product.images[0] || '',
-      quantity: 1,
-      price: product.price,
-      storeId: store.id,
-      storeName: store.name,
-    });
+    // Find store that has this product (simplified - in real app, check storeProduct relationship)
+    const store = activeStores[0]; // For now, use first store
+    if (!store) {
+      showToast.error('No store available');
+      return;
+    }
 
-    toast.success('Added to cart!');
+    // Add to cart via API or localStorage
+    try {
+      const cart = JSON.parse(localStorage.getItem(`cart_${user?.id}`) || '[]');
+      const existingItem = cart.find((item: any) => item.productId === productId);
+      
+      if (existingItem) {
+        existingItem.quantity += 1;
+      } else {
+        cart.push({
+          productId: product.id,
+          productName: product.name,
+          productImage: product.images?.[0] || '',
+          quantity: 1,
+          price: product.price,
+          storeId: store.id,
+          storeName: store.name,
+        });
+      }
+      
+      localStorage.setItem(`cart_${user?.id}`, JSON.stringify(cart));
+      showToast.success('Added to cart!');
+    } catch (error) {
+      showToast.error('Failed to add to cart');
+    }
   };
   
   const toggleWishlist = (productId: string) => {
@@ -85,14 +151,16 @@ export function CustomerBrowse() {
     
     if (isInWishlist) {
       updated = wishlistIds.filter(id => id !== productId);
-      toast.success('Removed from wishlist');
+      showToast.success('Removed from wishlist');
     } else {
       updated = [...wishlistIds, productId];
-      toast.success('Added to wishlist');
+      showToast.success('Added to wishlist');
     }
     
     setWishlistIds(updated);
-    localStorage.setItem(`wishlist_${user?.id}`, JSON.stringify(updated));
+    if (user?.id && typeof window !== 'undefined') {
+      localStorage.setItem(`wishlist_${user.id}`, JSON.stringify(updated));
+    }
   };
 
   return (
@@ -124,14 +192,19 @@ export function CustomerBrowse() {
                   <div className="flex-1">
                     <h4 className="font-bold">{store.name}</h4>
                     <p className="text-sm text-muted-foreground">
-                      {store.products.length} products
+                      {store.productCount || 0} products
                     </p>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
                   {store.description}
                 </p>
-                <Button variant="outline" size="sm" className="w-full">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full"
+                  onClick={() => router.push(`/store/${store.slug}`)}
+                >
                   <ExternalLink className="w-4 h-4 mr-2" />
                   Visit Store
                 </Button>
@@ -172,11 +245,27 @@ export function CustomerBrowse() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-semibold">
-            {filteredProducts.length} Products Available
+            {loading ? 'Loading...' : `${filteredProducts.length} Products Available`}
           </h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredProducts.map((product, index) => (
+        
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <Card className="p-12 text-center">
+            <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-xl font-bold mb-2">
+              {searchQuery || selectedCategory !== 'all' ? 'No products found' : 'No products available'}
+            </h3>
+            <p className="text-muted-foreground">
+              {searchQuery || selectedCategory !== 'all' ? 'Try adjusting your search or filters' : 'Check back later for new products'}
+            </p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredProducts.map((product: any, index: number) => (
             <motion.div
               key={product.id}
               initial={{ opacity: 0, y: 20 }}
@@ -257,17 +346,8 @@ export function CustomerBrowse() {
                 </div>
               </Card>
             </motion.div>
-          ))}
-        </div>
-
-        {filteredProducts.length === 0 && (
-          <Card className="p-12 text-center">
-            <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No products found</h3>
-            <p className="text-muted-foreground">
-              Try adjusting your search or filters
-            </p>
-          </Card>
+            ))}
+          </div>
         )}
       </div>
     </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { StoreLandingPage } from './StoreLandingPage';
 import { ProductDetailPage } from './ProductDetailPage';
 import { StoreCart } from './StoreCart';
@@ -11,6 +12,7 @@ import { Loader2 } from 'lucide-react';
 interface PublicStoreProps {
   storeData: any;
   onClose: () => void;
+  initialView?: PublicStoreView;
 }
 
 type PublicStoreView = 
@@ -39,6 +41,7 @@ interface Product {
 
 interface CartItem {
   productId: string;
+  storeProductId?: string; // StoreProduct ID for order creation
   productName: string;
   productImage: string;
   quantity: number;
@@ -47,8 +50,11 @@ interface CartItem {
   storeName: string;
 }
 
-export function PublicStore({ storeData, onClose }: PublicStoreProps) {
-  const [currentView, setCurrentView] = useState<PublicStoreView>({ type: 'landing' });
+export function PublicStore({ storeData, onClose, initialView }: PublicStoreProps) {
+  const router = useRouter();
+  const params = useParams();
+  const slug = params.slug as string || storeData.slug;
+  const [currentView, setCurrentView] = useState<PublicStoreView>(initialView || { type: 'landing' });
   const [storeCart, setStoreCart] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,6 +120,7 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
         ...storeCart,
         {
           productId: product.id,
+          storeProductId: (product as any).storeProductId, // From API response
           productName: product.name,
           productImage: product.image || product.images?.[0] || '',
           quantity,
@@ -139,8 +146,8 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
     setStoreCart(storeCart.filter((item) => item.productId !== productId));
   };
 
-  // Handle place order
-  const handlePlaceOrder = async (formData: any) => {
+  // Handle place order with Stripe payment
+  const handlePlaceOrder = async (formData: any, paymentIntentId?: string) => {
     if (!store?.id) {
       showToast.error('Store not found');
       return;
@@ -152,6 +159,9 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
     const total = subtotal + shipping + tax;
 
     try {
+      // Detect customer currency (simplified - use USD for now, can be enhanced with IP detection)
+      const customerCurrency = 'USD'; // TODO: Detect from IP or browser locale
+
       const response = await fetch('/api/public/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,18 +178,21 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
           shippingCountry: formData.country,
           shippingPhone: formData.phone,
           paymentMethod: formData.paymentMethod || 'credit_card',
+          customerCurrency,
           items: storeCart.map((item) => ({
             productId: item.productId,
+            storeProductId: item.storeProductId, // Required for order creation
             productName: item.productName,
             productImage: item.productImage,
             quantity: item.quantity,
             price: item.price,
-            supplierId: null, // Will be fetched from product if needed
+            currency: customerCurrency,
           })),
           subtotal,
           shipping,
           tax,
           total,
+          paymentIntentId, // Include payment intent ID if Stripe payment was processed
         }),
       });
 
@@ -190,7 +203,7 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
 
       const data = await response.json();
       setStoreCart([]);
-      setCurrentView({ type: 'landing' });
+      router.push(`/store/${slug}`);
       showToast.success(`Order placed successfully! Order #${data.order.orderNumber}`);
     } catch (error: any) {
       console.error('Place order error:', error);
@@ -212,7 +225,7 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
               sections: store?.sections || storeData.sections || storeData.template?.sections || [],
             }}
             products={storeProducts}
-            onProductClick={(productId) => setCurrentView({ type: 'product', productId })}
+            onProductClick={(productId) => router.push(`/store/${slug}/product/${productId}`)}
           />
         );
 
@@ -232,7 +245,7 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
             storeTheme={storeTheme}
             relatedProducts={relatedProducts}
             onAddToCart={handleAddToCart}
-            onBack={() => setCurrentView({ type: 'landing' })}
+            onBack={() => router.push(`/store/${slug}`)}
           />
         );
 
@@ -243,8 +256,8 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
             storeTheme={storeTheme}
             onUpdateQuantity={handleUpdateCartQuantity}
             onRemoveItem={handleRemoveFromCart}
-            onContinueShopping={() => setCurrentView({ type: 'landing' })}
-            onProceedToCheckout={() => setCurrentView({ type: 'checkout' })}
+            onContinueShopping={() => router.push(`/store/${slug}`)}
+            onProceedToCheckout={() => router.push(`/store/${slug}/checkout`)}
           />
         );
 
@@ -253,7 +266,7 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
           <StoreCheckout
             cartItems={storeCart}
             storeTheme={storeTheme}
-            onBack={() => setCurrentView({ type: 'cart' })}
+            onBack={() => router.push(`/store/${slug}/cart`)}
             onPlaceOrder={handlePlaceOrder}
           />
         );
@@ -290,13 +303,13 @@ export function PublicStore({ storeData, onClose }: PublicStoreProps) {
             {/* Navigation */}
             <div className="flex items-center gap-4">
               <button
-                onClick={() => setCurrentView({ type: 'landing' })}
+                onClick={() => router.push(`/store/${slug}`)}
                 className="text-sm font-medium hover:opacity-70 transition-opacity"
               >
                 Home
               </button>
               <button
-                onClick={() => setCurrentView({ type: 'cart' })}
+                onClick={() => router.push(`/store/${slug}/cart`)}
                 className="relative text-sm font-medium hover:opacity-70 transition-opacity"
               >
                 Cart

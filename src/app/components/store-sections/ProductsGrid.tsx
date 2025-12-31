@@ -9,9 +9,17 @@ import { Badge } from '../ui/badge';
 
 interface ProductsGridProps {
   heading?: string;
+  subheading?: string;
   columns?: number;
   rows?: number;
+  productCount?: number;
   showFilters?: boolean;
+  showRating?: boolean;
+  showQuickActions?: boolean;
+  showStockBadge?: boolean;
+  backgroundColor?: string;
+  textAlignment?: 'left' | 'center' | 'right';
+  layout?: 'grid' | 'carousel';
   products?: any[];
   onProductClick?: (productId: string) => void;
   theme?: {
@@ -98,9 +106,17 @@ const mockProducts = [
 
 export function ProductsGrid({
   heading = 'Our Products',
+  subheading = '',
   columns = 4,
   rows = 2,
+  productCount,
   showFilters = true,
+  showRating = true,
+  showQuickActions = true,
+  showStockBadge = true,
+  backgroundColor = '',
+  textAlignment = 'center',
+  layout = 'grid',
   products,
   onProductClick,
   theme,
@@ -109,25 +125,73 @@ export function ProductsGrid({
   
   // Use provided products or empty array (don't use mockProducts)
   const productsToDisplay = products && products.length > 0 ? products : [];
-  const displayProducts = productsToDisplay.slice(0, columns * rows);
+  
+  // Calculate display products count
+  // Priority: productCount > (columns * rows) > default
+  const maxProducts = productCount || (columns && rows ? columns * rows : 8);
+  const displayProducts = productsToDisplay.slice(0, maxProducts);
   
   // Use theme colors or defaults
   const primaryColor = theme?.primaryColor || '#6366f1';
   const secondaryColor = theme?.secondaryColor || '#06b6d4';
 
+  // Get text alignment class
+  const getTextAlignmentClass = () => {
+    switch (textAlignment) {
+      case 'left':
+        return 'text-left';
+      case 'right':
+        return 'text-right';
+      default:
+        return 'text-center';
+    }
+  };
+
+  // Get grid columns class based on columns prop
+  const getGridCols = () => {
+    const cols = Math.min(Math.max(columns || 4, 1), 6);
+    return {
+      1: 'grid-cols-1',
+      2: 'grid-cols-1 sm:grid-cols-2',
+      3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+      4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+      5: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5',
+      6: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6',
+    }[cols] || 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+  };
+
   return (
-    <section className="py-16 bg-slate-50 dark:bg-slate-900">
+    <section 
+      className="py-16"
+      style={{ 
+        backgroundColor: backgroundColor || undefined,
+        ...(backgroundColor ? {} : { background: 'inherit' })
+      }}
+    >
       <div className="container mx-auto px-4">
         {/* Heading */}
-        <div className="text-center mb-12">
-          <motion.h2
-            className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-600 to-cyan-600 bg-clip-text text-transparent"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            {heading}
-          </motion.h2>
+        <div className={`mb-12 ${getTextAlignmentClass()}`}>
+          {heading && (
+            <motion.h2
+              className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-600 to-cyan-600 bg-clip-text text-transparent"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              {heading}
+            </motion.h2>
+          )}
+          {subheading && (
+            <motion.p
+              className="text-lg text-muted-foreground"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+            >
+              {subheading}
+            </motion.p>
+          )}
         </div>
 
         {/* Filters */}
@@ -152,7 +216,7 @@ export function ProductsGrid({
 
         {/* Products Grid */}
         <div
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+          className={`grid ${getGridCols()} gap-6`}
         >
           {displayProducts.length === 0 ? (
             <div className="col-span-full text-center py-16">
@@ -180,33 +244,35 @@ export function ProductsGrid({
                     />
 
                   {/* Quick Actions */}
-                  <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="rounded-full w-10 h-10 p-0 shadow-lg"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Handle wishlist
-                      }}
-                    >
-                      <Heart className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="rounded-full w-10 h-10 p-0 shadow-lg"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onProductClick?.(String(product.id));
-                      }}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  {showQuickActions && (
+                    <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-full w-10 h-10 p-0 shadow-lg"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Handle wishlist
+                        }}
+                      >
+                        <Heart className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-full w-10 h-10 p-0 shadow-lg"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onProductClick?.(String(product.id));
+                        }}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
 
                   {/* Stock Badge */}
-                  {(product.stock === 0 || product.status === 'out_of_stock' || (!product.stock && product.status !== 'active')) && (
+                  {showStockBadge && (!product.inStock || product.stock === 0 || (product.stock || 0) <= 0 || product.status !== 'active') && (
                     <Badge className="absolute top-3 left-3 bg-red-500 text-white">
                       Out of Stock
                     </Badge>
@@ -223,7 +289,7 @@ export function ProductsGrid({
                   </h3>
 
                   {/* Rating */}
-                  {(product.rating || product.reviews) && (
+                  {showRating && (product.rating || product.reviews) && (
                     <div className="flex items-center gap-2 mb-3">
                       <div className="flex items-center gap-1">
                         {[...Array(5)].map((_, i) => (
@@ -237,7 +303,7 @@ export function ProductsGrid({
                           />
                         ))}
                       </div>
-                      {product.reviews && (
+                      {product.reviews > 0 && (
                         <span className="text-sm text-muted-foreground">
                           ({product.reviews})
                         </span>
@@ -260,14 +326,14 @@ export function ProductsGrid({
                       style={{ 
                         background: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` 
                       }}
-                      disabled={product.stock === 0 || product.status !== 'active'}
+                      disabled={!product.inStock || (product.stock || 0) <= 0 || product.status !== 'active'}
                       onClick={(e) => {
                         e.stopPropagation();
                         onProductClick?.(String(product.id));
                       }}
                     >
                       <ShoppingCart className="w-4 h-4 mr-2" />
-                      {(product.stock === 0 || product.status !== 'active') ? 'Out of Stock' : 'Add to Cart'}
+                      {(!product.inStock || (product.stock || 0) <= 0 || product.status !== 'active') ? 'Out of Stock' : 'Add to Cart'}
                     </Button>
                   </div>
                 </div>

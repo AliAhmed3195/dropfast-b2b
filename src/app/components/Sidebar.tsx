@@ -147,7 +147,8 @@ export function Sidebar() {
           // Check if current pathname matches the route or starts with it (for nested routes like inventory/products)
           const isActive = pathname === route || 
             (route && pathname?.startsWith(route + '/')) ||
-            (item.view === 'dashboard' && pathname?.includes(`/dashboard/${user?.role}/overview`));
+            (item.view === 'dashboard' && user?.role === 'customer' && pathname?.includes('/dashboard/customer/browse')) ||
+            (item.view === 'dashboard' && user?.role !== 'customer' && pathname?.includes(`/dashboard/${user?.role}/overview`));
           return (
             <motion.button
               key={item.label}

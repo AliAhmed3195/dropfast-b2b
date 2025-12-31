@@ -22,9 +22,13 @@ export default function DashboardLayout({
       return
     }
 
-    // If on /dashboard, redirect to role-specific overview
+    // If on /dashboard, redirect to role-specific dashboard
     if (pathname === '/dashboard' && user?.role) {
-      router.push(`/dashboard/${user.role}/overview`)
+      if (user.role === 'customer') {
+        router.push('/dashboard/customer/browse')
+      } else {
+        router.push(`/dashboard/${user.role}/overview`)
+      }
     }
   }, [isAuthenticated, user, router, pathname])
 

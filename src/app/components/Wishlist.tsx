@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import {
   Heart,
@@ -10,54 +10,112 @@ import {
   Package,
   Tag,
   ArrowRight,
+  Loader2,
 } from 'lucide-react';
-import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { toast } from 'sonner';
+import { showToast } from '../../lib/toast';
 
 export function Wishlist() {
-  const { products, cart, addToCart } = useApp();
   const { user } = useAuth();
   const router = useRouter();
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
   
   // In a real app, wishlist would be stored in state/database
   // For now, using localStorage
   const [wishlistIds, setWishlistIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem(`wishlist_${user?.id}`);
-    return saved ? JSON.parse(saved) : [];
+    if (typeof window !== 'undefined' && user?.id) {
+      const saved = localStorage.getItem(`wishlist_${user.id}`);
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
   });
 
-  const wishlistProducts = products.filter(p => wishlistIds.includes(p.id));
+  // Fetch products
+  useEffect(() => {
+    if (fetchingRef.current) return;
+
+    fetchingRef.current = true;
+    setLoading(true);
+
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch('/api/customer/products');
+        const data = await response.json();
+
+        if (response.ok) {
+          setProducts(data.products || []);
+        } else {
+          showToast.error(data.error || 'Failed to fetch products');
+        }
+      } catch (error) {
+        console.error('Fetch products error:', error);
+        showToast.error('Failed to fetch products');
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  const wishlistProducts = products.filter((p: any) => wishlistIds.includes(p.id));
+
+  // Get cart from localStorage
+  const [cart, setCart] = useState<any[]>(() => {
+    if (typeof window !== 'undefined' && user?.id) {
+      const saved = localStorage.getItem(`cart_${user.id}`);
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
 
   const removeFromWishlist = (productId: string) => {
     const updated = wishlistIds.filter(id => id !== productId);
     setWishlistIds(updated);
-    localStorage.setItem(`wishlist_${user?.id}`, JSON.stringify(updated));
-    toast.success('Removed from wishlist');
+    if (user?.id && typeof window !== 'undefined') {
+      localStorage.setItem(`wishlist_${user.id}`, JSON.stringify(updated));
+    }
+    showToast.success('Removed from wishlist');
   };
 
-  const handleAddToCart = (product: typeof products[0]) => {
-    const store = { id: 'store-1', name: 'Tech Haven' }; // In real app, get from product
-    
-    addToCart({
-      productId: product.id,
-      productName: product.name,
-      productImage: product.images[0],
-      quantity: 1,
-      price: product.price,
-      storeId: store.id,
-      storeName: store.name,
-    });
-    
-    toast.success('Added to cart!');
+  const handleAddToCart = (product: any) => {
+    try {
+      const cartItems = JSON.parse(localStorage.getItem(`cart_${user?.id}`) || '[]');
+      const existingItem = cartItems.find((item: any) => item.productId === product.id);
+      
+      if (existingItem) {
+        existingItem.quantity += 1;
+      } else {
+        cartItems.push({
+          productId: product.id,
+          productName: product.name,
+          productImage: product.images?.[0] || '',
+          quantity: 1,
+          price: product.price,
+          storeId: 'store-1', // TODO: Get from product/store relationship
+          storeName: 'Store',
+        });
+      }
+      
+      if (user?.id && typeof window !== 'undefined') {
+        localStorage.setItem(`cart_${user.id}`, JSON.stringify(cartItems));
+        setCart(cartItems);
+      }
+      showToast.success('Added to cart!');
+    } catch (error) {
+      showToast.error('Failed to add to cart');
+    }
   };
 
   const isInCart = (productId: string) => {
-    return cart.some(item => item.productId === productId);
+    return cart.some((item: any) => item.productId === productId);
   };
 
   const totalValue = wishlistProducts.reduce((sum, p) => sum + p.price, 0);
@@ -116,9 +174,13 @@ export function Wishlist() {
       )}
 
       {/* Wishlist Grid */}
-      {wishlistProducts.length > 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : wishlistProducts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {wishlistProducts.map((product, index) => (
+            {wishlistProducts.map((product: any, index: number) => (
             <motion.div
               key={product.id}
               initial={{ opacity: 0, y: 20 }}
@@ -270,23 +332,15 @@ export function Wishlist() {
         </div>
       ) : (
         <Card className="p-12 text-center">
-          <div className="max-w-md mx-auto">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-pink-500/10 to-rose-500/10 flex items-center justify-center">
-              <Heart className="w-10 h-10 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-bold mb-2">Your wishlist is empty</h3>
-            <p className="text-muted-foreground mb-6">
-              Save products you love to buy them later
-            </p>
-            <Button
-              onClick={() => router.push('/dashboard/customer/browse')}
-              className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white"
-            >
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              Start Shopping
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
+          <Heart className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-xl font-bold mb-2">Your wishlist is empty</h3>
+          <p className="text-muted-foreground mb-6">Save products you love to buy them later</p>
+          <Button
+            onClick={() => router.push('/dashboard/customer/browse')}
+            className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white"
+          >
+            Start Shopping
+          </Button>
         </Card>
       )}
     </div>
