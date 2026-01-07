@@ -127,6 +127,8 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
           price: product.price,
           storeId: store?.id || storeData.id,
           storeName: store?.name || storeData.name,
+          shippingCost: (product as any).shippingCost || 0,
+          shippingMethods: (product as any).shippingMethods || null,
         },
       ]);
     }

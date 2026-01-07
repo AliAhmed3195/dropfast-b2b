@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowLeft,
@@ -25,6 +25,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { Badge } from './ui/badge';
 import { showToast } from '../../lib/toast';
 
 interface CheckoutFormData {
@@ -69,8 +70,63 @@ export function Checkout() {
     return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
 
+  // Shipping Methods
+  interface ShippingMethod {
+    name: string;
+    cost: number;
+    estimatedDays: string;
+  }
+  
+  const getAllShippingMethods = (): ShippingMethod[] => {
+    const methodMap = new Map<string, ShippingMethod>();
+    cart.forEach((item: any) => {
+      if (item.shippingMethods && Array.isArray(item.shippingMethods)) {
+        item.shippingMethods.forEach((method: ShippingMethod) => {
+          const existing = methodMap.get(method.name);
+          if (!existing || existing.cost < method.cost) {
+            methodMap.set(method.name, method);
+          }
+        });
+      }
+    });
+    return Array.from(methodMap.values());
+  };
+
+  const availableMethods = getAllShippingMethods();
+  const [selectedShippingMethod, setSelectedShippingMethod] = useState<string>('');
+  
+  // Get default shipping method or fallback
+  useEffect(() => {
+    if (availableMethods.length > 0 && !selectedShippingMethod) {
+      // Default to first method or cheapest
+      const defaultMethod = availableMethods.find(m => m.cost === 0) || availableMethods[0];
+      if (defaultMethod) {
+        setSelectedShippingMethod(defaultMethod.name);
+      }
+    } else if (availableMethods.length === 0 && cart.length > 0) {
+      // Fallback to product shippingCost
+      const defaultCost = cart.reduce((max: number, item: any) => {
+        return Math.max(max, item.shippingCost || 0);
+      }, 0);
+      if (defaultCost > 0 && !selectedShippingMethod) {
+        setSelectedShippingMethod('Standard Shipping');
+      }
+    }
+  }, [availableMethods, cart, selectedShippingMethod]);
+
+  const getShippingCost = (): number => {
+    if (selectedShippingMethod && availableMethods.length > 0) {
+      const method = availableMethods.find(m => m.name === selectedShippingMethod);
+      return method ? method.cost : 0;
+    }
+    // Fallback to product shippingCost
+    return cart.reduce((max: number, item: any) => {
+      return Math.max(max, item.shippingCost || 0);
+    }, 0);
+  };
+
   const subtotal = getCartTotal();
-  const shipping = cart.length > 0 ? 10 : 0;
+  const shipping = getShippingCost();
   const tax = subtotal * 0.1;
   const total = subtotal + shipping + tax;
 
@@ -179,6 +235,7 @@ export function Checkout() {
             items: storeOrder.items,
             subtotal: orderSubtotal,
             shipping: orderShipping,
+            shippingMethod: selectedShippingMethod || null,
             tax: orderTax,
             total: orderTotal,
           }),
@@ -532,6 +589,60 @@ export function Checkout() {
                     <Building className="w-6 h-6 text-muted-foreground" />
                   </div>
                 </RadioGroup>
+
+                {/* Shipping Method Selection */}
+                {availableMethods.length > 0 && (
+                  <div className="mt-6 space-y-3">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Truck className="w-5 h-5 text-purple-500" />
+                      <h4 className="font-semibold">Shipping Method</h4>
+                    </div>
+                    <RadioGroup
+                      value={selectedShippingMethod}
+                      onValueChange={setSelectedShippingMethod}
+                      className="space-y-2"
+                    >
+                      {availableMethods.map((method) => (
+                        <div
+                          key={method.name}
+                          className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                            selectedShippingMethod === method.name
+                              ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/10'
+                              : 'border-border hover:border-purple-300'
+                          }`}
+                          onClick={() => setSelectedShippingMethod(method.name)}
+                        >
+                          <RadioGroupItem value={method.name} id={method.name} />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor={method.name} className="cursor-pointer font-medium">
+                                {method.name}
+                              </Label>
+                              <Badge variant="outline" className="text-xs">
+                                {method.cost === 0 ? 'Free' : `$${method.cost.toFixed(2)}`}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Estimated delivery: {method.estimatedDays} days
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </RadioGroup>
+                  </div>
+                )}
+
+                {availableMethods.length === 0 && cart.length > 0 && shipping > 0 && (
+                  <div className="mt-6 p-3 rounded-lg bg-muted border">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">Standard Shipping</span>
+                      </div>
+                      <span className="text-sm font-semibold">${shipping.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-6 p-4 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800">
                   <div className="flex items-start gap-3">

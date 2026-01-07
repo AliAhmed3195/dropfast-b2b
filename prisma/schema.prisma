@@ -119,13 +119,15 @@ model Product {
   leadTime       String? // e.g., "3-5-days"
 
   // Shipping
-  weight        Float?
-  weightUnit    String? @default("kg") // kg, g, lb, oz
-  length        Float?
-  width         Float?
-  height        Float?
-  dimensionUnit String? @default("cm") // cm, in, m
-  shippingCost  Float?  @default(0)
+  weight            Float?
+  weightUnit        String?  @default("kg") // kg, g, lb, oz
+  length            Float?
+  width             Float?
+  height            Float?
+  dimensionUnit     String?  @default("cm") // cm, in, m
+  shippingCost      Float?   @default(0)
+  shippingCountries String[] @default([]) // Array of country codes (e.g., ["US", "GB", "CA"])
+  shippingMethods   Json?    // Array of { name, cost, estimatedDays }
 
   // Media
   images String[] @default([]) // Array of image URLs
@@ -344,6 +346,9 @@ model Order {
   shipping Float
   tax      Float
   total    Float
+
+  // Shipping Method
+  shippingMethod String? // Selected shipping method name (e.g., "Express Shipping")
 
   // Status
   status        OrderStatus   @default(PENDING)

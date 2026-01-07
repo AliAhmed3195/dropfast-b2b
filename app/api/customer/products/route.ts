@@ -62,6 +62,10 @@ export async function GET(request: NextRequest) {
       featured: false, // TODO: Add featured flag
       status: product.status.toLowerCase(),
       createdAt: product.createdAt.toISOString(),
+      // Shipping info
+      shippingCost: product.shippingCost || 0,
+      shippingMethods: product.shippingMethods || null,
+      shippingCountries: product.shippingCountries || [],
     }));
 
     return NextResponse.json({ products: formattedProducts });

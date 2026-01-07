@@ -111,6 +111,9 @@ export async function GET(
         // Supplier info
         supplierId: sp.product.supplierId,
         supplierName: sp.product.supplier?.name || null,
+        // Shipping info
+        shippingCountries: sp.product.shippingCountries || [],
+        shippingMethods: sp.product.shippingMethods || null,
         // Currency info
         currency,
         exchangeRate,

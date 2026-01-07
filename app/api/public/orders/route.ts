@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
       // Totals
       subtotal,
       shipping,
+      shippingMethod,
       tax,
       total,
       customerCurrency, // Customer's currency (for display only)
@@ -93,6 +94,31 @@ export async function POST(request: NextRequest) {
     const shippingUSD = convertToUSD(parseFloat(shipping) || 0, currency)
     const taxUSD = convertToUSD(parseFloat(tax) || 0, currency)
     const totalUSD = convertToUSD(parseFloat(total) || 0, currency)
+
+    // Validate shipping country for all products
+    const productIds = items.map((item: any) => item.productId).filter(Boolean)
+    if (productIds.length > 0) {
+      const products = await prisma.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, name: true, shippingCountries: true },
+      })
+
+      // Check if shipping country is valid for all products
+      const invalidProducts = products.filter((product) => {
+        if (!product.shippingCountries || product.shippingCountries.length === 0) {
+          return false // Empty array means all countries allowed
+        }
+        return !product.shippingCountries.includes(shippingCountry)
+      })
+
+      if (invalidProducts.length > 0) {
+        const productNames = invalidProducts.map(p => p.name).join(', ')
+        return NextResponse.json(
+          { error: `The following products cannot be shipped to ${shippingCountry}: ${productNames}` },
+          { status: 400 }
+        )
+      }
+    }
 
     // Process order items with fee calculations
     const orderItemsData = await Promise.all(
@@ -214,6 +240,7 @@ export async function POST(request: NextRequest) {
         // Pricing (all in USD)
         subtotal: subtotalUSD,
         shipping: shippingUSD,
+        shippingMethod: shippingMethod || null,
         tax: taxUSD,
         total: totalUSD,
         // Status

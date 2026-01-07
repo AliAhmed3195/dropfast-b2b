@@ -35,6 +35,7 @@ import { showToast } from '../../lib/toast';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from './ui/utils';
 import { currencies, formatCurrency } from '../../data/currencies';
+import { countries } from '../../data/countries';
 
 // Currency exchange rates (mock - in production, fetch from API)
 const EXCHANGE_RATES: Record<string, number> = {
@@ -108,6 +109,32 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
   const [height, setHeight] = useState(product?.height || '');
   const [dimensionUnit, setDimensionUnit] = useState(product?.dimensionUnit || 'cm');
   const [shippingCost, setShippingCost] = useState(product?.shippingCost || '');
+  const [shippingCountries, setShippingCountries] = useState<string[]>(product?.shippingCountries || []);
+  
+  // Shipping Methods
+  interface ShippingMethod {
+    name: string;
+    cost: number;
+    estimatedDays: string;
+  }
+  const parseShippingMethods = (methods: any): ShippingMethod[] => {
+    if (!methods) return [];
+    if (typeof methods === 'string') {
+      try {
+        return JSON.parse(methods);
+      } catch {
+        return [];
+      }
+    }
+    return Array.isArray(methods) ? methods : [];
+  };
+  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>(
+    parseShippingMethods(product?.shippingMethods) || []
+  );
+  const [editingMethodIndex, setEditingMethodIndex] = useState<number | null>(null);
+  const [newMethodName, setNewMethodName] = useState('');
+  const [newMethodCost, setNewMethodCost] = useState('');
+  const [newMethodDays, setNewMethodDays] = useState('');
   
   // Variants & Images
   const [hasVariants, setHasVariants] = useState(product?.hasVariants || false);
@@ -247,6 +274,8 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
       setHeight(product.height?.toString() || '');
       setDimensionUnit(product.dimensionUnit || 'cm');
       setShippingCost(product.shippingCost?.toString() || '');
+      setShippingCountries(product.shippingCountries || []);
+      setShippingMethods(parseShippingMethods(product.shippingMethods));
       
       // Variants & Images
       setHasVariants(product.hasVariants || false);
@@ -643,6 +672,8 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
           unit: dimensionUnit,
         },
         shippingCost: shippingCost ? parseFloat(shippingCost) : 0,
+        shippingCountries,
+        shippingMethods: shippingMethods.length > 0 ? shippingMethods : null,
         hasVariants,
         variants,
         productImages, // API will convert this to 'images' array
@@ -1451,6 +1482,297 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
                   <p className="text-xs text-muted-foreground">
                     Leave empty if shipping cost varies by location or will be calculated separately
                   </p>
+                </div>
+
+                {/* Shipping Countries */}
+                <div className="space-y-2">
+                  <Label htmlFor="shippingCountries">
+                    Shipping Countries <span className="text-muted-foreground text-xs">(Select countries where this product can be shipped)</span>
+                  </Label>
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      if (value && !shippingCountries.includes(value)) {
+                        setShippingCountries([...shippingCountries, value]);
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="shippingCountries" className="h-11">
+                      <SelectValue placeholder="Select countries to add" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {countries
+                        .filter(country => !shippingCountries.includes(country.code))
+                        .map((country) => (
+                          <SelectItem key={country.code} value={country.code}>
+                            {country.flag} {country.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  {shippingCountries.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {shippingCountries.map((code) => {
+                        const country = countries.find(c => c.code === code);
+                        return country ? (
+                          <Badge key={code} variant="outline" className="flex items-center gap-1">
+                            {country.flag} {country.name}
+                            <button
+                              type="button"
+                              onClick={() => setShippingCountries(shippingCountries.filter(c => c !== code))}
+                              className="ml-1 hover:text-red-500"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                  {shippingCountries.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No countries selected. Product will be available for shipping to all countries.
+                    </p>
+                  )}
+                </div>
+
+                {/* Shipping Methods */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>
+                      Shipping Methods <span className="text-muted-foreground text-xs">(Optional - Customer will select during checkout)</span>
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditingMethodIndex(null);
+                        setNewMethodName('');
+                        setNewMethodCost('');
+                        setNewMethodDays('');
+                      }}
+                      className="h-8"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Method
+                    </Button>
+                  </div>
+
+                  {editingMethodIndex === null && (
+                    <div className="space-y-2">
+                      {shippingMethods.map((method, index) => (
+                        <Card key={index} className="p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold">{method.name}</span>
+                                <Badge variant="outline">
+                                  {method.cost === 0 ? 'Free' : `$${method.cost.toFixed(2)}`}
+                                </Badge>
+                                <Badge variant="secondary" className="text-xs">
+                                  {method.estimatedDays} days
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingMethodIndex(index);
+                                  setNewMethodName(method.name);
+                                  setNewMethodCost(method.cost.toString());
+                                  setNewMethodDays(method.estimatedDays);
+                                }}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Tag className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setShippingMethods(shippingMethods.filter((_, i) => i !== index));
+                                }}
+                                className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                      {shippingMethods.length === 0 && (
+                        <p className="text-xs text-muted-foreground text-center py-4">
+                          No shipping methods added. Click "Add Method" to add options for customers.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {editingMethodIndex === null && (
+                    <Card className="p-4 border-dashed">
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="methodName">Method Name</Label>
+                            <Input
+                              id="methodName"
+                              value={newMethodName}
+                              onChange={(e) => setNewMethodName(e.target.value)}
+                              placeholder="e.g., Free Shipping, Express"
+                              className="h-10"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="methodCost">Cost (USD)</Label>
+                            <Input
+                              id="methodCost"
+                              type="number"
+                              step="0.01"
+                              value={newMethodCost}
+                              onChange={(e) => setNewMethodCost(e.target.value)}
+                              placeholder="0.00"
+                              className="h-10"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="methodDays">Estimated Days</Label>
+                          <Input
+                            id="methodDays"
+                            value={newMethodDays}
+                            onChange={(e) => setNewMethodDays(e.target.value)}
+                            placeholder="e.g., 2-3, 5-7, 7-10"
+                            className="h-10"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            if (newMethodName && newMethodCost !== '' && newMethodDays) {
+                              setShippingMethods([
+                                ...shippingMethods,
+                                {
+                                  name: newMethodName,
+                                  cost: parseFloat(newMethodCost) || 0,
+                                  estimatedDays: newMethodDays,
+                                },
+                              ]);
+                              setNewMethodName('');
+                              setNewMethodCost('');
+                              setNewMethodDays('');
+                            }
+                          }}
+                          className="w-full"
+                          disabled={!newMethodName || newMethodCost === '' || !newMethodDays}
+                        >
+                          Add Method
+                        </Button>
+                      </div>
+                    </Card>
+                  )}
+
+                  {editingMethodIndex !== null && (
+                    <Card className="p-4 border-blue-200">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-base font-semibold">Edit Shipping Method</Label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingMethodIndex(null);
+                              setNewMethodName('');
+                              setNewMethodCost('');
+                              setNewMethodDays('');
+                            }}
+                            className="h-8 w-8 p-0"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="editMethodName">Method Name</Label>
+                            <Input
+                              id="editMethodName"
+                              value={newMethodName}
+                              onChange={(e) => setNewMethodName(e.target.value)}
+                              className="h-10"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="editMethodCost">Cost (USD)</Label>
+                            <Input
+                              id="editMethodCost"
+                              type="number"
+                              step="0.01"
+                              value={newMethodCost}
+                              onChange={(e) => setNewMethodCost(e.target.value)}
+                              className="h-10"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="editMethodDays">Estimated Days</Label>
+                          <Input
+                            id="editMethodDays"
+                            value={newMethodDays}
+                            onChange={(e) => setNewMethodDays(e.target.value)}
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              if (newMethodName && newMethodCost !== '' && newMethodDays) {
+                                const updated = [...shippingMethods];
+                                updated[editingMethodIndex] = {
+                                  name: newMethodName,
+                                  cost: parseFloat(newMethodCost) || 0,
+                                  estimatedDays: newMethodDays,
+                                };
+                                setShippingMethods(updated);
+                                setEditingMethodIndex(null);
+                                setNewMethodName('');
+                                setNewMethodCost('');
+                                setNewMethodDays('');
+                              }
+                            }}
+                            className="flex-1"
+                            disabled={!newMethodName || newMethodCost === '' || !newMethodDays}
+                          >
+                            Save Changes
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingMethodIndex(null);
+                              setNewMethodName('');
+                              setNewMethodCost('');
+                              setNewMethodDays('');
+                            }}
+                            className="flex-1"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+
+                  {shippingMethods.length === 0 && editingMethodIndex === null && (
+                    <p className="text-xs text-muted-foreground">
+                      If no methods are added, the product's shipping cost will be used as default.
+                    </p>
+                  )}
                 </div>
 
                 {/* Shipping Summary */}

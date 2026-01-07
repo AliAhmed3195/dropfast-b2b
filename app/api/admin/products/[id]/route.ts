@@ -109,6 +109,8 @@ export async function PUT(
       weightUnit,
       dimensions,
       shippingCost,
+      shippingCountries,
+      shippingMethods,
       hasVariants,
       variants,
       productImages,
@@ -196,6 +198,7 @@ export async function PUT(
     if (dimensions?.height !== undefined) updateData.height = dimensions.height ? parseFloat(dimensions.height) : null
     if (dimensions?.unit) updateData.dimensionUnit = dimensions.unit
     if (shippingCost !== undefined) updateData.shippingCost = shippingCost ? parseFloat(shippingCost) : 0
+    if (shippingCountries !== undefined) updateData.shippingCountries = Array.isArray(shippingCountries) ? shippingCountries : []
     if (productImages !== undefined) updateData.images = Array.isArray(productImages) ? productImages : []
     if (hasVariants !== undefined) updateData.hasVariants = hasVariants
     if (variants !== undefined) updateData.variants = variants

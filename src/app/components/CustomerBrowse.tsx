@@ -135,6 +135,8 @@ export function CustomerBrowse() {
           price: product.price,
           storeId: store.id,
           storeName: store.name,
+          shippingCost: product.shippingCost || 0,
+          shippingMethods: product.shippingMethods || null,
         });
       }
       

@@ -8,10 +8,11 @@ import {
   X,
   DollarSign,
   CheckCircle2,
-  ShoppingBag,
   Loader2,
+  Globe,
 } from 'lucide-react';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -25,6 +26,7 @@ import {
 import { showToast } from '../../lib/toast';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from './ui/utils';
+import { countries, getCountryByCode } from '../../data/countries';
 
 interface Product {
   id: number;
@@ -80,17 +82,23 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
   }, [user?.id]);
 
   useEffect(() => {
-    // Initialize form with product data
+    const defaultPrice = product.type === 'supplier' 
+      ? (product.supplierPrice! * 1.5).toFixed(2) 
+      : product.retailPrice!.toFixed(2);
+    
     setImportForm({
       storeId: '',
-      sellingPrice: product.type === 'supplier' 
-        ? (product.supplierPrice! * 1.5).toFixed(2) 
-        : product.retailPrice!.toFixed(2),
+      sellingPrice: defaultPrice,
       metaTitle: product.name,
       metaDescription: product.description,
       metaKeywords: product.category,
     });
   }, [product]);
+
+  const calculateProfitMargin = () => {
+    if (product.type !== 'supplier' || !importForm.sellingPrice || !product.supplierPrice) return 0;
+    return ((parseFloat(importForm.sellingPrice) - product.supplierPrice) / parseFloat(importForm.sellingPrice)) * 100;
+  };
 
   const handleSubmit = async () => {
     if (!user?.id) {
@@ -98,56 +106,57 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
       return;
     }
 
-    // Validation
-    if (importType === 'my-products-store') {
-      if (!importForm.storeId) {
-        showToast.error('Please select a store');
-        return;
-      }
-      if (!importForm.sellingPrice) {
-        showToast.error('Please enter a selling price');
-        return;
+    if (!importForm.sellingPrice) {
+      showToast.error('Please enter a selling price');
+      return;
+    }
+
+    if (product.type === 'supplier' && parseFloat(importForm.sellingPrice) <= (product.supplierPrice || 0)) {
+      showToast.error('Selling price must be higher than supplier price!');
+      return;
+    }
+
+    if (importType === 'my-products-store' && !importForm.storeId) {
+      showToast.error('Please select a store');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const keywords = importForm.metaKeywords 
+        ? importForm.metaKeywords.split(',').map(k => k.trim()).filter(Boolean)
+        : [];
+
+      const response = await fetch('/api/vendor/products/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: String(product.id),
+          vendorId: user.id,
+          ...(importType === 'my-products-store' && { storeId: importForm.storeId }),
+          sellingPrice: parseFloat(importForm.sellingPrice),
+          metaTitle: importForm.metaTitle || null,
+          metaDescription: importForm.metaDescription || null,
+          metaKeywords: keywords,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to import product');
       }
 
-      if (product.type === 'supplier' && parseFloat(importForm.sellingPrice) <= (product.supplierPrice || 0)) {
-        showToast.error('Selling price must be higher than supplier price!');
-        return;
-      }
-
-      try {
-        setLoading(true);
-        const response = await fetch('/api/vendor/products/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            productId: String(product.id),
-            storeId: importForm.storeId,
-            vendorId: user.id,
-            sellingPrice: parseFloat(importForm.sellingPrice),
-            metaTitle: importForm.metaTitle || null,
-            metaDescription: importForm.metaDescription || null,
-            metaKeywords: importForm.metaKeywords ? importForm.metaKeywords.split(',').map(k => k.trim()) : [],
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Failed to import product');
-        }
-
-        showToast.success('Product imported successfully to store!');
-        onClose();
-      } catch (error: any) {
-        console.error('Import product error:', error);
-        showToast.error(error.message || 'Failed to import product');
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      // For "My Products" only (without store), we might not need to create StoreProduct
-      // This could be for a future "My Products" catalog feature
-      showToast.info('Product added to My Products catalog');
+      const successMessage = importType === 'my-products-store' 
+        ? 'Product imported successfully to store!'
+        : 'Product added to My Products catalog!';
+      
+      showToast.success(successMessage);
       onClose();
+    } catch (error: any) {
+      console.error('Import product error:', error);
+      showToast.error(error.message || 'Failed to import product');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -224,16 +233,60 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
             <p className="text-sm text-muted-foreground">{product.description}</p>
           </div>
 
+          {/* Shipping Countries */}
+          {product.shippingCountries && product.shippingCountries.length > 0 && (
+            <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
+              <h4 className="font-bold mb-2 flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                Shipping Countries
+              </h4>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {product.shippingCountries.map((code: string) => {
+                  const country = getCountryByCode(code);
+                  return country ? (
+                    <Badge key={code} variant="outline" className="text-xs">
+                      {country.flag} {country.name}
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Shipping Methods */}
+          {product.shippingMethods && Array.isArray(product.shippingMethods) && product.shippingMethods.length > 0 && (
+            <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800">
+              <h4 className="font-bold mb-2 flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                Shipping Methods
+              </h4>
+              <div className="space-y-2 mt-2">
+                {product.shippingMethods.map((method: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{method.name}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {method.cost === 0 ? 'Free' : `$${method.cost.toFixed(2)}`}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        {method.estimatedDays} days
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Import Type Selection */}
           <div className="space-y-4">
             <h4 className="font-bold">Choose Import Option:</h4>
             
             <div className="grid grid-cols-2 gap-4">
-              {/* Option 1: Add to My Products */}
               <div
                 onClick={() => setImportType('my-products')}
                 className={cn(
-                  "p-6 rounded-2xl border-2 cursor-pointer transition-all",
+                  "p-6 rounded-2xl border-2 cursor-pointer transition-all relative",
                   importType === 'my-products'
                     ? "border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 shadow-lg"
                     : "border-slate-300 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-700"
@@ -246,10 +299,7 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
                       ? "bg-gradient-to-br from-purple-500 to-pink-500"
                       : "bg-slate-200 dark:bg-slate-700"
                   )}>
-                    <Package className={cn(
-                      "w-5 h-5",
-                      importType === 'my-products' ? "text-white" : "text-slate-500"
-                    )} />
+                    <Package className={cn("w-5 h-5", importType === 'my-products' ? "text-white" : "text-slate-500")} />
                   </div>
                   <div className="flex-1">
                     <h5 className="font-bold">Add to My Products</h5>
@@ -258,12 +308,9 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
                     )}
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Quick import to catalog
-                </p>
+                <p className="text-sm text-muted-foreground">Quick import to catalog</p>
               </div>
 
-              {/* Option 2: Add to My Products + Store */}
               <div
                 onClick={() => setImportType('my-products-store')}
                 className={cn(
@@ -280,10 +327,7 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
                       ? "bg-gradient-to-br from-cyan-500 to-blue-500"
                       : "bg-slate-200 dark:bg-slate-700"
                   )}>
-                    <Store className={cn(
-                      "w-5 h-5",
-                      importType === 'my-products-store' ? "text-white" : "text-slate-500"
-                    )} />
+                    <Store className={cn("w-5 h-5", importType === 'my-products-store' ? "text-white" : "text-slate-500")} />
                   </div>
                   <div className="flex-1">
                     <h5 className="font-bold">Add to Products + Store</h5>
@@ -292,69 +336,65 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
                     )}
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  Complete setup with store
-                </p>
+                <p className="text-sm text-muted-foreground">Complete setup with store</p>
               </div>
             </div>
           </div>
 
           {/* Conditional Fields Based on Import Type */}
           <div className="space-y-4 border-t pt-6">
+            {/* Select Store - Only for "Add to Products + Store" */}
             {importType === 'my-products-store' && (
-              <>
-                {/* Select Store */}
-                <div>
-                  <Label className="text-base font-bold mb-2 block">
-                    Select Store <span className="text-red-500">*</span>
-                  </Label>
-                  <Select 
-                    value={importForm.storeId} 
-                    onValueChange={(value) => setImportForm({ ...importForm, storeId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a store" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores.length === 0 ? (
-                        <SelectItem value="" disabled>No stores available</SelectItem>
-                      ) : (
-                        stores.map((store) => (
-                          <SelectItem key={store.id} value={store.id}>
-                            {store.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Selling Price */}
-                <div>
-                  <Label className="text-base font-bold mb-2 block">
-                    Selling Price <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="Enter selling price"
-                      value={importForm.sellingPrice}
-                      onChange={(e) => setImportForm({ ...importForm, sellingPrice: e.target.value })}
-                      className="pl-10 text-lg font-semibold"
-                    />
-                  </div>
-                  {product.type === 'supplier' && importForm.sellingPrice && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Profit Margin: <strong className="text-green-600">
-                        {(((parseFloat(importForm.sellingPrice) - product.supplierPrice!) / parseFloat(importForm.sellingPrice)) * 100).toFixed(1)}%
-                      </strong>
-                    </p>
-                  )}
-                </div>
-              </>
+              <div>
+                <Label className="text-base font-bold mb-2 block">
+                  Select Store <span className="text-red-500">*</span>
+                </Label>
+                <Select 
+                  value={importForm.storeId} 
+                  onValueChange={(value) => setImportForm({ ...importForm, storeId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a store" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stores.length === 0 ? (
+                      <SelectItem value="no-stores" disabled>No stores available</SelectItem>
+                    ) : (
+                      stores.map((store) => (
+                        <SelectItem key={store.id} value={store.id}>
+                          {store.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
+
+            {/* Selling Price - Required for both options */}
+            <div>
+              <Label className="text-base font-bold mb-2 block">
+                Selling Price <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Enter selling price"
+                  value={importForm.sellingPrice}
+                  onChange={(e) => setImportForm({ ...importForm, sellingPrice: e.target.value })}
+                  className="pl-10 text-lg font-semibold"
+                />
+              </div>
+              {product.type === 'supplier' && importForm.sellingPrice && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  Profit Margin: <strong className="text-green-600">
+                    {calculateProfitMargin().toFixed(1)}%
+                  </strong>
+                </p>
+              )}
+            </div>
 
             {/* SEO Fields (Always Show) */}
             <div className="border-t pt-4">
