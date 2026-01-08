@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
+    "build:staging": "prisma generate && dotenv -e .env.staging -- next build",
     "start": "next start",
-    "lint": "next lint"
+    "start:staging": "dotenv -e .env.staging -- next start",
+    "lint": "next lint",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -83,6 +86,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10",
+    "dotenv-cli": "^11.0.0",
     "postcss": "^8",
     "prisma": "^6.0.0",
     "tailwindcss": "4.1.12",

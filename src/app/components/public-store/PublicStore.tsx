@@ -48,6 +48,8 @@ interface CartItem {
   price: number;
   storeId: string;
   storeName: string;
+  shippingCost?: number;
+  shippingMethods?: any;
 }
 
 export function PublicStore({ storeData, onClose, initialView }: PublicStoreProps) {
