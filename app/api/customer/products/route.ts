@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       supplierName: product.supplier?.name || 'Unknown Supplier',
       name: product.name,
       description: product.description || '',
-      price: Number(product.sellingPrice || product.price),
+      price: Number(product.sellingPrice || 0),
       originalPrice: product.originalPrice ? Number(product.originalPrice) : undefined,
       category: product.category?.name || product.categoryId || 'Uncategorized',
       images: product.images || [],

@@ -119,12 +119,18 @@ export function StoreCheckout({
     }
   }, [currentStep, formData.paymentMethod, formData.email, formData.fullName, total, clientSecret]);
 
-  const getElementsOptions = (): StripeElementsOptions => ({
-    mode: 'payment',
-    amount: Math.round(total * 100),
-    currency: 'usd',
-    ...(clientSecret && { clientSecret }),
-  });
+  const getElementsOptions = (): StripeElementsOptions => {
+    if (clientSecret) {
+      return {
+        clientSecret,
+      };
+    }
+    return {
+      mode: 'payment',
+      amount: Math.round(total * 100),
+      currency: 'usd',
+    };
+  };
 
   const CheckoutForm = () => {
     const PaymentStepComponent = ({

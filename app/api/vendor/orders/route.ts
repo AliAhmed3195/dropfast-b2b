@@ -74,6 +74,11 @@ export async function GET(request: NextRequest) {
             price: true,
             productName: true,
             productImage: true,
+            vendorPrice: true,
+            supplierPrice: true,
+            vendorProfit: true,
+            stripeFeeVendor: true,
+            platformFee: true,
             product: {
               select: {
                 id: true,

@@ -41,6 +41,8 @@ interface Product {
   image: string;
   description: string;
   type: 'supplier' | 'own';
+  shippingCountries?: string[];
+  shippingMethods?: any;
 }
 
 interface UnifiedImportModalProps {

@@ -53,6 +53,8 @@ export async function GET(request: NextRequest) {
             price: true,
             productName: true,
             productImage: true,
+            productId: true,
+            supplierId: true,
             product: {
               select: {
                 id: true,
@@ -78,7 +80,7 @@ export async function GET(request: NextRequest) {
       storeId: order.storeId,
       storeName: order.store?.name || 'Unknown Store',
       items: order.items.map((item) => ({
-        productId: item.productId,
+        productId: item.productId || item.product?.id || '',
         productName: item.productName,
         productImage: item.productImage || item.product?.images?.[0] || '',
         quantity: item.quantity,

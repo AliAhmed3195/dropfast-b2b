@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
         },
         _count: {
           select: {
-            products: true,
+            storeProducts: true,
           },
         },
       },
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       },
       status: store.status.toLowerCase(),
       createdAt: store.createdAt.toISOString(),
-      productCount: store._count.products,
+      productCount: store._count.storeProducts,
     }));
 
     return NextResponse.json({ stores: formattedStores });
