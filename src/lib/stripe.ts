@@ -60,6 +60,80 @@ export async function getPaymentIntent(
 }
 
 /**
+ * Update PaymentIntent metadata
+ */
+export async function updatePaymentIntentMetadata(
+  paymentIntentId: string,
+  metadata: Record<string, string>
+): Promise<Stripe.PaymentIntent> {
+  return await stripe.paymentIntents.update(paymentIntentId, {
+    metadata,
+  })
+}
+
+/**
+ * Create Stripe Connect account
+ */
+export async function createConnectAccount(
+  email: string,
+  country: string = 'US',
+  type: 'express' | 'standard' = 'express'
+): Promise<Stripe.Account> {
+  return await stripe.accounts.create({
+    type: type,
+    country: country,
+    email: email,
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+  })
+}
+
+/**
+ * Create Stripe Connect onboarding link
+ */
+export async function createOnboardingLink(
+  accountId: string,
+  returnUrl: string,
+  refreshUrl: string
+): Promise<Stripe.AccountLink> {
+  return await stripe.accountLinks.create({
+    account: accountId,
+    return_url: returnUrl,
+    refresh_url: refreshUrl,
+    type: 'account_onboarding',
+  })
+}
+
+/**
+ * Retrieve Stripe Connect account
+ */
+export async function getConnectAccount(
+  accountId: string
+): Promise<Stripe.Account> {
+  return await stripe.accounts.retrieve(accountId)
+}
+
+/**
+ * Create Stripe Transfer to connected account
+ */
+export async function createTransfer(
+  amount: number,
+  destination: string,
+  currency: string = 'usd',
+  metadata?: Record<string, string>
+): Promise<Stripe.Transfer> {
+  const amountInCents = Math.round(amount * 100)
+  return await stripe.transfers.create({
+    amount: amountInCents,
+    currency: currency.toLowerCase(),
+    destination: destination,
+    metadata: metadata || {},
+  })
+}
+
+/**
  * Verify webhook signature
  */
 export function verifyWebhookSignature(

@@ -176,7 +176,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
     }
 
     const subtotal = storeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const shipping = 10;
+    const shipping = subtotal >= 50 ? 0 : 9.99;
     const tax = subtotal * 0.1;
     const total = subtotal + shipping + tax;
 

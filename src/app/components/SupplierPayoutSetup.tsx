@@ -85,20 +85,57 @@ export function SupplierPayoutSetup() {
   }, [user?.id]);
 
   const handleGenerateOnboardingLink = async () => {
+    if (!user?.id) {
+      showToast.error('User not found');
+      return;
+    }
+
     setIsGeneratingLink(true);
-    
+
     try {
-      // TODO: Call API to generate Stripe onboarding link
-      showToast.info('Generating onboarding link...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Mock onboarding URL (in production, this comes from Stripe API)
-      const mockUrl = `https://connect.stripe.com/express/oauth/authorize?client_id=ca_xxx&state=supplier_${Date.now()}`;
-      
-      setOnboardingUrl(mockUrl);
+      const returnUrl = `${window.location.origin}/supplier/payouts?return=true`;
+      const refreshUrl = `${window.location.origin}/supplier/payouts?refresh=true`;
+
+      // Create account if doesn't exist
+      if (!stripeAccount?.accountId) {
+        const createResponse = await fetch('/api/supplier/stripe-connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            returnUrl,
+            refreshUrl,
+          }),
+        });
+
+        if (!createResponse.ok) {
+          const error = await createResponse.json();
+          throw new Error(error.error || 'Failed to create Stripe account');
+        }
+
+        const { onboardingUrl } = await createResponse.json();
+        if (onboardingUrl) {
+          window.location.href = onboardingUrl;
+          return;
+        }
+      }
+
+      // Generate onboarding link
+      const linkResponse = await fetch(
+        `/api/supplier/stripe-connect?userId=${user.id}&returnUrl=${encodeURIComponent(returnUrl)}&refreshUrl=${encodeURIComponent(refreshUrl)}`
+      );
+
+      if (!linkResponse.ok) {
+        const error = await linkResponse.json();
+        throw new Error(error.error || 'Failed to generate onboarding link');
+      }
+
+      const { onboardingUrl } = await linkResponse.json();
+      setOnboardingUrl(onboardingUrl);
       showToast.success('Onboarding link generated! Click the link to complete your Stripe verification.');
-    } catch (error) {
-      showToast.error('Failed to generate onboarding link');
+    } catch (error: any) {
+      console.error('Generate onboarding link error:', error);
+      showToast.error(error.message || 'Failed to generate onboarding link');
     } finally {
       setIsGeneratingLink(false);
     }

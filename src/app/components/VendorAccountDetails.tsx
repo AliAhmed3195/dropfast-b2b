@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   Building2,
@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Landmark,
   Hash,
+  Loader2,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -29,19 +30,7 @@ import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
-
-// Mock account data
-const accountData = {
-  stripeStatus: 'verified', // 'not_started' | 'pending' | 'verified' | 'restricted'
-  stripeAccountId: 'acct_1OXYZvendor123',
-  onboardingCompleted: true,
-  kycStatus: 'approved', // 'not_submitted' | 'pending' | 'approved' | 'rejected'
-  payoutsEnabled: true,
-  chargesEnabled: true,
-  lastUpdated: '2024-12-20',
-  totalPayouts: 45230.50,
-  pendingBalance: 3420.75,
-};
+import { useAuth } from '../contexts/AuthContext';
 
 const bankDetails = {
   accountHolderName: 'TechVendor LLC',
@@ -65,6 +54,10 @@ const businessInfo = {
 };
 
 export function VendorAccountDetails() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [accountData, setAccountData] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     accountHolderName: '',
@@ -74,18 +67,84 @@ export function VendorAccountDetails() {
     accountType: 'checking',
   });
 
-  const handleStartStripeOnboarding = () => {
-    // In production, this would call your backend to create Stripe Connect account
-    toast.success('Redirecting to Stripe...', {
-      description: 'You will be redirected to complete your Stripe onboarding',
-    });
-    
-    // Simulate redirect
-    setTimeout(() => {
-      toast.info('Stripe Onboarding', {
-        description: 'This would open Stripe Connect onboarding flow',
-      });
-    }, 1500);
+  // Fetch vendor account data
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchAccountData = async () => {
+      try {
+        // Fetch vendor data with Stripe info
+        const response = await fetch(`/api/vendor/account?userId=${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setAccountData(data);
+        }
+      } catch (error) {
+        console.error('Fetch account data error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAccountData();
+  }, [user?.id]);
+
+  const handleStartStripeOnboarding = async () => {
+    if (!user?.id) {
+      toast.error('User not found');
+      return;
+    }
+
+    setIsGeneratingLink(true);
+
+    try {
+      const returnUrl = `${window.location.origin}/vendor/account-details?return=true`;
+      const refreshUrl = `${window.location.origin}/vendor/account-details?refresh=true`;
+
+      // Create account if doesn't exist
+      if (!accountData?.stripeAccountId) {
+        const createResponse = await fetch('/api/vendor/stripe-connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            returnUrl,
+            refreshUrl,
+          }),
+        });
+
+        if (!createResponse.ok) {
+          const error = await createResponse.json();
+          throw new Error(error.error || 'Failed to create Stripe account');
+        }
+
+        const { onboardingUrl } = await createResponse.json();
+        if (onboardingUrl) {
+          window.location.href = onboardingUrl;
+          return;
+        }
+      }
+
+      // Generate onboarding link
+      const linkResponse = await fetch(
+        `/api/vendor/stripe-connect?userId=${user.id}&returnUrl=${encodeURIComponent(returnUrl)}&refreshUrl=${encodeURIComponent(refreshUrl)}`
+      );
+
+      if (!linkResponse.ok) {
+        const error = await linkResponse.json();
+        throw new Error(error.error || 'Failed to generate onboarding link');
+      }
+
+      const { onboardingUrl } = await linkResponse.json();
+      if (onboardingUrl) {
+        window.location.href = onboardingUrl;
+      }
+    } catch (error: any) {
+      console.error('Stripe onboarding error:', error);
+      toast.error(error.message || 'Failed to start Stripe onboarding');
+    } finally {
+      setIsGeneratingLink(false);
+    }
   };
 
   const handleUpdateBankDetails = () => {
@@ -96,7 +155,7 @@ export function VendorAccountDetails() {
   };
 
   const getStripeStatusColor = (status: string) => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case 'verified':
         return 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400';
       case 'pending':
@@ -109,7 +168,7 @@ export function VendorAccountDetails() {
   };
 
   const getStripeStatusIcon = (status: string) => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case 'verified':
         return <CheckCircle2 className="w-4 h-4" />;
       case 'pending':
@@ -120,6 +179,17 @@ export function VendorAccountDetails() {
         return <Shield className="w-4 h-4" />;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const stripeStatus = accountData?.stripeKycStatus === 'verified' ? 'verified' : accountData?.stripeAccountId ? 'pending' : 'not_started';
+  const kycStatus = accountData?.stripeKycStatus || 'not_submitted';
 
   return (
     <div className="space-y-6">
@@ -146,7 +216,7 @@ export function VendorAccountDetails() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Payouts</p>
-              <p className="text-2xl font-bold">${accountData.totalPayouts.toLocaleString()}</p>
+              <p className="text-2xl font-bold">${(accountData?.totalPayouts || 0).toLocaleString()}</p>
             </div>
           </div>
         </Card>
@@ -158,7 +228,7 @@ export function VendorAccountDetails() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Pending Balance</p>
-              <p className="text-2xl font-bold">${accountData.pendingBalance.toLocaleString()}</p>
+              <p className="text-2xl font-bold">${(accountData?.pendingBalance || 0).toLocaleString()}</p>
             </div>
           </div>
         </Card>
@@ -167,7 +237,7 @@ export function VendorAccountDetails() {
           <div className="flex items-center gap-3">
             <div className={cn(
               'p-3 rounded-xl',
-              accountData.stripeStatus === 'verified'
+              stripeStatus === 'verified'
                 ? 'bg-gradient-to-br from-green-500 to-emerald-500'
                 : 'bg-gradient-to-br from-yellow-500 to-orange-500'
             )}>
@@ -175,7 +245,7 @@ export function VendorAccountDetails() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Stripe Status</p>
-              <p className="text-xl font-bold capitalize">{accountData.stripeStatus}</p>
+              <p className="text-xl font-bold capitalize">{stripeStatus}</p>
             </div>
           </div>
         </Card>
@@ -184,7 +254,7 @@ export function VendorAccountDetails() {
           <div className="flex items-center gap-3">
             <div className={cn(
               'p-3 rounded-xl',
-              accountData.kycStatus === 'approved'
+              kycStatus === 'verified'
                 ? 'bg-gradient-to-br from-purple-500 to-pink-500'
                 : 'bg-gradient-to-br from-orange-500 to-red-500'
             )}>
@@ -192,7 +262,7 @@ export function VendorAccountDetails() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">KYC Status</p>
-              <p className="text-xl font-bold capitalize">{accountData.kycStatus}</p>
+              <p className="text-xl font-bold capitalize">{kycStatus}</p>
             </div>
           </div>
         </Card>
@@ -213,16 +283,16 @@ export function VendorAccountDetails() {
                 </p>
               </div>
             </div>
-            <Badge className={cn('gap-2 px-4 py-2', getStripeStatusColor(accountData.stripeStatus))}>
-              {getStripeStatusIcon(accountData.stripeStatus)}
-              {accountData.stripeStatus.charAt(0).toUpperCase() + accountData.stripeStatus.slice(1)}
+            <Badge className={cn('gap-2 px-4 py-2', getStripeStatusColor(stripeStatus))}>
+              {getStripeStatusIcon(stripeStatus)}
+              {stripeStatus.charAt(0).toUpperCase() + stripeStatus.slice(1)}
             </Badge>
           </div>
         </div>
 
         <div className="p-6 space-y-6">
           {/* Stripe Account Info */}
-          {accountData.stripeStatus === 'verified' ? (
+          {stripeStatus === 'verified' ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800">
@@ -233,20 +303,20 @@ export function VendorAccountDetails() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Account ID:</span>
-                      <span className="font-mono font-semibold">{accountData.stripeAccountId}</span>
+                      <span className="font-mono font-semibold text-xs">{accountData?.stripeAccountId || 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Payouts:</span>
-                      <Badge className="bg-green-600 text-white">
+                      <Badge className={accountData?.stripePayoutsEnabled ? 'bg-green-600 text-white' : 'bg-gray-400 text-white'}>
                         <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Enabled
+                        {accountData?.stripePayoutsEnabled ? 'Enabled' : 'Disabled'}
                       </Badge>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Charges:</span>
-                      <Badge className="bg-green-600 text-white">
+                      <Badge className={accountData?.stripeChargesEnabled ? 'bg-green-600 text-white' : 'bg-gray-400 text-white'}>
                         <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Enabled
+                        {accountData?.stripeChargesEnabled ? 'Enabled' : 'Disabled'}
                       </Badge>
                     </div>
                   </div>
@@ -260,9 +330,13 @@ export function VendorAccountDetails() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Status:</span>
-                      <Badge className="bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+                      <Badge className={cn(
+                        kycStatus === 'verified' 
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                          : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                      )}>
                         <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Approved
+                        {kycStatus === 'verified' ? 'Verified' : 'Pending'}
                       </Badge>
                     </div>
                     <div className="flex justify-between">
@@ -270,8 +344,8 @@ export function VendorAccountDetails() {
                       <span className="font-semibold">Stripe</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Last Updated:</span>
-                      <span className="font-semibold">{accountData.lastUpdated}</span>
+                      <span className="text-muted-foreground">Onboarding:</span>
+                      <span className="font-semibold">{accountData?.stripeOnboardingComplete ? 'Complete' : 'Incomplete'}</span>
                     </div>
                   </div>
                 </div>
@@ -299,10 +373,20 @@ export function VendorAccountDetails() {
               </p>
               <Button
                 onClick={handleStartStripeOnboarding}
+                disabled={isGeneratingLink}
                 className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-8"
               >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Start Stripe Onboarding
+                {isGeneratingLink ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Start Stripe Onboarding
+                  </>
+                )}
               </Button>
               <p className="text-xs text-muted-foreground mt-4">
                 You'll be redirected to Stripe to complete identity verification (KYC)
@@ -313,7 +397,7 @@ export function VendorAccountDetails() {
       </Card>
 
       {/* Bank Account Details */}
-      {accountData.stripeStatus === 'verified' && (
+      {stripeStatus === 'verified' && (
         <Card className="overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-6 text-white">
             <div className="flex items-center justify-between">

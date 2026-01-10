@@ -7,6 +7,7 @@ import {
   calculateSupplierPayout,
   calculateVendorPayout,
 } from '../../../../src/lib/payout-calculator'
+import { createTransfer } from '../../../../src/lib/stripe'
 
 // GET /api/admin/payouts - List all payouts
 export async function GET(request: NextRequest) {
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user
+    // Get user with Stripe account info
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -79,11 +80,36 @@ export async function POST(request: NextRequest) {
         name: true,
         role: true,
         baseCurrency: true,
+        stripeAccountId: true,
+        stripeKycStatus: true,
+        stripePayoutsEnabled: true,
       },
     })
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // Validate Stripe account for payout
+    if (!user.stripeAccountId) {
+      return NextResponse.json(
+        { error: 'User has not connected Stripe account' },
+        { status: 400 }
+      )
+    }
+
+    if (user.stripeKycStatus !== 'verified') {
+      return NextResponse.json(
+        { error: 'User KYC verification is not complete' },
+        { status: 400 }
+      )
+    }
+
+    if (!user.stripePayoutsEnabled) {
+      return NextResponse.json(
+        { error: 'Payouts are not enabled for this account' },
+        { status: 400 }
+      )
     }
 
     // Verify user role matches payout type
@@ -150,13 +176,10 @@ export async function POST(request: NextRequest) {
       payoutAmounts = await calculateVendorPayout(filteredItems)
     }
 
-    // Get order item IDs
-    const orderItemIds = filteredItems.map((item) => item.id)
-
-    // Create payout
+    // Create payout record
     const payout = await prisma.payout.create({
       data: {
-        amount: payoutAmounts.netAmount, // Legacy field
+        amount: payoutAmounts.netAmount,
         userId,
         payoutType,
         orderIds,
@@ -167,8 +190,8 @@ export async function POST(request: NextRequest) {
         recipientCurrency: user.baseCurrency || 'USD',
         recipientName: user.name,
         recipientType: payoutType,
-        status: PayoutStatus.PENDING,
-        method: 'stripe', // Default to Stripe
+        status: PayoutStatus.PROCESSING,
+        method: 'stripe',
       },
       include: {
         user: {
@@ -181,7 +204,56 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ payout }, { status: 201 })
+    // Create Stripe Transfer
+    try {
+      const transfer = await createTransfer(
+        payoutAmounts.netAmount,
+        user.stripeAccountId!,
+        'usd',
+        {
+          payoutId: payout.id,
+          userId: userId,
+          payoutType: payoutType,
+        }
+      )
+
+      // Update payout with transfer ID
+      const updatedPayout = await prisma.payout.update({
+        where: { id: payout.id },
+        data: {
+          transferId: transfer.id,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      })
+
+      return NextResponse.json({ payout: updatedPayout }, { status: 201 })
+    } catch (transferError: any) {
+      // If transfer fails, update payout status to FAILED
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: {
+          status: PayoutStatus.FAILED,
+        },
+      })
+
+      console.error('Stripe transfer error:', transferError)
+      return NextResponse.json(
+        {
+          error: 'Failed to process payout transfer',
+          details: transferError.message,
+          payout,
+        },
+        { status: 500 }
+      )
+    }
   } catch (error: any) {
     console.error('Create payout error:', error)
     return NextResponse.json(

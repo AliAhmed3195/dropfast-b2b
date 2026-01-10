@@ -4,6 +4,7 @@ import { OrderStatus, PaymentStatus } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { convertToUSD, getExchangeRate } from '../../../../src/lib/currency'
 import { calculatePlatformFee, calculateStripeFee, getPlatformConfig } from '../../../../src/lib/platform-config'
+import { updatePaymentIntentMetadata } from '../../../../src/lib/stripe'
 
 // POST /api/public/orders - Create order from public store
 export async function POST(request: NextRequest) {
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest) {
       shippingPhone,
       // Payment
       paymentMethod,
+      paymentIntentId, // Stripe PaymentIntent ID (optional)
       // Items
       items, // Array of { productId, storeProductId, quantity, price, productName, productImage, currency }
       // Totals
@@ -247,6 +249,8 @@ export async function POST(request: NextRequest) {
         status: OrderStatus.PENDING,
         paymentMethod: paymentMethod || 'credit_card',
         paymentStatus: PaymentStatus.PENDING,
+        // Payment Intent
+        paymentIntentId: paymentIntentId || null,
         // Shipping
         shippingFullName,
         shippingAddress,
@@ -276,6 +280,21 @@ export async function POST(request: NextRequest) {
         },
       },
     })
+
+    // Update PaymentIntent metadata with orderId (if paymentIntentId exists)
+    if (paymentIntentId) {
+      try {
+        await updatePaymentIntentMetadata(paymentIntentId, {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          customerEmail: customerEmail,
+          customerName: customerName || '',
+        })
+      } catch (error) {
+        // Log error but don't fail order creation
+        console.error('Failed to update PaymentIntent metadata:', error)
+      }
+    }
 
     return NextResponse.json(
       {

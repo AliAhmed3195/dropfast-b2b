@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyWebhookSignature } from '../../../../src/lib/stripe'
 import { prisma } from '../../../../src/lib/prisma'
-import { PaymentStatus } from '@prisma/client'
+import { PaymentStatus, PayoutStatus } from '@prisma/client'
 
 // POST /api/webhooks/stripe - Handle Stripe webhooks
 export async function POST(request: NextRequest) {
@@ -62,11 +62,161 @@ export async function POST(request: NextRequest) {
         const orderId = paymentIntent.metadata?.orderId
 
         if (orderId) {
-          // Update order payment status
           await prisma.order.update({
             where: { id: orderId },
             data: {
               paymentStatus: PaymentStatus.FAILED,
+            },
+          })
+        }
+        break
+      }
+
+      case 'payment_intent.canceled': {
+        const paymentIntent = event.data.object as any
+        const orderId = paymentIntent.metadata?.orderId
+
+        if (orderId) {
+          await prisma.order.update({
+            where: { id: orderId },
+            data: {
+              paymentStatus: PaymentStatus.FAILED,
+            },
+          })
+        }
+        break
+      }
+
+      case 'account.updated': {
+        const account = event.data.object as any
+        const accountId = account.id
+
+        const user = await prisma.user.findFirst({
+          where: { stripeAccountId: accountId },
+        })
+
+        if (user) {
+          // Determine KYC status
+          let kycStatus = 'pending'
+          if (account.charges_enabled && account.payouts_enabled) {
+            kycStatus = 'verified'
+          } else if (account.details_submitted === false) {
+            kycStatus = 'pending'
+          }
+
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              stripeKycStatus: kycStatus,
+              stripeOnboardingComplete: account.details_submitted || false,
+              stripeChargesEnabled: account.charges_enabled || false,
+              stripePayoutsEnabled: account.payouts_enabled || false,
+            },
+          })
+        }
+        break
+      }
+
+      case 'capability.updated': {
+        const capability = event.data.object as any
+        const accountId = capability.account
+
+        const user = await prisma.user.findFirst({
+          where: { stripeAccountId: accountId },
+        })
+
+        if (user) {
+          const updateData: any = {}
+          if (capability.type === 'card_payments') {
+            updateData.stripeChargesEnabled = capability.status === 'active'
+          } else if (capability.type === 'transfers') {
+            updateData.stripePayoutsEnabled = capability.status === 'active'
+          }
+
+          if (Object.keys(updateData).length > 0) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: updateData,
+            })
+          }
+        }
+        break
+      }
+
+      case 'transfer.created': {
+        const transfer = event.data.object as any
+        const transferId = transfer.id
+
+        // Find payout by transferId
+        const payout = await prisma.payout.findFirst({
+          where: { transferId: transferId },
+        })
+
+        if (payout) {
+          // Transfer created, status should already be PROCESSING
+          // But update transferId if not set
+          await prisma.payout.update({
+            where: { id: payout.id },
+            data: {
+              transferId: transferId,
+              status: PayoutStatus.PROCESSING,
+            },
+          })
+        }
+        break
+      }
+
+      case 'transfer.updated': {
+        const transfer = event.data.object as any
+        const transferId = transfer.id
+        const transferStatus = transfer.status
+
+        const payout = await prisma.payout.findFirst({
+          where: { transferId: transferId },
+        })
+
+        if (payout) {
+          // Update payout status based on transfer status
+          if (transferStatus === 'paid') {
+            await prisma.payout.update({
+              where: { id: payout.id },
+              data: {
+                status: PayoutStatus.COMPLETED,
+                processedAt: new Date(),
+              },
+            })
+          } else if (transferStatus === 'failed' || transferStatus === 'canceled') {
+            await prisma.payout.update({
+              where: { id: payout.id },
+              data: {
+                status: PayoutStatus.FAILED,
+              },
+            })
+          } else if (transferStatus === 'pending') {
+            await prisma.payout.update({
+              where: { id: payout.id },
+              data: {
+                status: PayoutStatus.PROCESSING,
+              },
+            })
+          }
+        }
+        break
+      }
+
+      case 'transfer.reversed': {
+        const transfer = event.data.object as any
+        const transferId = transfer.id
+
+        const payout = await prisma.payout.findFirst({
+          where: { transferId: transferId },
+        })
+
+        if (payout) {
+          await prisma.payout.update({
+            where: { id: payout.id },
+            data: {
+              status: PayoutStatus.FAILED,
             },
           })
         }

@@ -371,6 +371,9 @@ model Order {
   // Currency Info (for display only)
   customerCurrency String? // Customer's currency preference
 
+  // Payment Intent (Stripe)
+  paymentIntentId String? // Stripe PaymentIntent ID for tracking and refunds
+
   // Tracking
   trackingNumber String?
   shippedAt      DateTime?
@@ -498,6 +501,7 @@ model Payout {
   method         String // stripe, bank_transfer, paypal
   accountDetails Json? // Encrypted bank/payment details
   processedAt    DateTime?
+  transferId     String? // Stripe Transfer ID
 
   // Payout Details (USD)
   orderIds          String[] @default([]) // Array of order IDs
