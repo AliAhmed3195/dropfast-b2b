@@ -50,6 +50,7 @@ interface CartItem {
   storeName: string;
   shippingCost?: number;
   shippingMethods?: any;
+  sku?: string;
 }
 
 export function PublicStore({ storeData, onClose, initialView }: PublicStoreProps) {
@@ -57,10 +58,26 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
   const params = useParams();
   const slug = params.slug as string || storeData.slug;
   const [currentView, setCurrentView] = useState<PublicStoreView>(initialView || { type: 'landing' });
-  const [storeCart, setStoreCart] = useState<CartItem[]>([]);
+  
+  // Load cart from localStorage on mount
+  const [storeCart, setStoreCart] = useState<CartItem[]>(() => {
+    if (typeof window !== 'undefined' && slug) {
+      const saved = localStorage.getItem(`storeCart_${slug}`);
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+  
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<any>(storeData);
+  
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && slug) {
+      localStorage.setItem(`storeCart_${slug}`, JSON.stringify(storeCart));
+    }
+  }, [storeCart, slug]);
 
   // Fetch store and products from API
   useEffect(() => {
@@ -131,6 +148,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
           storeName: store?.name || storeData.name,
           shippingCost: (product as any).shippingCost || 0,
           shippingMethods: (product as any).shippingMethods || null,
+          sku: product.sku || (product as any).sku || undefined,
         },
       ]);
     }
@@ -250,6 +268,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
             relatedProducts={relatedProducts}
             onAddToCart={handleAddToCart}
             onBack={() => router.push(`/store/${slug}`)}
+            storeSlug={slug}
           />
         );
 
@@ -262,6 +281,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
             onRemoveItem={handleRemoveFromCart}
             onContinueShopping={() => router.push(`/store/${slug}`)}
             onProceedToCheckout={() => router.push(`/store/${slug}/checkout`)}
+            storeSlug={slug}
           />
         );
 

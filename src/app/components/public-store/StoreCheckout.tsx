@@ -13,6 +13,7 @@ import {
   Phone,
   Home,
   MapPin,
+  ShieldCheck,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -73,7 +74,7 @@ export function StoreCheckout({
   });
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = 10;
+  const shipping = subtotal >= 50 ? 0 : 9.99;
   const tax = subtotal * 0.1;
   const total = subtotal + shipping + tax;
 
@@ -237,6 +238,21 @@ export function StoreCheckout({
                     )}
                   </div>
                 </div>
+
+                <div className="flex items-center gap-2 p-4 bg-blue-50 rounded-lg">
+                  <Lock className="w-5 h-5 text-blue-600" />
+                  <span className="text-sm text-blue-700">
+                    Your payment information is encrypted and secure
+                  </span>
+                </div>
+
+                <label className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                  />
+                  <span className="text-sm text-gray-700">Save card for future purchases</span>
+                </label>
               </div>
             )}
 
@@ -480,112 +496,154 @@ export function StoreCheckout({
                 animate={{ opacity: 1, x: 0 }}
                 className="space-y-6"
               >
+                {/* Shipping Address Card */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Review Your Order</CardTitle>
+                    <CardTitle>Shipping Address</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Shipping Info */}
-                    <div>
-                      <h3 className="font-semibold mb-2">Shipping Address</h3>
-                      <p className="text-sm text-gray-600">
-                        {formData.fullName}<br />
-                        {formData.address}<br />
-                        {formData.city}, {formData.state} {formData.zipCode}<br />
-                        {formData.country}
-                      </p>
+                  <CardContent>
+                    <div className="text-gray-700">
+                      <p className="font-medium">{formData.fullName}</p>
+                      <p>{formData.address}</p>
+                      <p>{formData.city}, {formData.state} {formData.zipCode}</p>
+                      <p>{formData.country}</p>
+                      <p className="mt-2">{formData.email}</p>
+                      <p>{formData.phone}</p>
                     </div>
+                    <button
+                      onClick={() => setCurrentStep(1)}
+                      className="mt-4 text-primary hover:underline text-sm font-medium"
+                      style={{ color: storeTheme.primaryColor }}
+                    >
+                      Edit Address
+                    </button>
+                  </CardContent>
+                </Card>
 
-                    <Separator />
-
-                    {/* Payment Info */}
-                    <div>
-                      <h3 className="font-semibold mb-2">Payment Method</h3>
-                      <p className="text-sm text-gray-600 capitalize">
-                        {formData.paymentMethod.replace('_', ' ')}
-                      </p>
+                {/* Payment Method Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Payment Method</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-6 h-6 text-gray-600" />
+                      <span className="text-gray-700 capitalize">
+                        {formData.paymentMethod === 'credit_card' 
+                          ? 'Credit/Debit Card' 
+                          : formData.paymentMethod.replace('_', ' ')}
+                      </span>
                     </div>
+                    <button
+                      onClick={() => setCurrentStep(2)}
+                      className="mt-4 text-primary hover:underline text-sm font-medium"
+                      style={{ color: storeTheme.primaryColor }}
+                    >
+                      Edit Payment
+                    </button>
+                  </CardContent>
+                </Card>
 
-                    <Separator />
-
-                    {/* Order Items */}
-                    <div>
-                      <h3 className="font-semibold mb-3">Order Items</h3>
-                      <div className="space-y-3">
-                        {cartItems.map((item) => (
-                          <div key={item.productId} className="flex gap-4 text-sm">
+                {/* Order Items Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Order Items ({cartItems.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {cartItems.map((item) => (
+                        <div key={item.productId} className="flex gap-4">
+                          <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                             <img
                               src={item.productImage || 'https://via.placeholder.com/60'}
                               alt={item.productName}
-                              className="w-16 h-16 rounded object-cover"
+                              className="w-full h-full object-cover"
                             />
-                            <div className="flex-1">
-                              <p className="font-medium">{item.productName}</p>
-                              <p className="text-gray-500">Qty: {item.quantity}</p>
-                            </div>
-                            <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3 pt-4">
-                      <Button variant="outline" onClick={() => setCurrentStep(2)} className="flex-1">
-                        Back
-                      </Button>
-                      <Button
-                        className="flex-1 text-white gap-2"
-                        onClick={() => onPlaceOrder(formData, paymentIntentId)}
-                        style={{ backgroundColor: storeTheme.primaryColor }}
-                      >
-                        <Lock className="w-4 h-4" />
-                        Place Order
-                      </Button>
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">{item.productName}</div>
+                            <div className="text-sm text-gray-600">Qty: {item.quantity}</div>
+                          </div>
+                          <div className="font-medium text-gray-900">
+                            ${(item.price * item.quantity).toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Place Order Button */}
+                <button
+                  onClick={() => onPlaceOrder(formData, paymentIntentId)}
+                  className="w-full px-6 py-4 text-white font-semibold rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2"
+                  style={{ backgroundColor: storeTheme.primaryColor }}
+                >
+                  <ShieldCheck className="w-5 h-5" />
+                  Place Order - ${total.toFixed(2)}
+                </button>
+
+                <p className="text-sm text-gray-600 text-center">
+                  By placing this order, you agree to our Terms of Service and Privacy Policy
+                </p>
               </motion.div>
             )}
           </div>
 
           {/* Order Summary Sidebar */}
           <div className="lg:col-span-1">
-            <Card className="sticky top-4">
+            <Card className="sticky top-24">
               <CardHeader>
                 <CardTitle>Order Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal ({cartItems.length} items)</span>
+                  <div className="flex justify-between text-sm text-gray-700">
+                    <span>Subtotal ({cartItems.length} items)</span>
                     <span className="font-medium">${subtotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Shipping</span>
-                    <span className="font-medium">${shipping.toFixed(2)}</span>
+                  <div className="flex justify-between text-sm text-gray-700">
+                    <span>Shipping</span>
+                    <span className="font-medium">
+                      {shipping === 0 ? (
+                        <span className="text-green-600">FREE</span>
+                      ) : (
+                        `$${shipping.toFixed(2)}`
+                      )}
+                    </span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Tax (10%)</span>
+                  <div className="flex justify-between text-sm text-gray-700">
+                    <span>Tax (10%)</span>
                     <span className="font-medium">${tax.toFixed(2)}</span>
                   </div>
                   
                   <Separator />
                   
-                  <div className="flex justify-between text-lg">
-                    <span className="font-bold">Total</span>
-                    <span
-                      className="font-bold text-2xl"
-                      style={{ color: storeTheme.primaryColor }}
-                    >
-                      ${total.toFixed(2)}
-                    </span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-lg font-semibold text-gray-900">Total</span>
+                    <span className="text-2xl font-bold text-gray-900">${total.toFixed(2)}</span>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Lock className="w-4 h-4" />
-                    <span>Secure checkout powered by FastDrop</span>
+                {/* Trust Badges */}
+                <div className="space-y-3 pt-4 border-t border-gray-200">
+                  <div className="flex items-center gap-3 text-sm text-gray-700">
+                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <span>Secure checkout</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-gray-700">
+                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <span>Money-back guarantee</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-gray-700">
+                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <span>Encrypted payment</span>
                   </div>
                 </div>
               </CardContent>
