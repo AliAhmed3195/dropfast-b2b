@@ -50,6 +50,37 @@ interface ProductFormProps {
   product?: any;
 }
 
+// Predefined common tags
+const COMMON_TAGS = [
+  'wireless',
+  'bluetooth',
+  'portable',
+  'waterproof',
+  'rechargeable',
+  'eco-friendly',
+  'premium',
+  'best-seller',
+  'new-arrival',
+  'sale',
+  'limited-edition',
+  'fast-shipping',
+  'free-shipping',
+  'warranty-included',
+  'electronics',
+  'accessories',
+  'gadgets',
+  'smart-device',
+  'usb-c',
+  'compatible',
+  'durable',
+  'lightweight',
+  'compact',
+  'professional',
+  'home-office',
+  'travel-friendly',
+  'gift-ready',
+];
+
 // Stepper steps configuration
 const STEPS = [
   { number: 1, title: 'Basic Info', icon: Package, description: 'Product information' },
@@ -89,6 +120,7 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
   const [subcategory, setSubcategory] = useState(product?.subcategory || '');
   const [tags, setTags] = useState<string[]>(product?.tags || []);
   const [tagInput, setTagInput] = useState('');
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   
   // Product Details
   const [productCondition, setProductCondition] = useState(product?.condition || 'new');
@@ -96,6 +128,8 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
   const [leadTime, setLeadTime] = useState(product?.leadTime || '');
   
   // Shipping
+  const [shippingMethodName, setShippingMethodName] = useState(product?.shippingMethodName || '');
+  const [estimatedDeliveryDays, setEstimatedDeliveryDays] = useState(product?.estimatedDeliveryDays || '');
   const [weight, setWeight] = useState(product?.weight || '');
   const [weightUnit, setWeightUnit] = useState(product?.weightUnit || 'kg');
   const [length, setLength] = useState(product?.length || '');
@@ -134,16 +168,28 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     }
   }, [usdCostPrice, usdSellingPrice]);
 
-  const handleAddTag = () => {
-    if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-      setTags([...tags, tagInput.trim()]);
+  const handleAddTag = (tag?: string) => {
+    const newTag = tag || tagInput.trim();
+    if (newTag && !tags.includes(newTag)) {
+      setTags([...tags, newTag]);
       setTagInput('');
+      setShowTagSuggestions(false);
+      toast.success(`Tag "${newTag}" added successfully!`);
+    } else if (newTag && tags.includes(newTag)) {
+      toast.error(`Tag "${newTag}" is already added!`);
     }
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
+
+  // Filter suggestions based on input
+  const filteredSuggestions = COMMON_TAGS.filter(
+    tag => 
+      tag.toLowerCase().includes(tagInput.toLowerCase()) && 
+      !tags.includes(tag)
+  ).slice(0, 8);
 
   const handleAddVariant = () => {
     setVariants([
@@ -213,6 +259,14 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
         return true;
 
       case 4: // Shipping
+        if (!shippingMethodName.trim()) {
+          toast.error('Shipping method name is required');
+          return false;
+        }
+        if (!estimatedDeliveryDays || parseInt(estimatedDeliveryDays) <= 0) {
+          toast.error('Valid estimated delivery days is required');
+          return false;
+        }
         if (!weight || parseFloat(weight) <= 0) {
           toast.error('Valid weight is required');
           return false;
@@ -254,13 +308,28 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     }
   };
 
+  // Prevent Enter key from triggering form submission
+  const handleInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && currentStep < 5) {
+      e.preventDefault();
+      handleNext();
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Only submit if on Step 5 (last step)
+    if (currentStep !== 5) {
+      console.warn('Form submission attempted from Step', currentStep, '- prevented');
+      return;
+    }
     
     // Validate all steps before submission
     for (let i = 1; i <= 5; i++) {
       if (!validateStep(i)) {
         setCurrentStep(i);
+        toast.error(`Please complete Step ${i} first`);
         return;
       }
     }
@@ -292,6 +361,8 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
       productCondition,
       warrantyPeriod,
       leadTime,
+      shippingMethodName,
+      estimatedDeliveryDays: parseInt(estimatedDeliveryDays),
       weight: parseFloat(weight),
       weightUnit,
       dimensions: {
@@ -440,6 +511,7 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         onSubmit={handleSubmit}
+        onKeyDown={handleInputKeyDown}
         className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8"
       >
         <AnimatePresence mode="wait">
@@ -778,35 +850,109 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
 
                 <div className="space-y-2">
                   <Label htmlFor="tags">Product Tags</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="tags"
-                      value={tagInput}
-                      onChange={(e) => setTagInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                      placeholder="Add tags (e.g., wireless, bluetooth)"
-                      className="h-11"
-                    />
-                    <Button type="button" onClick={handleAddTag} variant="outline">
-                      <Plus className="w-4 h-4" />
-                    </Button>
+                  <div className="relative">
+                    <div className="flex gap-2">
+                      <Input
+                        id="tags"
+                        value={tagInput}
+                        onChange={(e) => {
+                          setTagInput(e.target.value);
+                          setShowTagSuggestions(e.target.value.length > 0);
+                        }}
+                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                        onFocus={() => setShowTagSuggestions(tagInput.length > 0)}
+                        onBlur={() => setTimeout(() => setShowTagSuggestions(false), 200)}
+                        placeholder="Add tags (e.g., wireless, bluetooth)"
+                        className="h-11"
+                      />
+                      <Button type="button" onClick={() => handleAddTag()} variant="outline">
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    
+                    {/* Tag Suggestions Dropdown */}
+                    {showTagSuggestions && filteredSuggestions.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute z-50 w-full mt-2 bg-white dark:bg-slate-800 border-2 border-indigo-200 dark:border-indigo-700 rounded-xl shadow-2xl max-h-60 overflow-y-auto"
+                      >
+                        <div className="p-2">
+                          <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 px-3 py-2 flex items-center gap-2">
+                            <Tag className="w-4 h-4" />
+                            Suggested Tags ({filteredSuggestions.length})
+                          </div>
+                          {filteredSuggestions.map((suggestion, index) => (
+                            <motion.button
+                              key={index}
+                              type="button"
+                              onClick={() => handleAddTag(suggestion)}
+                              whileHover={{ x: 4 }}
+                              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 dark:hover:from-indigo-900/20 dark:hover:to-purple-900/20 transition-all flex items-center gap-3 group border border-transparent hover:border-indigo-200 dark:hover:border-indigo-700"
+                            >
+                              <div className="p-1.5 rounded-md bg-indigo-100 dark:bg-indigo-900/30 group-hover:bg-indigo-200 dark:group-hover:bg-indigo-800/50 transition-colors">
+                                <Tag className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                              </div>
+                              <span className="font-semibold text-sm text-slate-700 dark:text-slate-300 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">
+                                {suggestion}
+                              </span>
+                              <Plus className="w-4 h-4 ml-auto text-muted-foreground group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
+                            </motion.button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
+                  
+                  {/* Selected Tags */}
                   {tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
+                    <div className="flex flex-wrap gap-2 mt-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
                       {tags.map((tag, index) => (
-                        <Badge key={index} variant="outline" className="px-3 py-1">
-                          {tag}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTag(tag)}
-                            className="ml-2 hover:text-red-500"
+                        <motion.div
+                          key={index}
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0, opacity: 0 }}
+                        >
+                          <Badge 
+                            variant="outline" 
+                            className="px-3 py-1.5 bg-white dark:bg-slate-900 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-medium"
                           >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </Badge>
+                            <Tag className="w-3 h-3 mr-1" />
+                            {tag}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTag(tag)}
+                              className="ml-2 hover:text-red-500 transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        </motion.div>
                       ))}
                     </div>
                   )}
+                  
+                  {/* Quick Add Common Tags */}
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <span className="text-xs font-semibold text-muted-foreground self-center">
+                      Quick add:
+                    </span>
+                    {COMMON_TAGS.filter(tag => !tags.includes(tag)).slice(0, 8).map((tag, index) => (
+                      <motion.button
+                        key={index}
+                        type="button"
+                        onClick={() => handleAddTag(tag)}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 hover:from-indigo-100 hover:to-purple-100 dark:hover:from-indigo-900/40 dark:hover:to-purple-900/40 text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-100 transition-all font-medium border border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 dark:hover:border-indigo-600 shadow-sm hover:shadow-md"
+                      >
+                        <Plus className="w-3 h-3 inline mr-1" />
+                        {tag}
+                      </motion.button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t">
@@ -889,6 +1035,43 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
               </div>
 
               <div className="space-y-4">
+                {/* Shipping Method Name & Estimated Delivery Days */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="shippingMethodName">
+                      Shipping Method Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="shippingMethodName"
+                      value={shippingMethodName}
+                      onChange={(e) => setShippingMethodName(e.target.value)}
+                      placeholder="e.g., Standard Shipping, Express Delivery"
+                      className="h-11"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Enter the shipping method or delivery option name
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="estimatedDeliveryDays">
+                      Estimated Delivery Days <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="estimatedDeliveryDays"
+                      type="number"
+                      min="1"
+                      value={estimatedDeliveryDays}
+                      onChange={(e) => setEstimatedDeliveryDays(e.target.value)}
+                      placeholder="e.g., 3, 5, 7"
+                      className="h-11"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Number of days for estimated delivery
+                    </p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="weight">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
@@ -80,18 +81,30 @@ const navigationByRole: Record<UserRole, NavItem[]> = {
 export function Sidebar() {
   const { user } = useAuth();
   const { currentView, setView } = useNavigation();
+  const router = useRouter();
   const navigation = user?.role ? navigationByRole[user.role] : [];
   
-  // Load collapsed state from localStorage
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    const saved = localStorage.getItem('sidebar-collapsed');
-    return saved === 'true';
-  });
+  // Load collapsed state from localStorage (client-side only)
+  const [isCollapsed, setIsCollapsed] = useState(false); // Default to expanded
+  const [isMounted, setIsMounted] = useState(false); // Track first mount
+  
+  // Load from localStorage on client side only
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebar-collapsed');
+      if (saved === 'true') {
+        setIsCollapsed(true);
+      }
+      setIsMounted(true); // Mark as mounted after loading localStorage
+    }
+  }, []);
 
   // Save to localStorage when state changes
   useEffect(() => {
-    localStorage.setItem('sidebar-collapsed', String(isCollapsed));
-  }, [isCollapsed]);
+    if (typeof window !== 'undefined' && isMounted) {
+      localStorage.setItem('sidebar-collapsed', String(isCollapsed));
+    }
+  }, [isCollapsed, isMounted]);
 
   // Keyboard shortcut: Ctrl+B to toggle sidebar
   useEffect(() => {
@@ -112,10 +125,8 @@ export function Sidebar() {
 
   return (
     <motion.aside
-      initial={{ x: -20, opacity: 0 }}
+      initial={false} // ✅ Disable initial animation to prevent re-triggering
       animate={{ 
-        x: 0, 
-        opacity: 1,
         width: isCollapsed ? '80px' : '288px',
       }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
@@ -143,14 +154,40 @@ export function Sidebar() {
           return (
             <motion.button
               key={item.label}
-              initial={{ x: -30, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ 
-                delay: index * 0.05,
-                type: "spring",
-                stiffness: 100,
+              initial={false} // ✅ Disable initial animation
+              onClick={() => {
+                // Map views to routes
+                const viewToRoute: Record<string, string> = {
+                  'dashboard': 'overview',
+                  'users': 'users',
+                  'vendor-management': 'vendors',
+                  'supplier-management': 'suppliers',
+                  'orders': 'orders',
+                  'payouts': 'payouts',
+                  'inventory': 'inventory',
+                  'categories': 'categories',
+                  'tags': 'tags',
+                  'invoice-templates': 'invoices',
+                  'analytics': 'analytics',
+                  'reports': 'reports',
+                  'settings': 'settings',
+                  'products': 'products',
+                  'stores': 'stores',
+                  'invoices': 'invoices',
+                  'account-details': 'account-details',
+                  'customers': 'customers',
+                  'browse': 'browse',
+                  'my-orders': 'my-orders',
+                  'wishlist': 'wishlist',
+                };
+
+                const route = viewToRoute[item.view];
+                if (route && user?.role) {
+                  router.push(`/dashboard/${user.role}/${route}`);
+                } else {
+                  setView(item.view as any);
+                }
               }}
-              onClick={() => setView(item.view as any)}
               whileHover={{ 
                 x: isCollapsed ? 0 : 2,
                 transition: { duration: 0.2 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText,
@@ -39,6 +39,8 @@ import {
 } from './ui/table';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 // Mock invoices data
 const invoices = [
@@ -150,6 +152,7 @@ export function VendorInvoices() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const invoiceRef = useRef<HTMLDivElement>(null);
 
   const handleViewInvoice = (invoice: any) => {
     setSelectedInvoice(invoice);
@@ -160,6 +163,272 @@ export function VendorInvoices() {
     toast.success('Invoice Sent!', {
       description: `Invoice ${invoice.id} sent to ${invoice.customer.email}`,
     });
+  };
+
+  const handleDownloadInvoice = async (invoice: any) => {
+    if (!invoiceRef.current) {
+      toast.error('Invoice preview not found');
+      console.error('Invoice ref not found');
+      return;
+    }
+
+    console.log('Starting PDF generation for invoice:', invoice.id);
+    const loadingToast = toast.loading('Generating PDF...');
+
+    let wrapper: HTMLElement | null = null;
+    const originalStylesheets: HTMLElement[] = [];
+
+    try {
+      // Wait for rendering
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // STEP 1: Temporarily disable ALL document stylesheets
+      console.log('Disabling all stylesheets...');
+      document.querySelectorAll('style, link[rel="stylesheet"]').forEach((sheet) => {
+        const htmlSheet = sheet as HTMLElement;
+        if (htmlSheet.textContent?.includes('oklch') || 
+            htmlSheet.textContent?.includes('oklab') || 
+            htmlSheet.textContent?.includes('lch(') || 
+            htmlSheet.textContent?.includes('lab(') || 
+            htmlSheet.getAttribute('href')?.includes('tailwind')) {
+          originalStylesheets.push(htmlSheet);
+          htmlSheet.setAttribute('data-pdf-disabled', 'true');
+          if (htmlSheet.tagName === 'LINK') {
+            (htmlSheet as HTMLLinkElement).disabled = true;
+          } else {
+            htmlSheet.textContent = '';
+          }
+        }
+      });
+
+      // STEP 2: Create isolated wrapper
+      wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-9999px';
+      wrapper.style.top = '0';
+      wrapper.style.width = invoiceRef.current.offsetWidth + 'px';
+      wrapper.style.backgroundColor = '#ffffff';
+      wrapper.style.zIndex = '-1';
+      document.body.appendChild(wrapper);
+      console.log('Wrapper created');
+
+      // STEP 3: Clone the invoice
+      const clone = invoiceRef.current.cloneNode(true) as HTMLElement;
+      wrapper.appendChild(clone);
+
+      // STEP 4: Inject ONLY RGB/hex colors - comprehensive override
+      const overrideStyle = document.createElement('style');
+      overrideStyle.textContent = `
+        * { 
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        
+        /* Gradients */
+        .bg-gradient-to-r, 
+        [class*="gradient-to-r"],
+        [class*="from-purple"] { 
+          background: linear-gradient(to right, #9333ea, #4f46e5, #06b6d4) !important; 
+        }
+        
+        /* Purple shades */
+        [class*="purple-50"] { background-color: #faf5ff !important; }
+        [class*="purple-100"] { background-color: #f3e8ff !important; color: #7c3aed !important; }
+        [class*="purple-200"] { background-color: #e9d5ff !important; border-color: #e9d5ff !important; }
+        [class*="purple-500"] { background-color: #a855f7 !important; }
+        [class*="purple-600"], [class*="from-purple-600"], [class*="to-purple"] { 
+          background-color: #9333ea !important; 
+          color: #ffffff !important; 
+        }
+        [class*="purple-700"] { background-color: #7e22ce !important; }
+        [class*="text-purple"] { color: #9333ea !important; }
+        
+        /* Indigo shades */
+        [class*="indigo-50"] { background-color: #eef2ff !important; }
+        [class*="indigo-100"] { background-color: #e0e7ff !important; }
+        [class*="indigo-600"], [class*="via-indigo"], [class*="to-indigo"] { 
+          background-color: #4f46e5 !important; 
+          color: #ffffff !important; 
+        }
+        
+        /* Cyan/Blue shades */
+        [class*="cyan-50"] { background-color: #ecfeff !important; }
+        [class*="cyan-100"] { background-color: #cffafe !important; }
+        [class*="cyan-600"], [class*="to-cyan"] { 
+          background-color: #06b6d4 !important; 
+          color: #ffffff !important; 
+        }
+        [class*="blue-50"] { background-color: #eff6ff !important; }
+        [class*="blue-100"] { background-color: #dbeafe !important; }
+        [class*="blue-600"], [class*="from-blue"], [class*="to-blue"] { 
+          background-color: #2563eb !important; 
+          color: #ffffff !important; 
+        }
+        
+        /* Slate shades */
+        [class*="slate-50"] { background-color: #f8fafc !important; }
+        [class*="slate-100"] { background-color: #f1f5f9 !important; }
+        [class*="slate-200"] { 
+          background-color: #e2e8f0 !important; 
+          border-color: #e2e8f0 !important; 
+        }
+        [class*="slate-300"] { background-color: #cbd5e1 !important; }
+        [class*="slate-400"] { background-color: #94a3b8 !important; }
+        [class*="slate-500"] { background-color: #64748b !important; }
+        [class*="slate-600"] { background-color: #475569 !important; }
+        [class*="slate-700"] { 
+          background-color: #334155 !important; 
+          color: #ffffff !important;
+          border-color: #334155 !important;
+        }
+        [class*="slate-800"] { 
+          background-color: #1e293b !important; 
+          color: #ffffff !important;
+        }
+        [class*="slate-900"] { 
+          background-color: #0f172a !important; 
+          color: #ffffff !important;
+        }
+        
+        /* Other colors */
+        [class*="green-50"] { background-color: #f0fdf4 !important; }
+        [class*="green-600"], [class*="text-green"] { color: #16a34a !important; }
+        [class*="yellow-50"] { background-color: #fefce8 !important; }
+        [class*="yellow-400"] { background-color: #facc15 !important; }
+        [class*="orange-50"] { background-color: #fff7ed !important; }
+        [class*="orange-600"] { color: #ea580c !important; }
+        [class*="red-50"] { background-color: #fef2f2 !important; }
+        [class*="red-600"] { color: #dc2626 !important; }
+        
+        /* Base colors */
+        [class*="bg-white"], [class*="white"] { 
+          background-color: #ffffff !important; 
+          color: #000000 !important; 
+        }
+        [class*="text-white"] { color: #ffffff !important; }
+        [class*="bg-black"] { background-color: #000000 !important; }
+        [class*="text-black"] { color: #000000 !important; }
+        
+        /* Borders */
+        [class*="border-slate"] { border-color: #e2e8f0 !important; }
+        [class*="border-purple"] { border-color: #e9d5ff !important; }
+        
+        /* Text colors */
+        [class*="muted-foreground"] { color: #64748b !important; }
+      `;
+      wrapper.appendChild(overrideStyle);
+
+      // STEP 5: Remove any remaining problematic styles from clone
+      const cloneStyles = wrapper.querySelectorAll('style, link[rel="stylesheet"]');
+      cloneStyles.forEach(style => {
+        if (style !== overrideStyle) {
+          style.remove();
+        }
+      });
+
+      // STEP 6: Capture with html2canvas using MINIMAL CSS parsing
+      console.log('Starting html2canvas capture...');
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        foreignObjectRendering: false,
+        imageTimeout: 0,
+      });
+      console.log('Canvas captured successfully');
+
+      // STEP 7: Restore original stylesheets
+      console.log('Restoring original stylesheets...');
+      originalStylesheets.forEach((sheet) => {
+        sheet.removeAttribute('data-pdf-disabled');
+        if (sheet.tagName === 'LINK') {
+          (sheet as HTMLLinkElement).disabled = false;
+        }
+      });
+
+      // STEP 8: Cleanup wrapper
+      if (wrapper && wrapper.parentNode) {
+        document.body.removeChild(wrapper);
+        console.log('Wrapper cleaned up');
+      }
+
+      if (!canvas) {
+        throw new Error('Failed to capture invoice');
+      }
+
+      // Calculate PDF dimensions
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      // Create PDF
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      // Convert to image
+      const imgData = canvas.toDataURL('image/png', 1.0);
+
+      if (!imgData || imgData === 'data:,') {
+        throw new Error('Failed to convert invoice to image');
+      }
+
+      // Handle multi-page
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      // Download
+      const fileName = `${invoice.id.toLowerCase()}.pdf`;
+      pdf.save(fileName);
+
+      toast.dismiss(loadingToast);
+      toast.success('Invoice downloaded successfully!');
+      console.log('PDF generated and downloaded successfully');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      console.error('Error details:', error instanceof Error ? error.stack : error);
+      
+      // Restore stylesheets on error
+      console.log('Restoring stylesheets after error...');
+      originalStylesheets.forEach((sheet) => {
+        try {
+          sheet.removeAttribute('data-pdf-disabled');
+          if (sheet.tagName === 'LINK') {
+            (sheet as HTMLLinkElement).disabled = false;
+          }
+        } catch (restoreError) {
+          console.error('Error restoring stylesheet:', restoreError);
+        }
+      });
+      
+      // Cleanup wrapper on error
+      if (wrapper && wrapper.parentNode) {
+        try {
+          document.body.removeChild(wrapper);
+          console.log('Wrapper cleaned up after error');
+        } catch (cleanupError) {
+          console.error('Error cleaning up wrapper:', cleanupError);
+        }
+      }
+      
+      toast.dismiss(loadingToast);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to generate PDF: ${errorMessage}`);
+    }
   };
 
   const filteredInvoices = invoices.filter(invoice => {
@@ -406,7 +675,15 @@ export function VendorInvoices() {
                       >
                         <Send className="w-4 h-4" />
                       </Button>
-                      <Button size="sm" variant="ghost">
+                      <Button 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => {
+                          setSelectedInvoice(invoice);
+                          setPreviewOpen(true);
+                          setTimeout(() => handleDownloadInvoice(invoice), 500);
+                        }}
+                      >
                         <Download className="w-4 h-4" />
                       </Button>
                     </div>
@@ -440,7 +717,7 @@ export function VendorInvoices() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
             >
               {/* Modal Header */}
               <div className="sticky top-0 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white p-6 rounded-t-2xl z-10">
@@ -461,11 +738,11 @@ export function VendorInvoices() {
               </div>
 
               {/* Invoice Content */}
-              <div className="p-8">
-                <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-8">
+                <div ref={invoiceRef} className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden max-w-full">
                   {/* Invoice Header */}
-                  <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-8 text-white">
-                    <div className="flex items-start justify-between">
+                  <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-4 md:p-8 text-white">
+                    <div className="flex flex-col md:flex-row items-start justify-between gap-4">
                       <div>
                         <h1 className="text-4xl font-bold mb-2">INVOICE</h1>
                         <p className="text-white/90">Invoice #: {selectedInvoice.id}</p>
@@ -501,8 +778,8 @@ export function VendorInvoices() {
                     </div>
 
                     {/* Items Table */}
-                    <div>
-                      <table className="w-full">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-full">
                         <thead>
                           <tr className="border-b-2 border-purple-200">
                             <th className="text-left py-3 font-bold text-purple-600">ITEM</th>
@@ -597,7 +874,11 @@ export function VendorInvoices() {
                     <Send className="w-4 h-4 mr-2" />
                     Send Email
                   </Button>
-                  <Button variant="outline" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => handleDownloadInvoice(selectedInvoice)}
+                  >
                     <Download className="w-4 h-4 mr-2" />
                     Download PDF
                   </Button>

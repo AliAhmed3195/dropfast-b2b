@@ -19,6 +19,7 @@ import {
   Building2,
   Tag as TagIcon,
   Layers,
+  Plus,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -47,6 +48,7 @@ import {
   TableRow,
 } from './ui/table';
 import { toast } from 'sonner';
+import { ProductForm } from './ProductForm';
 
 // Mock product data
 const mockProducts = [
@@ -271,6 +273,8 @@ export function AdminInventory() {
   const [storeFilter, setStoreFilter] = useState('all'); // store filter
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
 
   const filteredProducts = mockProducts.filter(product => {
     const matchesSearch =
@@ -318,6 +322,35 @@ export function AdminInventory() {
     }
   };
 
+  const handleAddProduct = () => {
+    setEditingProduct(null);
+    setIsAddProductOpen(true);
+  };
+
+  const handleEditProduct = (product: any) => {
+    setEditingProduct(product);
+    setIsAddProductOpen(true);
+  };
+
+  const handleProductSubmit = (productData: any) => {
+    if (editingProduct) {
+      // Update existing product
+      toast.success('Product updated successfully!');
+      console.log('Updated product:', productData);
+    } else {
+      // Add new product
+      toast.success('Product added successfully!');
+      console.log('Added product:', productData);
+    }
+    setIsAddProductOpen(false);
+    setEditingProduct(null);
+  };
+
+  const handleProductCancel = () => {
+    setIsAddProductOpen(false);
+    setEditingProduct(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -328,6 +361,13 @@ export function AdminInventory() {
             View all products added by suppliers and vendors
           </p>
         </div>
+        <Button
+          onClick={handleAddProduct}
+          className="bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 text-white"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Product
+        </Button>
       </div>
 
       {/* Stats */}
@@ -511,14 +551,25 @@ export function AdminInventory() {
                     )}
                     <span className="truncate">{product.addedBy}</span>
                   </div>
-                  <Button
-                    className="w-full"
-                    size="sm"
-                    onClick={() => setSelectedProduct(product)}
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Details
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelectedProduct(product)}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View
+                    </Button>
+                    <Button
+                      className="flex-1 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 text-white"
+                      size="sm"
+                      onClick={() => handleEditProduct(product)}
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  </div>
                 </div>
               </Card>
             </motion.div>
@@ -591,13 +642,23 @@ export function AdminInventory() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedProduct(product)}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedProduct(product)}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditProduct(product)}
+                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </motion.tr>
               ))}
@@ -694,6 +755,57 @@ export function AdminInventory() {
               </Card>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Add/Edit Product Modal */}
+      <AnimatePresence>
+        {isAddProductOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={handleProductCancel}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="sticky top-0 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white p-6 rounded-t-2xl z-10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-2xl font-bold mb-1">
+                      {editingProduct ? 'Edit Product' : 'Add New Product'}
+                    </h3>
+                    <p className="text-purple-100">
+                      {editingProduct ? 'Update product information' : 'Add a new product to inventory'}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleProductCancel}
+                    className="text-white hover:bg-white/20"
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <ProductForm
+                  product={editingProduct}
+                  onClose={handleProductCancel}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

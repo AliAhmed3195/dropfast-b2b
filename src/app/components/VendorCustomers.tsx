@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
+import { toast } from 'sonner';
 
 // Mock customer data - will come from Supabase in production
 const mockCustomers = [
@@ -162,6 +163,7 @@ export function VendorCustomers() {
   const totalRevenue = mockCustomers.reduce((sum, c) => sum + c.totalSpent, 0);
   const avgOrderValue = totalRevenue / mockCustomers.reduce((sum, c) => sum + c.totalOrders, 0);
 
+  // Export data to CSV
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -178,10 +180,6 @@ export function VendorCustomers() {
             Manage your registered customers and view their activity
           </p>
         </div>
-        <Button className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white">
-          <Download className="w-4 h-4 mr-2" />
-          Export Data
-        </Button>
       </motion.div>
 
       {/* Stats Cards */}

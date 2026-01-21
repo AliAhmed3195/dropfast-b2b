@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText,
@@ -23,6 +23,8 @@ import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 // Mock invoice templates with unique layouts
 const invoiceTemplates = [
@@ -71,6 +73,7 @@ const invoiceTemplates = [
 export function AdminInvoiceTemplates() {
   const [templates, setTemplates] = useState(invoiceTemplates);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const invoiceRef = useRef<HTMLDivElement>(null);
 
   const handleSetDefault = (templateId: string) => {
     setTemplates(prev =>
@@ -92,6 +95,276 @@ export function AdminInvoiceTemplates() {
     );
     const template = templates.find(t => t.id === templateId);
     toast.success(template?.isActive ? 'Template deactivated' : 'Template activated');
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!invoiceRef.current || !selectedTemplate) {
+      toast.error('Invoice template not found');
+      console.error('Invoice ref or template not found');
+      return;
+    }
+
+    console.log('Starting PDF generation for template:', selectedTemplate.name);
+    const loadingToast = toast.loading('Generating PDF...');
+
+    let wrapper: HTMLElement | null = null;
+    const originalStylesheets: HTMLElement[] = [];
+
+    try {
+      // Wait for rendering
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // STEP 1: Temporarily disable ALL document stylesheets containing modern CSS
+      console.log('Disabling all problematic stylesheets...');
+      document.querySelectorAll('style, link[rel="stylesheet"]').forEach((sheet) => {
+        const htmlSheet = sheet as HTMLElement;
+        if (htmlSheet.textContent?.includes('oklch') || 
+            htmlSheet.textContent?.includes('oklab') || 
+            htmlSheet.textContent?.includes('lch(') || 
+            htmlSheet.textContent?.includes('lab(') || 
+            htmlSheet.getAttribute('href')?.includes('tailwind')) {
+          originalStylesheets.push(htmlSheet);
+          htmlSheet.setAttribute('data-pdf-disabled', 'true');
+          if (htmlSheet.tagName === 'LINK') {
+            (htmlSheet as HTMLLinkElement).disabled = true;
+          } else {
+            htmlSheet.textContent = '';
+          }
+        }
+      });
+
+      // STEP 2: Create isolated wrapper
+      wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-9999px';
+      wrapper.style.top = '0';
+      wrapper.style.width = invoiceRef.current.offsetWidth + 'px';
+      wrapper.style.backgroundColor = '#ffffff';
+      wrapper.style.zIndex = '-1';
+      document.body.appendChild(wrapper);
+      console.log('Wrapper created');
+
+      // STEP 3: Clone the template
+      const clone = invoiceRef.current.cloneNode(true) as HTMLElement;
+      wrapper.appendChild(clone);
+
+      // STEP 4: Inject comprehensive RGB/hex color overrides
+      const overrideStyle = document.createElement('style');
+      overrideStyle.textContent = `
+        * { 
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        
+        /* Gradients */
+        .bg-gradient-to-r, 
+        [class*="gradient-to-r"],
+        [class*="from-purple"] { 
+          background: linear-gradient(to right, #9333ea, #4f46e5, #06b6d4) !important; 
+        }
+        
+        /* Purple shades */
+        [class*="purple-50"] { background-color: #faf5ff !important; }
+        [class*="purple-100"] { background-color: #f3e8ff !important; color: #7c3aed !important; }
+        [class*="purple-200"] { background-color: #e9d5ff !important; border-color: #e9d5ff !important; }
+        [class*="purple-500"] { background-color: #a855f7 !important; }
+        [class*="purple-600"], [class*="from-purple-600"], [class*="to-purple"] { 
+          background-color: #9333ea !important; 
+          color: #ffffff !important; 
+        }
+        [class*="purple-700"] { background-color: #7e22ce !important; }
+        [class*="text-purple"] { color: #9333ea !important; }
+        
+        /* Indigo shades */
+        [class*="indigo-50"] { background-color: #eef2ff !important; }
+        [class*="indigo-100"] { background-color: #e0e7ff !important; }
+        [class*="indigo-600"], [class*="via-indigo"], [class*="to-indigo"] { 
+          background-color: #4f46e5 !important; 
+          color: #ffffff !important; 
+        }
+        
+        /* Cyan/Blue shades */
+        [class*="cyan-50"] { background-color: #ecfeff !important; }
+        [class*="cyan-100"] { background-color: #cffafe !important; }
+        [class*="cyan-600"], [class*="to-cyan"] { 
+          background-color: #06b6d4 !important; 
+          color: #ffffff !important; 
+        }
+        [class*="blue-50"] { background-color: #eff6ff !important; }
+        [class*="blue-100"] { background-color: #dbeafe !important; }
+        [class*="blue-600"], [class*="from-blue"], [class*="to-blue"] { 
+          background-color: #2563eb !important; 
+          color: #ffffff !important; 
+        }
+        
+        /* Slate shades */
+        [class*="slate-50"] { background-color: #f8fafc !important; }
+        [class*="slate-100"] { background-color: #f1f5f9 !important; }
+        [class*="slate-200"] { 
+          background-color: #e2e8f0 !important; 
+          border-color: #e2e8f0 !important; 
+        }
+        [class*="slate-300"] { background-color: #cbd5e1 !important; }
+        [class*="slate-400"] { background-color: #94a3b8 !important; }
+        [class*="slate-500"] { background-color: #64748b !important; }
+        [class*="slate-600"] { background-color: #475569 !important; }
+        [class*="slate-700"] { 
+          background-color: #334155 !important; 
+          color: #ffffff !important;
+          border-color: #334155 !important;
+        }
+        [class*="slate-800"] { 
+          background-color: #1e293b !important; 
+          color: #ffffff !important;
+        }
+        [class*="slate-900"] { 
+          background-color: #0f172a !important; 
+          color: #ffffff !important;
+        }
+        
+        /* Other colors */
+        [class*="green-50"] { background-color: #f0fdf4 !important; }
+        [class*="green-600"], [class*="text-green"] { color: #16a34a !important; }
+        [class*="yellow-50"] { background-color: #fefce8 !important; }
+        [class*="yellow-400"] { background-color: #facc15 !important; }
+        [class*="orange-50"] { background-color: #fff7ed !important; }
+        [class*="orange-600"] { color: #ea580c !important; }
+        [class*="red-50"] { background-color: #fef2f2 !important; }
+        [class*="red-600"] { color: #dc2626 !important; }
+        
+        /* Base colors */
+        [class*="bg-white"], [class*="white"] { 
+          background-color: #ffffff !important; 
+          color: #000000 !important; 
+        }
+        [class*="text-white"] { color: #ffffff !important; }
+        [class*="bg-black"] { background-color: #000000 !important; }
+        [class*="text-black"] { color: #000000 !important; }
+        
+        /* Borders */
+        [class*="border-slate"] { border-color: #e2e8f0 !important; }
+        [class*="border-purple"] { border-color: #e9d5ff !important; }
+        
+        /* Text colors */
+        [class*="muted-foreground"] { color: #64748b !important; }
+      `;
+      wrapper.appendChild(overrideStyle);
+
+      // STEP 5: Remove any remaining problematic styles from clone
+      const cloneStyles = wrapper.querySelectorAll('style, link[rel="stylesheet"]');
+      cloneStyles.forEach(style => {
+        if (style !== overrideStyle) {
+          style.remove();
+        }
+      });
+
+      // STEP 6: Capture with html2canvas
+      console.log('Starting html2canvas capture...');
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        foreignObjectRendering: false,
+        imageTimeout: 0,
+      });
+      console.log('Canvas captured successfully');
+
+      // STEP 7: Restore original stylesheets
+      console.log('Restoring original stylesheets...');
+      originalStylesheets.forEach((sheet) => {
+        sheet.removeAttribute('data-pdf-disabled');
+        if (sheet.tagName === 'LINK') {
+          (sheet as HTMLLinkElement).disabled = false;
+        }
+      });
+
+      // STEP 8: Cleanup wrapper
+      if (wrapper && wrapper.parentNode) {
+        document.body.removeChild(wrapper);
+        console.log('Wrapper cleaned up');
+      }
+
+      if (!canvas) {
+        throw new Error('Failed to capture invoice');
+      }
+
+      // Calculate PDF dimensions
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      // Create PDF
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      // Convert canvas to image
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      
+      if (!imgData || imgData === 'data:,') {
+        throw new Error('Failed to convert invoice to image');
+      }
+
+      // Handle multi-page if needed
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // Add additional pages if content is longer than one page
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      // Generate filename
+      const fileName = `invoice-template-${selectedTemplate.name.toLowerCase().replace(/\s+/g, '-')}.pdf`;
+      
+      // Save PDF
+      pdf.save(fileName);
+
+      toast.dismiss(loadingToast);
+      toast.success('PDF downloaded successfully!');
+      console.log('PDF generated and downloaded successfully');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      console.error('Error details:', error instanceof Error ? error.stack : error);
+      
+      // Restore stylesheets on error
+      console.log('Restoring stylesheets after error...');
+      originalStylesheets.forEach((sheet) => {
+        try {
+          sheet.removeAttribute('data-pdf-disabled');
+          if (sheet.tagName === 'LINK') {
+            (sheet as HTMLLinkElement).disabled = false;
+          }
+        } catch (restoreError) {
+          console.error('Error restoring stylesheet:', restoreError);
+        }
+      });
+      
+      // Cleanup wrapper on error
+      if (wrapper && wrapper.parentNode) {
+        try {
+          document.body.removeChild(wrapper);
+          console.log('Wrapper cleaned up after error');
+        } catch (cleanupError) {
+          console.error('Error cleaning up wrapper:', cleanupError);
+        }
+      }
+      
+      toast.dismiss(loadingToast);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to generate PDF: ${errorMessage}`);
+    }
   };
 
   const stats = {
@@ -277,7 +550,9 @@ export function AdminInvoiceTemplates() {
                   </Button>
                 </div>
                 <div className="p-6 bg-slate-50 dark:bg-slate-950">
-                  <InvoicePreview template={selectedTemplate} />
+                  <div ref={invoiceRef}>
+                    <InvoicePreview template={selectedTemplate} />
+                  </div>
                 </div>
                 <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t p-6 flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -311,8 +586,8 @@ export function AdminInvoiceTemplates() {
                       </Button>
                     )}
                     <Button
-                      className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white"
-                      onClick={() => toast.success('Template downloaded!')}
+                      className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white hover:from-purple-700 hover:to-cyan-700"
+                      onClick={handleDownloadPDF}
                     >
                       <Download className="w-4 h-4 mr-2" />
                       Download PDF

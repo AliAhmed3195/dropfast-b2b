@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   Heart,
@@ -24,10 +24,17 @@ export function Wishlist() {
   
   // In a real app, wishlist would be stored in state/database
   // For now, using localStorage
-  const [wishlistIds, setWishlistIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem(`wishlist_${user?.id}`);
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
+
+  // Load wishlist from localStorage on client side
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user?.id) {
+      const saved = localStorage.getItem(`wishlist_${user.id}`);
+      if (saved) {
+        setWishlistIds(JSON.parse(saved));
+      }
+    }
+  }, [user?.id]);
 
   const wishlistProducts = products.filter(p => wishlistIds.includes(p.id));
 

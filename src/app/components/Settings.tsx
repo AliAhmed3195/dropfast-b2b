@@ -30,16 +30,41 @@ export function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Profile Settings
+  // Profile Settings - Complete Database Fields
   const [profileData, setProfileData] = useState({
+    // Basic Info
     name: user?.name || '',
     email: user?.email || '',
-    phone: '+1 (555) 123-4567',
-    company: 'FastDrop Enterprise',
-    address: '123 Business Street',
-    city: 'San Francisco',
-    country: 'United States',
+    phone: '',
+    dateOfBirth: '',
+    avatar: user?.avatar || '',
+    
+    // Address
+    streetAddress: '',
+    city: '',
+    stateProvince: '',
+    zipCode: '',
+    addressCountry: '',
+    
+    // Business Info (Supplier/Vendor)
+    businessName: '',
+    businessType: '',
+    registrationNumber: '',
+    vatNumber: '',
+    taxId: '',
+    country: '',
+    currency: 'USD',
+    baseCurrency: 'USD',
+    
+    // Supplier Specific
+    productCategories: '',
+    shippingLocations: '',
+    minimumOrderValue: '',
+    
+    // Vendor Specific
+    commissionRate: '15',
   });
 
   // Notification Settings
@@ -51,11 +76,283 @@ export function Settings() {
     securityAlerts: true,
   });
 
-  const handleSaveProfile = async () => {
+  // Security/Password Settings
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+
+  // Validation Functions
+  const validatePassword = (password: string): boolean => {
+    // Minimum 8 characters, at least one uppercase, one lowercase, one number
+    if (password.length < 8) return false;
+    if (!/[A-Z]/.test(password)) return false; // At least one uppercase
+    if (!/[a-z]/.test(password)) return false; // At least one lowercase
+    if (!/[0-9]/.test(password)) return false; // At least one number
+    return true;
+  };
+
+  const validatePasswordChange = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    // Current password required
+    if (!passwordData.currentPassword.trim()) {
+      newErrors.currentPassword = 'Current password is required';
+    }
+
+    // New password required and validation
+    if (!passwordData.newPassword.trim()) {
+      newErrors.newPassword = 'New password is required';
+    } else if (passwordData.newPassword.length < 8) {
+      newErrors.newPassword = 'Password must be at least 8 characters long';
+    } else if (!validatePassword(passwordData.newPassword)) {
+      newErrors.newPassword = 'Password must include uppercase, lowercase, and number';
+    }
+
+    // Confirm password match
+    if (!passwordData.confirmPassword.trim()) {
+      newErrors.confirmPassword = 'Please confirm your new password';
+    } else if (passwordData.newPassword !== passwordData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    // Check if new password is different from current
+    if (passwordData.currentPassword && passwordData.newPassword) {
+      if (passwordData.currentPassword === passwordData.newPassword) {
+        newErrors.newPassword = 'New password must be different from current password';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handlePasswordUpdate = () => {
+    if (!validatePasswordChange()) {
+      toast.error('Please fix the errors before saving');
+      return;
+    }
+
     setIsSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    toast.success('Profile updated successfully');
+    // Simulate API call
+    setTimeout(() => {
+      setIsSaving(false);
+      toast.success('Password updated successfully!');
+      // Clear password fields
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+      setErrors({});
+    }, 1000);
+  };
+
+  // Validation Functions
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePhone = (phone: string): boolean => {
+    if (!phone) return true; // Optional field
+    const phoneRegex = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,9}$/;
+    return phoneRegex.test(phone.replace(/\s/g, ''));
+  };
+
+  const validateZipCode = (zip: string): boolean => {
+    if (!zip) return true; // Optional field
+    const zipRegex = /^[0-9]{5}(-[0-9]{4})?$|^[A-Z0-9]{3,10}$/i;
+    return zipRegex.test(zip);
+  };
+
+  const validateTaxId = (taxId: string): boolean => {
+    if (!taxId) return true; // Optional field
+    return taxId.length >= 5; // Basic validation
+  };
+
+  const validateVatNumber = (vat: string): boolean => {
+    if (!vat) return true; // Optional field
+    return vat.length >= 5; // Basic validation
+  };
+
+  const validateCommissionRate = (rate: string): boolean => {
+    if (!rate) return true;
+    const numRate = parseFloat(rate);
+    return !isNaN(numRate) && numRate >= 0 && numRate <= 100;
+  };
+
+  const validateMinimumOrderValue = (value: string): boolean => {
+    if (!value) return true;
+    const numValue = parseFloat(value);
+    return !isNaN(numValue) && numValue >= 0;
+  };
+
+  const validateDateOfBirth = (date: string): boolean => {
+    if (!date) return true; // Optional field
+    const dateObj = new Date(date);
+    const today = new Date();
+    const age = today.getFullYear() - dateObj.getFullYear();
+    return !isNaN(dateObj.getTime()) && age >= 18 && age <= 120;
+  };
+
+  const validateRegistrationNumber = (regNum: string): boolean => {
+    if (!regNum) return true; // Optional field
+    return regNum.length >= 5;
+  };
+
+  const validateProfile = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    // Basic Information - All Required
+    if (!profileData.name.trim()) {
+      newErrors.name = 'Name is required';
+    } else if (profileData.name.trim().length < 2) {
+      newErrors.name = 'Name must be at least 2 characters';
+    }
+
+    if (!profileData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!validateEmail(profileData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
+    if (!profileData.phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!validatePhone(profileData.phone)) {
+      newErrors.phone = 'Please enter a valid phone number';
+    }
+
+    if (!profileData.dateOfBirth.trim()) {
+      newErrors.dateOfBirth = 'Date of birth is required';
+    } else if (!validateDateOfBirth(profileData.dateOfBirth)) {
+      newErrors.dateOfBirth = 'Invalid date or age must be between 18 and 120 years';
+    }
+
+    // Address validation - All Address Fields Required
+    if (!profileData.streetAddress.trim()) {
+      newErrors.streetAddress = 'Street address is required';
+    } else if (profileData.streetAddress.trim().length < 5) {
+      newErrors.streetAddress = 'Street address must be at least 5 characters';
+    }
+
+    if (!profileData.city.trim()) {
+      newErrors.city = 'City is required';
+    } else if (profileData.city.trim().length < 2) {
+      newErrors.city = 'City name must be at least 2 characters';
+    }
+
+    if (!profileData.stateProvince.trim()) {
+      newErrors.stateProvince = 'State/Province is required';
+    } else if (profileData.stateProvince.trim().length < 2) {
+      newErrors.stateProvince = 'State/Province must be at least 2 characters';
+    }
+
+    if (!profileData.zipCode.trim()) {
+      newErrors.zipCode = 'ZIP/Postal code is required';
+    } else if (!validateZipCode(profileData.zipCode)) {
+      newErrors.zipCode = 'Please enter a valid ZIP/Postal code';
+    }
+
+    if (!profileData.addressCountry.trim()) {
+      newErrors.addressCountry = 'Country is required';
+    } else if (profileData.addressCountry.trim().length < 2) {
+      newErrors.addressCountry = 'Country name must be at least 2 characters';
+    }
+
+    // Business validation for Supplier/Vendor - All Required
+    if (user?.role === 'supplier' || user?.role === 'vendor') {
+      if (!profileData.businessName.trim()) {
+        newErrors.businessName = 'Business name is required';
+      } else if (profileData.businessName.length < 3) {
+        newErrors.businessName = 'Business name must be at least 3 characters';
+      }
+
+      if (!profileData.businessType.trim()) {
+        newErrors.businessType = 'Business type is required';
+      }
+
+      if (!profileData.registrationNumber.trim()) {
+        newErrors.registrationNumber = 'Registration number is required';
+      } else if (!validateRegistrationNumber(profileData.registrationNumber)) {
+        newErrors.registrationNumber = 'Registration number must be at least 5 characters';
+      }
+
+      if (!profileData.taxId.trim()) {
+        newErrors.taxId = 'Tax ID is required';
+      } else if (!validateTaxId(profileData.taxId)) {
+        newErrors.taxId = 'Tax ID must be at least 5 characters';
+      }
+
+      if (!profileData.vatNumber.trim()) {
+        newErrors.vatNumber = 'VAT number is required';
+      } else if (!validateVatNumber(profileData.vatNumber)) {
+        newErrors.vatNumber = 'VAT number must be at least 5 characters';
+      }
+
+      if (!profileData.country.trim()) {
+        newErrors.country = 'Operating country is required';
+      } else if (profileData.country.trim().length < 2) {
+        newErrors.country = 'Operating country must be at least 2 characters';
+      }
+    }
+
+    // Vendor specific validation
+    if (user?.role === 'vendor') {
+      if (profileData.commissionRate && !validateCommissionRate(profileData.commissionRate)) {
+        newErrors.commissionRate = 'Commission rate must be between 0 and 100';
+      }
+    }
+
+    // Supplier specific validation - All Required
+    if (user?.role === 'supplier') {
+      if (!profileData.productCategories.trim()) {
+        newErrors.productCategories = 'Product categories are required';
+      } else {
+        const categories = profileData.productCategories.split(',').map(c => c.trim());
+        if (categories.some(cat => cat.length < 2)) {
+          newErrors.productCategories = 'Each category must be at least 2 characters';
+        }
+      }
+
+      if (!profileData.shippingLocations.trim()) {
+        newErrors.shippingLocations = 'Shipping locations are required';
+      } else {
+        const locations = profileData.shippingLocations.split(',').map(l => l.trim());
+        if (locations.some(loc => loc.length < 2)) {
+          newErrors.shippingLocations = 'Each location must be at least 2 characters';
+        }
+      }
+
+      if (!profileData.minimumOrderValue.trim()) {
+        newErrors.minimumOrderValue = 'Minimum order value is required';
+      } else if (!validateMinimumOrderValue(profileData.minimumOrderValue)) {
+        newErrors.minimumOrderValue = 'Minimum order value must be a positive number';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSaveProfile = async () => {
+    // Validate before saving
+    if (!validateProfile()) {
+      toast.error('Please fix the errors before saving');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsSaving(false);
+      toast.success('Profile updated successfully');
+      setErrors({}); // Clear errors on success
+    } catch (error) {
+      setIsSaving(false);
+      toast.error('Failed to update profile');
+    }
   };
 
   const handleSaveNotifications = async () => {
@@ -98,100 +395,481 @@ export function Settings() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="name" className="text-sm font-semibold mb-2 block">Full Name</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="name"
-                      value={profileData.name}
-                      onChange={e => setProfileData({ ...profileData, name: e.target.value })}
-                      className="pl-10"
-                    />
+            <div className="space-y-6">
+              {/* Basic Information - All Roles */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-muted-foreground uppercase">Basic Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="name" className="text-sm font-semibold mb-2 block">
+                      Full Name <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="name"
+                        value={profileData.name}
+                        onChange={e => {
+                          setProfileData({ ...profileData, name: e.target.value });
+                          if (errors.name) setErrors({ ...errors, name: '' });
+                        }}
+                        className={`pl-10 ${errors.name ? 'border-red-500 focus:ring-red-500' : ''}`}
+                      />
+                    </div>
+                    {errors.name && (
+                      <p className="text-sm text-red-500 mt-1">{errors.name}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="email" className="text-sm font-semibold mb-2 block">
+                      Email Address <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={profileData.email}
+                        onChange={e => {
+                          setProfileData({ ...profileData, email: e.target.value });
+                          if (errors.email) setErrors({ ...errors, email: '' });
+                        }}
+                        className={`pl-10 ${errors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
+                      />
+                    </div>
+                    {errors.email && (
+                      <p className="text-sm text-red-500 mt-1">{errors.email}</p>
+                    )}
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="email" className="text-sm font-semibold mb-2 block">Email Address</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="phone" className="text-sm font-semibold mb-2 block">
+                      Phone Number <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="phone"
+                        value={profileData.phone}
+                        onChange={e => {
+                          setProfileData({ ...profileData, phone: e.target.value });
+                          if (errors.phone) setErrors({ ...errors, phone: '' });
+                        }}
+                        className={`pl-10 ${errors.phone ? 'border-red-500 focus:ring-red-500' : ''}`}
+                        placeholder="+1 (555) 123-4567"
+                      />
+                    </div>
+                    {errors.phone && (
+                      <p className="text-sm text-red-500 mt-1">{errors.phone}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="dateOfBirth" className="text-sm font-semibold mb-2 block">
+                      Date of Birth <span className="text-red-500">*</span>
+                    </Label>
                     <Input
-                      id="email"
-                      type="email"
-                      value={profileData.email}
-                      onChange={e => setProfileData({ ...profileData, email: e.target.value })}
-                      className="pl-10"
+                      id="dateOfBirth"
+                      type="date"
+                      value={profileData.dateOfBirth}
+                      onChange={e => {
+                        setProfileData({ ...profileData, dateOfBirth: e.target.value });
+                        if (errors.dateOfBirth) setErrors({ ...errors, dateOfBirth: '' });
+                      }}
+                      className={errors.dateOfBirth ? 'border-red-500 focus:ring-red-500' : ''}
                     />
+                    {errors.dateOfBirth && (
+                      <p className="text-sm text-red-500 mt-1">{errors.dateOfBirth}</p>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Separator />
+
+              {/* Address Information - All Roles */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-muted-foreground uppercase">Address</h4>
                 <div>
-                  <Label htmlFor="phone" className="text-sm font-semibold mb-2 block">Phone Number</Label>
+                  <Label htmlFor="streetAddress" className="text-sm font-semibold mb-2 block">
+                    Street Address <span className="text-red-500">*</span>
+                  </Label>
                   <div className="relative">
-                    <Phone className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                    <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
-                      id="phone"
-                      value={profileData.phone}
-                      onChange={e => setProfileData({ ...profileData, phone: e.target.value })}
-                      className="pl-10"
+                      id="streetAddress"
+                      value={profileData.streetAddress}
+                      onChange={e => {
+                        setProfileData({ ...profileData, streetAddress: e.target.value });
+                        if (errors.streetAddress) setErrors({ ...errors, streetAddress: '' });
+                      }}
+                      className={`pl-10 ${errors.streetAddress ? 'border-red-500 focus:ring-red-500' : ''}`}
+                      placeholder="123 Business Street"
                     />
+                  </div>
+                  {errors.streetAddress && (
+                    <p className="text-sm text-red-500 mt-1">{errors.streetAddress}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="city" className="text-sm font-semibold mb-2 block">
+                      City <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="city"
+                      value={profileData.city}
+                      onChange={e => {
+                        setProfileData({ ...profileData, city: e.target.value });
+                        if (errors.city) setErrors({ ...errors, city: '' });
+                      }}
+                      className={errors.city ? 'border-red-500 focus:ring-red-500' : ''}
+                      placeholder="San Francisco"
+                    />
+                    {errors.city && (
+                      <p className="text-sm text-red-500 mt-1">{errors.city}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="stateProvince" className="text-sm font-semibold mb-2 block">
+                      State/Province <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="stateProvince"
+                      value={profileData.stateProvince}
+                      onChange={e => {
+                        setProfileData({ ...profileData, stateProvince: e.target.value });
+                        if (errors.stateProvince) setErrors({ ...errors, stateProvince: '' });
+                      }}
+                      className={errors.stateProvince ? 'border-red-500 focus:ring-red-500' : ''}
+                      placeholder="California"
+                    />
+                    {errors.stateProvince && (
+                      <p className="text-sm text-red-500 mt-1">{errors.stateProvince}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="zipCode" className="text-sm font-semibold mb-2 block">
+                      ZIP/Postal Code <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="zipCode"
+                      value={profileData.zipCode}
+                      onChange={e => {
+                        setProfileData({ ...profileData, zipCode: e.target.value });
+                        if (errors.zipCode) setErrors({ ...errors, zipCode: '' });
+                      }}
+                      className={errors.zipCode ? 'border-red-500 focus:ring-red-500' : ''}
+                      placeholder="94102"
+                    />
+                    {errors.zipCode && (
+                      <p className="text-sm text-red-500 mt-1">{errors.zipCode}</p>
+                    )}
                   </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="company" className="text-sm font-semibold mb-2 block">Company</Label>
-                  <div className="relative">
-                    <Building className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="company"
-                      value={profileData.company}
-                      onChange={e => setProfileData({ ...profileData, company: e.target.value })}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="address" className="text-sm font-semibold mb-2 block">Address</Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="address"
-                    value={profileData.address}
-                    onChange={e => setProfileData({ ...profileData, address: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="city" className="text-sm font-semibold mb-2 block">City</Label>
-                  <Input
-                    id="city"
-                    value={profileData.city}
-                    onChange={e => setProfileData({ ...profileData, city: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="country" className="text-sm font-semibold mb-2 block">Country</Label>
+                  <Label htmlFor="addressCountry" className="text-sm font-semibold mb-2 block">
+                    Country <span className="text-red-500">*</span>
+                  </Label>
                   <div className="relative">
                     <Globe className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
-                      id="country"
-                      value={profileData.country}
-                      onChange={e => setProfileData({ ...profileData, country: e.target.value })}
-                      className="pl-10"
+                      id="addressCountry"
+                      value={profileData.addressCountry}
+                      onChange={e => {
+                        setProfileData({ ...profileData, addressCountry: e.target.value });
+                        if (errors.addressCountry) setErrors({ ...errors, addressCountry: '' });
+                      }}
+                      className={`pl-10 ${errors.addressCountry ? 'border-red-500 focus:ring-red-500' : ''}`}
+                      placeholder="United States"
                     />
                   </div>
+                  {errors.addressCountry && (
+                    <p className="text-sm text-red-500 mt-1">{errors.addressCountry}</p>
+                  )}
                 </div>
               </div>
+
+              {/* Business Information - Supplier & Vendor Only */}
+              {(user?.role === 'supplier' || user?.role === 'vendor') && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase">Business Information</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="businessName" className="text-sm font-semibold mb-2 block">
+                          Business Name <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Building className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            id="businessName"
+                            value={profileData.businessName}
+                            onChange={e => {
+                              setProfileData({ ...profileData, businessName: e.target.value });
+                              if (errors.businessName) setErrors({ ...errors, businessName: '' });
+                            }}
+                            className={`pl-10 ${errors.businessName ? 'border-red-500 focus:ring-red-500' : ''}`}
+                            placeholder="FastDrop Enterprise"
+                          />
+                        </div>
+                        {errors.businessName && (
+                          <p className="text-sm text-red-500 mt-1">{errors.businessName}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label htmlFor="businessType" className="text-sm font-semibold mb-2 block">
+                          Business Type <span className="text-red-500">*</span>
+                        </Label>
+                        <select
+                          id="businessType"
+                          value={profileData.businessType}
+                          onChange={e => {
+                            setProfileData({ ...profileData, businessType: e.target.value });
+                            if (errors.businessType) setErrors({ ...errors, businessType: '' });
+                          }}
+                          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${errors.businessType ? 'border-red-500' : ''}`}
+                        >
+                          <option value="">Select Type</option>
+                          <option value="individual">Individual</option>
+                          <option value="company">Company</option>
+                          <option value="partnership">Partnership</option>
+                          <option value="corporation">Corporation</option>
+                        </select>
+                        {errors.businessType && (
+                          <p className="text-sm text-red-500 mt-1">{errors.businessType}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="registrationNumber" className="text-sm font-semibold mb-2 block">
+                          Registration Number <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="registrationNumber"
+                          value={profileData.registrationNumber}
+                          onChange={e => {
+                            setProfileData({ ...profileData, registrationNumber: e.target.value });
+                            if (errors.registrationNumber) setErrors({ ...errors, registrationNumber: '' });
+                          }}
+                          className={errors.registrationNumber ? 'border-red-500 focus:ring-red-500' : ''}
+                          placeholder="REG-123456"
+                        />
+                        {errors.registrationNumber && (
+                          <p className="text-sm text-red-500 mt-1">{errors.registrationNumber}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label htmlFor="vatNumber" className="text-sm font-semibold mb-2 block">
+                          VAT Number <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="vatNumber"
+                          value={profileData.vatNumber}
+                          onChange={e => {
+                            setProfileData({ ...profileData, vatNumber: e.target.value });
+                            if (errors.vatNumber) setErrors({ ...errors, vatNumber: '' });
+                          }}
+                          className={errors.vatNumber ? 'border-red-500 focus:ring-red-500' : ''}
+                          placeholder="VAT-123456"
+                        />
+                        {errors.vatNumber && (
+                          <p className="text-sm text-red-500 mt-1">{errors.vatNumber}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="taxId" className="text-sm font-semibold mb-2 block">
+                          Tax ID <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="taxId"
+                          value={profileData.taxId}
+                          onChange={e => {
+                            setProfileData({ ...profileData, taxId: e.target.value });
+                            if (errors.taxId) setErrors({ ...errors, taxId: '' });
+                          }}
+                          className={errors.taxId ? 'border-red-500 focus:ring-red-500' : ''}
+                          placeholder="TAX-123456"
+                        />
+                        {errors.taxId && (
+                          <p className="text-sm text-red-500 mt-1">{errors.taxId}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label htmlFor="country" className="text-sm font-semibold mb-2 block">
+                          Operating Country <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Globe className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            id="country"
+                            value={profileData.country}
+                            onChange={e => {
+                              setProfileData({ ...profileData, country: e.target.value });
+                              if (errors.country) setErrors({ ...errors, country: '' });
+                            }}
+                            className={`pl-10 ${errors.country ? 'border-red-500 focus:ring-red-500' : ''}`}
+                            placeholder="United States"
+                          />
+                        </div>
+                        {errors.country && (
+                          <p className="text-sm text-red-500 mt-1">{errors.country}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="currency" className="text-sm font-semibold mb-2 block">Display Currency</Label>
+                        <select
+                          id="currency"
+                          value={profileData.currency}
+                          onChange={e => setProfileData({ ...profileData, currency: e.target.value })}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                          <option value="USD">USD - US Dollar</option>
+                          <option value="EUR">EUR - Euro</option>
+                          <option value="GBP">GBP - British Pound</option>
+                          <option value="CAD">CAD - Canadian Dollar</option>
+                          <option value="AUD">AUD - Australian Dollar</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="baseCurrency" className="text-sm font-semibold mb-2 block">Base Currency</Label>
+                        <select
+                          id="baseCurrency"
+                          value={profileData.baseCurrency}
+                          onChange={e => setProfileData({ ...profileData, baseCurrency: e.target.value })}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                          <option value="USD">USD - US Dollar</option>
+                          <option value="EUR">EUR - Euro</option>
+                          <option value="GBP">GBP - British Pound</option>
+                          <option value="CAD">CAD - Canadian Dollar</option>
+                          <option value="AUD">AUD - Australian Dollar</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Supplier Specific Fields */}
+              {user?.role === 'supplier' && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase">Supplier Settings</h4>
+                    <div>
+                      <Label htmlFor="productCategories" className="text-sm font-semibold mb-2 block">Product Categories</Label>
+                      <Input
+                        id="productCategories"
+                        value={profileData.productCategories}
+                        onChange={e => {
+                          setProfileData({ ...profileData, productCategories: e.target.value });
+                          if (errors.productCategories) setErrors({ ...errors, productCategories: '' });
+                        }}
+                        className={errors.productCategories ? 'border-red-500 focus:ring-red-500' : ''}
+                        placeholder="Electronics, Fashion, Home & Garden (comma-separated)"
+                      />
+                      {errors.productCategories ? (
+                        <p className="text-sm text-red-500 mt-1">{errors.productCategories}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-1">Separate multiple categories with commas</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="shippingLocations" className="text-sm font-semibold mb-2 block">
+                        Shipping Locations <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="shippingLocations"
+                        value={profileData.shippingLocations}
+                        onChange={e => {
+                          setProfileData({ ...profileData, shippingLocations: e.target.value });
+                          if (errors.shippingLocations) setErrors({ ...errors, shippingLocations: '' });
+                        }}
+                        className={errors.shippingLocations ? 'border-red-500 focus:ring-red-500' : ''}
+                        placeholder="USA, Canada, UK, EU (comma-separated)"
+                      />
+                      {errors.shippingLocations ? (
+                        <p className="text-sm text-red-500 mt-1">{errors.shippingLocations}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-1">Countries/regions you ship to</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="minimumOrderValue" className="text-sm font-semibold mb-2 block">
+                        Minimum Order Value ($) <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="minimumOrderValue"
+                        type="number"
+                        value={profileData.minimumOrderValue}
+                        onChange={e => {
+                          setProfileData({ ...profileData, minimumOrderValue: e.target.value });
+                          if (errors.minimumOrderValue) setErrors({ ...errors, minimumOrderValue: '' });
+                        }}
+                        className={errors.minimumOrderValue ? 'border-red-500 focus:ring-red-500' : ''}
+                        placeholder="100"
+                      />
+                      {errors.minimumOrderValue && (
+                        <p className="text-sm text-red-500 mt-1">{errors.minimumOrderValue}</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Vendor Specific Fields */}
+              {user?.role === 'vendor' && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase">Vendor Settings</h4>
+                    <div>
+                      <Label htmlFor="commissionRate" className="text-sm font-semibold mb-2 block">Commission Rate (%)</Label>
+                      <Input
+                        id="commissionRate"
+                        type="number"
+                        value={profileData.commissionRate}
+                        onChange={e => {
+                          setProfileData({ ...profileData, commissionRate: e.target.value });
+                          if (errors.commissionRate) setErrors({ ...errors, commissionRate: '' });
+                        }}
+                        className={errors.commissionRate ? 'border-red-500 focus:ring-red-500' : ''}
+                        placeholder="15"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                      />
+                      {errors.commissionRate && (
+                        <p className="text-sm text-red-500 mt-1">{errors.commissionRate}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">Platform commission percentage (0-100%)</p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex justify-end mt-6">
@@ -356,57 +1034,85 @@ export function Settings() {
             <div className="space-y-4">
               <div>
                 <Label htmlFor="currentPassword" className="text-sm font-semibold mb-2 block">
-                  Current Password
+                  Current Password <span className="text-red-500">*</span>
                 </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="currentPassword"
                     type="password"
+                    value={passwordData.currentPassword}
+                    onChange={(e) => {
+                      setPasswordData({ ...passwordData, currentPassword: e.target.value });
+                      if (errors.currentPassword) setErrors({ ...errors, currentPassword: '' });
+                    }}
                     placeholder="Enter current password"
-                    className="pl-10"
+                    className={`pl-10 ${errors.currentPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
                   />
                 </div>
+                {errors.currentPassword && (
+                  <p className="text-sm text-red-500 mt-1">{errors.currentPassword}</p>
+                )}
               </div>
 
               <div>
                 <Label htmlFor="newPassword" className="text-sm font-semibold mb-2 block">
-                  New Password
+                  New Password <span className="text-red-500">*</span>
                 </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="newPassword"
                     type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => {
+                      setPasswordData({ ...passwordData, newPassword: e.target.value });
+                      if (errors.newPassword) setErrors({ ...errors, newPassword: '' });
+                    }}
                     placeholder="Enter new password"
-                    className="pl-10"
+                    className={`pl-10 ${errors.newPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
                   />
                 </div>
+                {errors.newPassword && (
+                  <p className="text-sm text-red-500 mt-1">{errors.newPassword}</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Must be 8+ characters with uppercase, lowercase, and number
+                </p>
               </div>
 
               <div>
                 <Label htmlFor="confirmPassword" className="text-sm font-semibold mb-2 block">
-                  Confirm New Password
+                  Confirm New Password <span className="text-red-500">*</span>
                 </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="confirmPassword"
                     type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => {
+                      setPasswordData({ ...passwordData, confirmPassword: e.target.value });
+                      if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
+                    }}
                     placeholder="Confirm new password"
-                    className="pl-10"
+                    className={`pl-10 ${errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
                   />
                 </div>
+                {errors.confirmPassword && (
+                  <p className="text-sm text-red-500 mt-1">{errors.confirmPassword}</p>
+                )}
               </div>
             </div>
 
             <div className="flex justify-end mt-6">
               <Button
-                onClick={() => toast.success('Password updated successfully')}
-                className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white"
+                onClick={handlePasswordUpdate}
+                disabled={isSaving}
+                className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white disabled:opacity-50"
               >
                 <Save className="w-4 h-4 mr-2" />
-                Update Password
+                {isSaving ? 'Updating...' : 'Update Password'}
               </Button>
             </div>
           </Card>

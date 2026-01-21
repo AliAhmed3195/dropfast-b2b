@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   Store,
@@ -35,10 +35,17 @@ export function CustomerBrowse() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   
   // Wishlist state (in real app, this would be in context/database)
-  const [wishlistIds, setWishlistIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem(`wishlist_${user?.id}`);
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
+
+  // Load wishlist from localStorage on client side
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user?.id) {
+      const saved = localStorage.getItem(`wishlist_${user.id}`);
+      if (saved) {
+        setWishlistIds(JSON.parse(saved));
+      }
+    }
+  }, [user?.id]);
 
   const activeStores = stores.filter(s => s.status === 'active');
 

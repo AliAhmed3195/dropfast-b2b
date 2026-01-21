@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
+import { useRouter } from 'next/navigation';
 import {
   LogOut,
   User,
@@ -23,12 +24,18 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Badge } from './ui/badge';
+import { ProfileModal } from './ProfileModal';
+import { NotificationPanel } from './NotificationPanel';
 
 export function Header() {
   const { user, logout } = useAuth();
   const { cart } = useApp();
   const { setView } = useNavigation();
+  const router = useRouter();
   const [isDark, setIsDark] = React.useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = React.useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = React.useState(false);
+  const [notificationCount, setNotificationCount] = React.useState(3);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -51,12 +58,19 @@ export function Header() {
   };
 
   return (
-    <motion.header
-      initial={{ y: -20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="sticky top-0 z-50 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
-    >
+    <>
+      {/* Profile Modal */}
+      <ProfileModal 
+        isOpen={isProfileModalOpen} 
+        onClose={() => setIsProfileModalOpen(false)} 
+      />
+
+      <motion.header
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="sticky top-0 z-50 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
+      >
       <div className="container mx-auto px-6 h-20 flex items-center justify-between">
         {/* Logo - Clean and minimal */}
         <motion.div 
@@ -111,21 +125,34 @@ export function Header() {
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.3, type: "spring" }}
+            className="relative"
           >
             <Button 
               variant="ghost" 
-              size="sm" 
+              size="sm"
+              onClick={() => setIsNotificationOpen(!isNotificationOpen)}
               className="relative h-11 w-11 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all group"
             >
               <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              <motion.span 
-                className="absolute -top-1 -right-1 w-[18px] h-[18px] bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-semibold shadow-sm"
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
-                3
-              </motion.span>
+              {notificationCount > 0 && (
+                <motion.span 
+                  key={notificationCount}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                  className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-semibold shadow-sm"
+                >
+                  {notificationCount}
+                </motion.span>
+              )}
             </Button>
+            
+            {/* Notification Panel */}
+            <NotificationPanel 
+              isOpen={isNotificationOpen}
+              onClose={() => setIsNotificationOpen(false)}
+              onCountChange={(count) => setNotificationCount(count)}
+            />
           </motion.div>
 
           {/* Theme Toggle with smooth icon transition */}
@@ -187,11 +214,21 @@ export function Header() {
                   <p className="text-xs text-muted-foreground mt-1 font-medium">{user?.company}</p>
                 </div>
                 <DropdownMenuSeparator className="my-2" />
-                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20">
+                <DropdownMenuItem 
+                  onClick={() => setIsProfileModalOpen(true)}
+                  className="rounded-lg py-2.5 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                >
                   <User className="w-4 h-4 mr-3 text-purple-600" />
                   <span className="font-medium">Profile</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-900/20">
+                <DropdownMenuItem 
+                  onClick={() => {
+                    if (user?.role) {
+                      router.push(`/dashboard/${user.role}/settings`);
+                    }
+                  }}
+                  className="rounded-lg py-2.5 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-900/20"
+                >
                   <Settings className="w-4 h-4 mr-3 text-cyan-600" />
                   <span className="font-medium">Settings</span>
                 </DropdownMenuItem>
@@ -208,6 +245,7 @@ export function Header() {
           </motion.div>
         </div>
       </div>
-    </motion.header>
+      </motion.header>
+    </>
   );
 }

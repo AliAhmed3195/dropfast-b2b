@@ -1,4 +1,7 @@
+'use client'
+
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 
 export type UserRole = 'admin' | 'supplier' | 'vendor' | 'customer';
 
@@ -66,21 +69,87 @@ const MOCK_USERS: Record<string, { password: string; user: User }> = {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const router = useRouter();
+
+  // ✅ Restore user from localStorage on mount
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        try {
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
+        } catch (error) {
+          console.error('Error parsing saved user:', error);
+          localStorage.removeItem('user');
+        }
+      }
+    }
+  }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    const userRecord = MOCK_USERS[email.toLowerCase()];
-    if (userRecord && userRecord.password === password) {
-      setUser(userRecord.user);
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Login API error:', data.error || data.message);
+        return false;
+      }
+
+      if (!data.user) {
+        console.error('Login response missing user data');
+        return false;
+      }
+
+      // Format user data
+      const userData = data.user;
+      const loggedInUser: User = {
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        role: userData.role?.toLowerCase() as UserRole || 'customer',
+        avatar: userData.avatar,
+        company: userData.company || userData.businessName,
+      };
+
+      setUser(loggedInUser);
+      
+      // ✅ Save user to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user', JSON.stringify(loggedInUser));
+      }
+      
+      // Redirect based on role
+      if (loggedInUser.role === 'customer') {
+        router.push('/dashboard/customer/browse');
+      } else {
+        router.push(`/dashboard/${loggedInUser.role}/overview`);
+      }
+      
       return true;
+    } catch (error: any) {
+      console.error('Login error:', error);
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
+    // Clear user state
     setUser(null);
+    
+    // Clear any localStorage data if needed
+    localStorage.removeItem('user');
+    
+    // Redirect to login page
+    router.push('/');
   };
 
   return (
