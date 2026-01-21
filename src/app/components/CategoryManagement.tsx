@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useApiCall } from '../../hooks/useApiCall';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Layers,
@@ -15,6 +16,7 @@ import {
   Grid3x3,
   Hash,
   FileText,
+  Filter,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -22,6 +24,13 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,97 +48,121 @@ import {
 } from './ui/table';
 import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from './ui/pagination';
 
 export function CategoryManagement() {
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('displayOrder');
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<any>(null);
-  const fetchingCategoriesRef = useRef(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const { callApi } = useApiCall();
 
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to avoid too many API calls
   useEffect(() => {
-    // Prevent duplicate calls - check before setting
-    if (fetchingCategoriesRef.current) {
-      return;
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset to page 1 when search or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchQuery, statusFilter, sortBy]);
+
+  // Abort controller ref for search
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch categories on mount and when filters/page change
+  useEffect(() => {
+    // Abort previous request if any
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
     }
 
-    let isMounted = true;
-    fetchingCategoriesRef.current = true;
+    // Create new abort controller
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
 
-    const loadCategories = async () => {
-      if (!isMounted) return;
-
+    // Use debouncedSearchQuery instead of searchQuery
+    const fetchWithDebouncedSearch = async (signal?: AbortSignal) => {
       try {
         setLoading(true);
-        // Global interceptor handles duplicate prevention and AbortController
-        const response = await fetch('/api/admin/categories');
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const statusParam = statusFilter !== 'all' ? `&status=${statusFilter}` : '';
+        const sortParam = sortBy ? `&sortBy=${sortBy}` : '';
+        const url = `/api/admin/categories?page=${currentPage}&limit=${pagination.limit}${searchParam}${statusParam}${sortParam}`;
+        const response = await fetch(url, { signal: signal || abortController.signal });
         const data = await response.json();
         
-        if (isMounted && response.ok) {
+        if (response.ok) {
           setCategories(data.categories || []);
-        } else if (isMounted && !response.ok) {
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
+        } else {
           showToast.error(data.error || 'Failed to fetch categories');
         }
       } catch (error: any) {
-        // AbortError is expected from global interceptor's duplicate prevention
-        if (error.name !== 'AbortError' && isMounted) {
+        if (error.name !== 'AbortError') {
           console.error('Fetch categories error:', error);
           showToast.error('Failed to fetch categories');
         }
       } finally {
-        if (isMounted) {
-          setLoading(false);
-          fetchingCategoriesRef.current = false;
-        }
+        setLoading(false);
       }
     };
 
-    loadCategories();
+    callApi(fetchWithDebouncedSearch);
 
+    // Cleanup: abort request on unmount or dependency change
     return () => {
-      isMounted = false;
-      fetchingCategoriesRef.current = false;
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+        searchAbortControllerRef.current = null;
+      }
     };
-  }, []);
+  }, [currentPage, debouncedSearchQuery, statusFilter, sortBy, callApi, pagination.limit]);
 
   const fetchCategories = async () => {
-    // Prevent duplicate calls
-    if (fetchingCategoriesRef.current) {
-      return;
-    }
-
-    let isMounted = true;
-    fetchingCategoriesRef.current = true;
-
-    try {
-      setLoading(true);
-      // Global interceptor handles duplicate prevention and AbortController
-      const response = await fetch('/api/admin/categories');
-      const data = await response.json();
-      
-      if (isMounted && response.ok) {
-        setCategories(data.categories || []);
-      } else if (isMounted && !response.ok) {
-        showToast.error(data.error || 'Failed to fetch categories');
-      }
-    } catch (error: any) {
-      // AbortError is expected from global interceptor's duplicate prevention
-      if (error.name !== 'AbortError' && isMounted) {
-      console.error('Fetch categories error:', error);
-        showToast.error('Failed to fetch categories');
-      }
-    } finally {
-      if (isMounted) {
-      setLoading(false);
-        fetchingCategoriesRef.current = false;
+    // Refresh categories list
+    const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+    const statusParam = statusFilter !== 'all' ? `&status=${statusFilter}` : '';
+    const sortParam = sortBy ? `&sortBy=${sortBy}` : '';
+    const url = `/api/admin/categories?page=${currentPage}&limit=${pagination.limit}${searchParam}${statusParam}${sortParam}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (response.ok) {
+      setCategories(data.categories || []);
+      if (data.pagination) {
+        setPagination(data.pagination);
       }
     }
   };
 
-  const filteredCategories = categories.filter(category =>
-    category.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const handleEdit = (category: any) => {
     setEditingCategory(category);
@@ -192,7 +225,7 @@ export function CategoryManagement() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Categories</p>
-                  <p className="text-2xl font-bold">{categories.length}</p>
+                  <p className="text-2xl font-bold">{pagination.total || categories.length}</p>
                 </div>
               </div>
             </Card>
@@ -224,16 +257,55 @@ export function CategoryManagement() {
             </Card>
           </div>
 
-          {/* Search */}
+          {/* Search and Filters */}
           <Card className="p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search categories..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search categories..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                  }}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' || e.which === 13 || e.keyCode === 13) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                  }}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full md:w-48">
+                  <Filter className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-full md:w-48">
+                  <SelectValue placeholder="Sort By" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="displayOrder">Display Order</SelectItem>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="createdAt">Date Created</SelectItem>
+                  <SelectItem value="productCount">Product Count</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </Card>
 
@@ -264,7 +336,7 @@ export function CategoryManagement() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : filteredCategories.length === 0 ? (
+                ) : categories.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-12">
                       <div className="flex flex-col items-center gap-3">
@@ -283,7 +355,7 @@ export function CategoryManagement() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredCategories.map((category, index) => (
+                  categories.map((category, index) => (
                   <motion.tr
                     key={category.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -344,6 +416,75 @@ export function CategoryManagement() {
               </TableBody>
             </Table>
           </Card>
+
+          {/* Pagination */}
+          {!loading && pagination.totalPages > 1 && (
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} categories
+                </div>
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious 
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage > 1) {
+                            setCurrentPage(currentPage - 1);
+                          }
+                        }}
+                        className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                      if (
+                        page === 1 ||
+                        page === pagination.totalPages ||
+                        (page >= currentPage - 1 && page <= currentPage + 1)
+                      ) {
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentPage(page);
+                              }}
+                              isActive={currentPage === page}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      } else if (page === currentPage - 2 || page === currentPage + 2) {
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        );
+                      }
+                      return null;
+                    })}
+                    <PaginationItem>
+                      <PaginationNext 
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage < pagination.totalPages) {
+                            setCurrentPage(currentPage + 1);
+                          }
+                        }}
+                        className={currentPage === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            </Card>
+          )}
         </>
       ) : (
         <CategoryForm

@@ -15,14 +15,50 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
     const payoutType = searchParams.get('type') // 'supplier' or 'vendor'
+    const search = searchParams.get('search') // Search query
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const skip = (page - 1) * limit
 
-    const where: any = {}
+    // Build base filters
+    const baseFilters: any = {}
     if (status && status !== 'all') {
-      where.status = status.toUpperCase() as PayoutStatus
+      baseFilters.status = status.toUpperCase() as PayoutStatus
     }
-    if (payoutType) {
-      where.payoutType = payoutType
+    if (payoutType && payoutType !== 'all') {
+      baseFilters.payoutType = payoutType
     }
+
+    // Build where clause
+    const where: any = {}
+    
+    // Add search filter
+    if (search && search.trim()) {
+      const searchTerm = search.trim()
+      const searchConditions = [
+        { recipientName: { contains: searchTerm, mode: 'insensitive' } },
+        { user: { email: { contains: searchTerm, mode: 'insensitive' } } },
+        { user: { name: { contains: searchTerm, mode: 'insensitive' } } },
+      ]
+      
+      // Combine base filters with search using AND
+      if (Object.keys(baseFilters).length > 0) {
+        where.AND = [
+          baseFilters,
+          { OR: searchConditions }
+        ]
+      } else {
+        where.OR = searchConditions
+      }
+    } else {
+      // No search, just use base filters
+      if (Object.keys(baseFilters).length > 0) {
+        Object.assign(where, baseFilters)
+      }
+    }
+
+    // Get total count for pagination
+    const total = await prisma.payout.count({ where })
 
     const payouts = await prisma.payout.findMany({
       where,
@@ -39,9 +75,19 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     })
 
-    return NextResponse.json({ payouts })
+    return NextResponse.json({ 
+      payouts,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+    })
   } catch (error: any) {
     console.error('Get payouts error:', error)
     return NextResponse.json(

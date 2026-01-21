@@ -38,6 +38,25 @@ export async function GET(request: NextRequest) {
       where.status = status.toUpperCase() as InvoiceStatus
     }
 
+    // Add search filter
+    const search = searchParams.get('search')
+    if (search && search.trim()) {
+      const searchTerm = search.trim()
+      where.OR = [
+        { invoiceNumber: { contains: searchTerm, mode: 'insensitive' } },
+        { order: { orderNumber: { contains: searchTerm, mode: 'insensitive' } } },
+        { order: { customer: { name: { contains: searchTerm, mode: 'insensitive' } } } },
+      ]
+    }
+
+    // Pagination
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const skip = (page - 1) * limit
+
+    // Get total count for pagination (before store filter)
+    const totalBeforeStoreFilter = await prisma.invoice.count({ where })
+
     // Get invoices
     const invoices = await prisma.invoice.findMany({
       where,
@@ -77,6 +96,8 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     })
 
     // Filter by store if provided (after fetching since store is in order relation)
@@ -84,6 +105,11 @@ export async function GET(request: NextRequest) {
     if (store && store !== 'all') {
       filteredInvoices = invoices.filter(inv => inv.order?.store?.name === store)
     }
+
+    // Calculate total after store filter
+    const total = store && store !== 'all' 
+      ? filteredInvoices.length 
+      : totalBeforeStoreFilter
 
     // Format invoices
     const formattedInvoices = filteredInvoices.map(invoice => ({
@@ -111,7 +137,35 @@ export async function GET(request: NextRequest) {
       })) || [],
     }))
 
-    return NextResponse.json({ invoices: formattedInvoices })
+    // Get unique stores for filter dropdown
+    const allInvoices = await prisma.invoice.findMany({
+      where: { vendorId },
+      include: {
+        order: {
+          include: {
+            store: {
+              select: { name: true },
+            },
+          },
+        },
+      },
+    })
+    const uniqueStores = Array.from(new Set(
+      allInvoices
+        .map(inv => inv.order?.store?.name)
+        .filter(Boolean) as string[]
+    ))
+
+    return NextResponse.json({ 
+      invoices: formattedInvoices,
+      stores: uniqueStores,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+    })
   } catch (error) {
     console.error('Get vendor invoices error:', error)
     return NextResponse.json(

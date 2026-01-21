@@ -10,6 +10,10 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category')
     const search = searchParams.get('search')
 
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '12')
+    const skip = (page - 1) * limit
+
     if (!supplierId) {
       return NextResponse.json(
         { error: 'Supplier ID is required' },
@@ -52,6 +56,9 @@ export async function GET(request: NextRequest) {
       ]
     }
 
+    // Get total count for pagination
+    const total = await prisma.product.count({ where })
+
     const products = await prisma.product.findMany({
       where,
       include: {
@@ -81,6 +88,8 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     })
 
     // Format response
@@ -113,7 +122,15 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ products: formattedProducts })
+    return NextResponse.json({
+      products: formattedProducts,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+    })
   } catch (error) {
     console.error('Get supplier products error:', error)
     return NextResponse.json(

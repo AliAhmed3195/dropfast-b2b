@@ -12,6 +12,7 @@ import {
   Trash2,
   TrendingUp,
   AlertCircle,
+  Check,
   DollarSign,
   X,
   Box,
@@ -57,7 +58,18 @@ export function SupplierProducts() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [showFilters, setShowFilters] = useState(false);
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, categoryFilter, searchQuery]);
+
   const [viewMode, setViewMode] = useState<'list' | 'add' | 'edit'>('list');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const itemsPerPage = 12;
 
   // Fetch products
   useEffect(() => {
@@ -70,6 +82,9 @@ export function SupplierProducts() {
       try {
         const params = new URLSearchParams();
         params.append('supplierId', user.id);
+        params.append('page', currentPage.toString());
+        params.append('limit', itemsPerPage.toString());
+
         if (statusFilter !== 'all') params.append('status', statusFilter);
         if (categoryFilter !== 'all') params.append('category', categoryFilter);
         if (searchQuery) params.append('search', searchQuery);
@@ -79,6 +94,10 @@ export function SupplierProducts() {
 
         if (response.ok) {
           setProducts(data.products || []);
+          if (data.pagination) {
+            setTotalPages(data.pagination.totalPages);
+            setTotalProducts(data.pagination.total);
+          }
         } else {
           showToast.error(data.error || 'Failed to fetch products');
         }
@@ -92,15 +111,9 @@ export function SupplierProducts() {
     };
 
     fetchProducts();
-  }, [user?.id, statusFilter, categoryFilter, searchQuery]);
+  }, [user?.id, statusFilter, categoryFilter, searchQuery, currentPage]);
 
-  const filteredProducts = products.filter(
-    product =>
-      (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchQuery.toLowerCase())) &&
-      (statusFilter === 'all' || product.status === statusFilter) &&
-      (categoryFilter === 'all' || product.category === categoryFilter)
-  ).sort((a, b) => {
+  const filteredProducts = products.sort((a, b) => {
     switch (sortBy) {
       case 'name':
         return a.name.localeCompare(b.name);
@@ -140,6 +153,29 @@ export function SupplierProducts() {
   const handleAddProduct = () => {
     setViewMode('add');
     setEditingProduct(null);
+  };
+
+  const handleUpdateStatus = async (product: any, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/admin/products/${product.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productStatus: newStatus }),
+      });
+
+      if (response.ok) {
+        showToast.success(`Product marked as ${newStatus}`);
+        // Update local state without refetching all
+        setProducts(products.map(p =>
+          p.id === product.id ? { ...p, status: newStatus } : p
+        ));
+      } else {
+        showToast.error('Failed to update product status');
+      }
+    } catch (error) {
+      console.error('Update status error:', error);
+      showToast.error('Failed to update product status');
+    }
   };
 
   const handleEditProduct = async (product: any) => {
@@ -191,7 +227,7 @@ export function SupplierProducts() {
   // If in add/edit mode, show ProductForm as full page
   if (viewMode === 'add' || viewMode === 'edit') {
     return (
-      <ProductForm 
+      <ProductForm
         product={editingProduct}
         onClose={handleBackToList}
       />
@@ -316,112 +352,158 @@ export function SupplierProducts() {
 
       {/* Products Grid */}
       {filteredProducts.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts.map((product, index) => (
-          <motion.div
-            key={product.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-          >
-            <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-              {/* Product Image */}
-              <div className="relative h-48 bg-slate-100 dark:bg-slate-800">
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
-                <Badge
-                  className={cn(
-                    'absolute top-3 right-3',
-                    getStatusColor(product.status)
-                  )}
-                >
-                  {product.status.replace('-', ' ')}
-                </Badge>
-              </div>
-
-              {/* Product Info */}
-              <div className="p-4 space-y-3">
-                <div>
-                  <h3 className="font-bold text-lg mb-1">{product.name}</h3>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {product.sku}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Category</p>
-                    <p className="text-sm font-medium">{product.category}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Stock</p>
-                    <p
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProducts.map((product, index) => (
+              <motion.div
+                key={product.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+                  {/* Product Image */}
+                  <div className="relative h-48 bg-slate-100 dark:bg-slate-800">
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <Badge
                       className={cn(
-                        'text-sm font-bold',
-                        product.stock === 0
-                          ? 'text-red-600'
-                          : product.stock < 50
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
+                        'absolute top-3 right-3',
+                        getStatusColor(product.status)
                       )}
                     >
-                      {product.stock}
-                    </p>
+                      {product.status.replace('-', ' ')}
+                    </Badge>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <div>
-                    <p className="text-2xl font-bold text-purple-600">
-                      ${product.price}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      MOQ: {product.moq} units
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewDetails(product)}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEditProduct(product)}>
-                          <Edit className="w-4 h-4 mr-2" />
-                          Edit Product
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          className="text-red-600"
-                          onClick={() => showToast.success('Product deleted successfully!')}
+                  {/* Product Info */}
+                  <div className="p-4 space-y-3">
+                    <div>
+                      <h3 className="font-bold text-lg mb-1">{product.name}</h3>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {product.sku}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Category</p>
+                        <p className="text-sm font-medium">{product.category}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Stock</p>
+                        <p
+                          className={cn(
+                            'text-sm font-bold',
+                            product.stock === 0
+                              ? 'text-red-600'
+                              : product.stock < 50
+                                ? 'text-yellow-600'
+                                : 'text-green-600'
+                          )}
                         >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
+                          {product.stock}
+                        </p>
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Package className="w-4 h-4" />
-                  <span>{product.orders} orders fulfilled</span>
-                </div>
+                    <div className="flex items-center justify-between pt-2 border-t">
+                      <div>
+                        <p className="text-2xl font-bold text-purple-600">
+                          ${product.price}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          MOQ: {product.moq} units
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewDetails(product)}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEditProduct(product)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Edit Product
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(product, 'active')}>
+                              <Check className="w-4 h-4 mr-2" />
+                              Mark as Active
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(product, 'draft')}>
+                              <Box className="w-4 h-4 mr-2" />
+                              Mark as Draft
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(product, 'inactive')}>
+                              <X className="w-4 h-4 mr-2" />
+                              Mark as Inactive
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={() => showToast.success('Product deleted successfully!')}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Package className="w-4 h-4" />
+                      <span>{product.orders} orders fulfilled</span>
+                    </div>
+                  </div>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6 border-t pt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {filteredProducts.length} items (Total: {totalProducts})
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4 mr-2" />
+                  Previous
+                </Button>
+                <span className="text-sm font-medium">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4 ml-2" />
+                </Button>
               </div>
-            </Card>
-          </motion.div>
-        ))}
-        </div>
+            </div>
+          )}
+        </>
       ) : (
         <Card className="p-16">
           <motion.div
@@ -458,7 +540,8 @@ export function SupplierProducts() {
             )}
           </motion.div>
         </Card>
-      )}
+      )
+      }
 
       {/* Product Detail Modal */}
       <AnimatePresence>
@@ -491,19 +574,19 @@ export function SupplierProducts() {
           </>
         )}
       </AnimatePresence>
-    </div>
+    </div >
   );
 }
 
 // Product Detail View Component
 function ProductDetailView(
   {
-  product,
-  onClose,
-}: {
-  product: any;
-  onClose: () => void;
-}) {
+    product,
+    onClose,
+  }: {
+    product: any;
+    onClose: () => void;
+  }) {
   const sliderSettings = {
     dots: true,
     infinite: true,
@@ -512,8 +595,8 @@ function ProductDetailView(
     slidesToScroll: 1,
     autoplay: false,
     arrows: true,
-    nextArrow: <NextArrow onClick={() => {}} />,
-    prevArrow: <PrevArrow onClick={() => {}} />,
+    nextArrow: <NextArrow onClick={() => { }} />,
+    prevArrow: <PrevArrow onClick={() => { }} />,
   };
 
   return (
@@ -545,8 +628,8 @@ function ProductDetailView(
               product.status === 'active'
                 ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
                 : product.status === 'low-stock'
-                ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
-                : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                  ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                  : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
             )}
           >
             {product.status.replace('-', ' ')}
@@ -592,8 +675,8 @@ function ProductDetailView(
                 product.stock === 0
                   ? 'text-red-600'
                   : product.stock < 50
-                  ? 'text-yellow-600'
-                  : 'text-green-600'
+                    ? 'text-yellow-600'
+                    : 'text-green-600'
               )}
             >
               {product.stock}
@@ -793,7 +876,7 @@ function ProductDetailView(
 
         {/* Actions */}
         <div className="flex gap-3 pt-4 border-t">
-          <Button 
+          <Button
             className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
             onClick={onClose}
           >

@@ -17,6 +17,8 @@ import {
   MapPin,
   Hash,
   Loader2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -43,6 +45,7 @@ export function SupplierPayoutSetup() {
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [onboardingUrl, setOnboardingUrl] = useState('');
   const [showBankForm, setShowBankForm] = useState(false);
+  const [showAccountNumber, setShowAccountNumber] = useState(false);
 
   // Bank details state
   const [bankDetails, setBankDetails] = useState({
@@ -93,8 +96,8 @@ export function SupplierPayoutSetup() {
     setIsGeneratingLink(true);
 
     try {
-      const returnUrl = `${window.location.origin}/supplier/payouts?return=true`;
-      const refreshUrl = `${window.location.origin}/supplier/payouts?refresh=true`;
+      const returnUrl = `${window.location.origin}/dashboard/supplier/payouts?return=true`;
+      const refreshUrl = `${window.location.origin}/dashboard/supplier/payouts?refresh=true`;
 
       // Create account if doesn't exist
       if (!stripeAccount?.accountId) {
@@ -156,7 +159,7 @@ export function SupplierPayoutSetup() {
     showToast.info('Refreshing account status...');
     fetchingRef.current = false;
     setLoading(true);
-    
+
     try {
       const response = await fetch(`/api/supplier/payouts?supplierId=${user?.id}`);
       const data = await response.json();
@@ -240,7 +243,7 @@ export function SupplierPayoutSetup() {
             {stripeAccount.kycStatus}
           </Badge>
         </Card>
-        
+
         <Card className="p-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
             <CheckCircle2 className="w-4 h-4" />
@@ -387,7 +390,7 @@ export function SupplierPayoutSetup() {
                       <p className="text-sm text-muted-foreground mb-4">
                         Your secure onboarding link is ready. Click below to complete verification.
                       </p>
-                      
+
                       {/* Link Display */}
                       <div className="bg-white dark:bg-slate-900 rounded-lg p-3 font-mono text-xs break-all border-2 border-green-200 dark:border-green-800">
                         {onboardingUrl}
@@ -587,8 +590,8 @@ export function SupplierPayoutSetup() {
                         payout.status === 'paid' || payout.status === 'completed'
                           ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
                           : payout.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
-                          : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400'
+                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400'
                       )}>
                         {payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
                       </Badge>
@@ -678,15 +681,24 @@ export function SupplierPayoutSetup() {
                   <Label htmlFor="accountNumber">
                     Account Number <span className="text-red-500">*</span>
                   </Label>
-                  <Input
-                    id="accountNumber"
-                    type="password"
-                    placeholder="••••••••"
-                    value={bankDetails.accountNumber}
-                    onChange={(e) => setBankDetails({ ...bankDetails, accountNumber: e.target.value })}
-                    className="h-11"
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="accountNumber"
+                      type={showAccountNumber ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={bankDetails.accountNumber}
+                      onChange={(e) => setBankDetails({ ...bankDetails, accountNumber: e.target.value })}
+                      className="h-11 pr-10"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAccountNumber(!showAccountNumber)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-purple-500 transition-colors"
+                    >
+                      {showAccountNumber ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">

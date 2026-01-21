@@ -30,6 +30,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
+import { validatePhoneNumber, cleanPhoneNumber, formatPhoneNumber, allowOnlyDigits } from '../../lib/phone-validation';
 
 // Mock supplier data
 const mockSuppliers = [
@@ -384,9 +385,22 @@ export function AdminSuppliers() {
 // Edit Supplier Modal Component
 function EditSupplierModal({ supplier, onClose, onSave, onToggleStatus }: any) {
   const [formData, setFormData] = useState(supplier);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Phone number validation
+    if (formData.phone && formData.phone.trim()) {
+      const phoneValidation = validatePhoneNumber(formData.phone);
+      if (!phoneValidation.isValid && phoneValidation.error) {
+        setPhoneError(phoneValidation.error);
+        toast.error(phoneValidation.error);
+        return;
+      }
+      setPhoneError(null);
+      // Clean phone number before saving
+      formData.phone = cleanPhoneNumber(formData.phone);
+    }
     onSave(formData);
   };
 
@@ -459,9 +473,53 @@ function EditSupplierModal({ supplier, onClose, onSave, onToggleStatus }: any) {
                     id="supplier-phone"
                     type="tel"
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Allow only digits
+                      const digitsOnly = allowOnlyDigits(value);
+                      // Format the phone number
+                      const formatted = formatPhoneNumber(digitsOnly);
+                      
+                      setFormData({ ...formData, phone: formatted });
+                      // Real-time validation
+                      if (digitsOnly && digitsOnly.trim()) {
+                        const validation = validatePhoneNumber(digitsOnly);
+                        if (!validation.isValid && validation.error) {
+                          setPhoneError(validation.error);
+                        } else {
+                          setPhoneError(null);
+                        }
+                      } else {
+                        setPhoneError(null);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      // Allow: backspace, delete, tab, escape, enter, and numbers
+                      if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+                        // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                        (e.keyCode === 65 && e.ctrlKey === true) ||
+                        (e.keyCode === 67 && e.ctrlKey === true) ||
+                        (e.keyCode === 86 && e.ctrlKey === true) ||
+                        (e.keyCode === 88 && e.ctrlKey === true) ||
+                        // Allow: home, end, left, right
+                        (e.keyCode >= 35 && e.keyCode <= 39)) {
+                        return;
+                      }
+                      // Ensure that it is a number and stop the keypress
+                      if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    className={phoneError ? "border-red-500" : ""}
+                    placeholder="12345678901"
                     required
                   />
+                  {phoneError && (
+                    <p className="text-sm text-red-500 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {phoneError}
+                    </p>
+                  )}
                 </div>
               </div>
 

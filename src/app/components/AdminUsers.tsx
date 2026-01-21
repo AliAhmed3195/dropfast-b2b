@@ -25,6 +25,9 @@ import {
   Briefcase,
   X,
   Calendar,
+  Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { SimpleUserForm } from './SimpleUserForm';
 import { Card } from './ui/card';
@@ -57,6 +60,16 @@ import { Avatar, AvatarFallback } from './ui/avatar';
 import { Label } from './ui/label';
 import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from './ui/pagination';
 
 // Mock user data - Admin internal users
 const adminUsers = [
@@ -211,26 +224,49 @@ const vendorUsers = [
 ];
 
 export function AdminUsers() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'admin' | 'supplier' | 'vendor'>('all');
+  const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'admin' | 'supplier' | 'vendor' | 'customer'>('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [viewingUser, setViewingUser] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
   const { callApi } = useApiCall();
 
   const fetchUsers = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
       const role = userTypeFilter === 'all' ? '' : userTypeFilter;
-      const url = role ? `/api/admin/users?role=${role}` : '/api/admin/users';
+      const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
+      const excludeUserId = currentUser?.id ? `&excludeUserId=${currentUser.id}` : '';
+      const url = `/api/admin/users?role=${role || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}${excludeUserId}`;
       const response = await fetch(url, { signal });
       const data = await response.json();
       
       if (response.ok) {
-        setUsers(data.users || []);
+        // Filter out current user from results (double check on client side)
+        const filteredUsers = (data.users || []).filter((u: any) => u.id !== currentUser?.id);
+        setUsers(filteredUsers);
+        if (data.pagination) {
+          // Adjust total count if current user was excluded
+          const adjustedTotal = currentUser?.id && data.pagination.total > 0 
+            ? Math.max(0, data.pagination.total - 1) 
+            : data.pagination.total;
+          setPagination({
+            ...data.pagination,
+            total: adjustedTotal,
+            totalPages: Math.ceil(adjustedTotal / data.pagination.limit),
+          });
+        }
       } else {
         showToast.error(data.error || 'Failed to fetch users');
       }
@@ -244,10 +280,86 @@ export function AdminUsers() {
     }
   };
 
-  // Fetch users on mount
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to avoid too many API calls
   useEffect(() => {
-    callApi(fetchUsers);
-  }, [userTypeFilter, callApi]);
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset to page 1 when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [userTypeFilter, debouncedSearchQuery]);
+
+  // Abort controller ref for search
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch users on mount and when filters/page change
+  useEffect(() => {
+    // Abort previous request if any
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
+    // Use debouncedSearchQuery instead of searchQuery
+    const fetchWithDebouncedSearch = async (signal?: AbortSignal) => {
+      try {
+        setLoading(true);
+        const role = userTypeFilter === 'all' ? '' : userTypeFilter;
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const excludeUserId = currentUser?.id ? `&excludeUserId=${currentUser.id}` : '';
+        const url = `/api/admin/users?role=${role || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}${excludeUserId}`;
+        const response = await fetch(url, { signal: signal || abortController.signal });
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Filter out current user from results (double check on client side)
+          const filteredUsers = (data.users || []).filter((u: any) => u.id !== currentUser?.id);
+          setUsers(filteredUsers);
+          if (data.pagination) {
+            // Adjust total count if current user was excluded
+            const adjustedTotal = currentUser?.id && data.pagination.total > 0 
+              ? Math.max(0, data.pagination.total - 1) 
+              : data.pagination.total;
+            setPagination({
+              ...data.pagination,
+              total: adjustedTotal,
+              totalPages: Math.ceil(adjustedTotal / data.pagination.limit),
+            });
+          }
+        } else {
+          showToast.error(data.error || 'Failed to fetch users');
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Fetch users error:', error);
+          showToast.error('Failed to fetch users');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    callApi(fetchWithDebouncedSearch);
+
+    // Cleanup: abort request on unmount or dependency change
+    return () => {
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+        searchAbortControllerRef.current = null;
+      }
+    };
+  }, [userTypeFilter, currentPage, debouncedSearchQuery, callApi, currentUser?.id, pagination.limit]);
 
   const handleFormSuccess = async () => {
     setShowForm(false);
@@ -265,6 +377,11 @@ export function AdminUsers() {
         role: roleValue.toLowerCase(), // API expects lowercase
         businessName: updatedUser.organization || updatedUser.businessName || null,
       };
+
+      // Include password if provided
+      if (updatedUser.password && updatedUser.password.trim()) {
+        apiData.password = updatedUser.password;
+      }
 
       // Include status if provided
       if (updatedUser.status !== undefined) {
@@ -334,14 +451,10 @@ export function AdminUsers() {
     // To persist in database, we would need to add a status field to the User model
   };
 
+  // Client-side filtering only for status (since search and role are handled server-side)
   const filteredUsers = users.filter(user => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.organization.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = userTypeFilter === 'all' || user.userType === userTypeFilter;
     const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
-    return matchesSearch && matchesType && matchesStatus;
+    return matchesStatus;
   });
 
   const getUserTypeIcon = (userType: string) => {
@@ -352,6 +465,8 @@ export function AdminUsers() {
         return Package;
       case 'vendor':
         return Store;
+      case 'customer':
+        return ShoppingBag;
       default:
         return Users;
     }
@@ -365,6 +480,8 @@ export function AdminUsers() {
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400';
       case 'vendor':
         return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-400';
+      case 'customer':
+        return 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400';
       default:
         return 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400';
     }
@@ -375,6 +492,7 @@ export function AdminUsers() {
     admin: users.filter(u => u.userType === 'admin').length,
     supplier: users.filter(u => u.userType === 'supplier').length,
     vendor: users.filter(u => u.userType === 'vendor').length,
+    customer: users.filter(u => u.userType === 'customer').length,
   };
 
   // If form is showing, render it instead of the list
@@ -407,7 +525,7 @@ export function AdminUsers() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
         <Card className="p-6">
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-cyan-500">
@@ -479,6 +597,26 @@ export function AdminUsers() {
             </div>
           </div>
         </Card>
+
+        <Card 
+          className={cn(
+            'p-6 cursor-pointer transition-all border-2',
+            userTypeFilter === 'customer' 
+              ? 'border-green-500 shadow-lg shadow-green-500/20' 
+              : 'hover:border-green-300'
+          )}
+          onClick={() => setUserTypeFilter(userTypeFilter === 'customer' ? 'all' : 'customer')}
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500">
+              <ShoppingBag className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Customer Users</p>
+              <p className="text-2xl font-bold">{stats.customer}</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Active Filter Info */}
@@ -510,9 +648,26 @@ export function AdminUsers() {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
             <Input
+              type="text"
               placeholder="Search by name, email, or organization..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                // Prevent form submission and page reload on Enter key
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
+              onKeyPress={(e) => {
+                // Prevent default behavior on Enter keypress
+                if (e.key === 'Enter' || e.which === 13 || e.keyCode === 13) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
               className="pl-10"
             />
           </div>
@@ -539,6 +694,12 @@ export function AdminUsers() {
                 <div className="flex items-center gap-2">
                   <Store className="w-4 h-4 text-cyan-600" />
                   Vendor Users
+                </div>
+              </SelectItem>
+              <SelectItem value="customer">
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="w-4 h-4 text-green-600" />
+                  Customer Users
                 </div>
               </SelectItem>
             </SelectContent>
@@ -673,6 +834,84 @@ export function AdminUsers() {
         )}
       </Card>
 
+      {/* Pagination */}
+      {!loading && pagination.totalPages > 1 && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} users
+            </div>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious 
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage > 1) {
+                        setCurrentPage(currentPage - 1);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }
+                    }}
+                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+                
+                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                  // Show first page, last page, current page, and pages around current
+                  if (
+                    page === 1 ||
+                    page === pagination.totalPages ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  ) {
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage(page);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          isActive={currentPage === page}
+                          className="cursor-pointer"
+                        >
+                          {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  } else if (
+                    page === currentPage - 2 ||
+                    page === currentPage + 2
+                  ) {
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    );
+                  }
+                  return null;
+                })}
+                
+                <PaginationItem>
+                  <PaginationNext 
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage < pagination.totalPages) {
+                        setCurrentPage(currentPage + 1);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }
+                    }}
+                    className={currentPage === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        </Card>
+      )}
+
       {/* Edit User Modal */}
       <AnimatePresence>
         {editingUser && (
@@ -803,6 +1042,8 @@ function UserDetailModal({ userId, onClose }: { userId: string; onClose: () => v
         return Package;
       case 'vendor':
         return Store;
+      case 'customer':
+        return ShoppingBag;
       default:
         return Users;
     }
@@ -858,6 +1099,8 @@ function UserDetailModal({ userId, onClose }: { userId: string; onClose: () => v
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
                     : user.userType === 'vendor' || user.role === 'vendor'
                     ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-400'
+                    : user.userType === 'customer' || user.role === 'customer'
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
                     : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400'
                 )}>
                   <UserTypeIcon className="w-3 h-3 mr-1" />
@@ -904,6 +1147,9 @@ function UserDetailModal({ userId, onClose }: { userId: string; onClose: () => v
 function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
   const [formData, setFormData] = useState(user);
   const [loading, setLoading] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordField, setShowPasswordField] = useState(false);
   const fetchingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -998,7 +1244,7 @@ function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
     }
 
     // Map formData to API format - only send fields that exist in original form
-    const updateData = {
+    const updateData: any = {
       id: user.id,
       name: formData.name || '',
       email: formData.email || '',
@@ -1006,6 +1252,15 @@ function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
       businessName: formData.organization || formData.businessName || null,
       status: formData.status || 'active', // Include status in save
     };
+    
+    // Include password if provided
+    if (password && password.trim()) {
+      if (password.length < 6) {
+        showToast.error('Password must be at least 6 characters');
+        return;
+      }
+      updateData.password = password;
+    }
     
     onSave(updateData);
   };
@@ -1121,6 +1376,62 @@ function EditUserModal({ user, onClose, onSave, onToggleStatus }: any) {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div>
+                {!showPasswordField ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowPasswordField(true)}
+                    className="w-full"
+                  >
+                    <Lock className="w-4 h-4 mr-2" />
+                    Change Password
+                  </Button>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label htmlFor="user-password" className="block text-sm font-semibold">
+                        New Password
+                      </label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setShowPasswordField(false);
+                          setPassword('');
+                          setShowPassword(false);
+                        }}
+                        className="h-auto p-1 text-xs"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="user-password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter new password"
+                        className="pl-10 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-purple-500 transition-colors"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {password && password.length > 0 && password.length < 6 && (
+                      <p className="text-sm text-red-500 mt-1">Password must be at least 6 characters</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">

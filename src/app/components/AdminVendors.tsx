@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useApiCall } from '../../hooks/useApiCall';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Store,
@@ -21,6 +22,7 @@ import {
   MoreVertical,
   Trash2,
   Building2,
+  AlertCircle,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -30,113 +32,211 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
-
-// Mock vendor data
-const mockVendors = [
-  {
-    id: '1',
-    name: 'Tech Haven Store',
-    email: 'owner@techhaven.com',
-    phone: '+1 (555) 123-4567',
-    storeName: 'Tech Haven',
-    address: '123 Business St, New York, NY 10001',
-    joinDate: '2024-01-15',
-    status: 'active',
-    totalProducts: 156,
-    totalOrders: 342,
-    revenue: 45678.90,
-    rating: 4.8,
-    stripeConnected: true,
-  },
-  {
-    id: '2',
-    name: 'Fashion Hub',
-    email: 'contact@fashionhub.com',
-    phone: '+1 (555) 234-5678',
-    storeName: 'Fashion Hub',
-    address: '456 Market Ave, Los Angeles, CA 90001',
-    joinDate: '2024-02-20',
-    status: 'active',
-    totalProducts: 234,
-    totalOrders: 567,
-    revenue: 78900.50,
-    rating: 4.9,
-    stripeConnected: true,
-  },
-  {
-    id: '3',
-    name: 'Home Essentials',
-    email: 'info@homeessentials.com',
-    phone: '+1 (555) 345-6789',
-    storeName: 'Home Essentials',
-    address: '789 Oak St, Chicago, IL 60601',
-    joinDate: '2024-03-10',
-    status: 'inactive',
-    totalProducts: 89,
-    totalOrders: 123,
-    revenue: 23456.75,
-    rating: 4.5,
-    stripeConnected: false,
-  },
-  {
-    id: '4',
-    name: 'Sports World',
-    email: 'admin@sportsworld.com',
-    phone: '+1 (555) 456-7890',
-    storeName: 'Sports World',
-    address: '321 Elm St, Houston, TX 77001',
-    joinDate: '2024-04-05',
-    status: 'active',
-    totalProducts: 178,
-    totalOrders: 445,
-    revenue: 56789.30,
-    rating: 4.7,
-    stripeConnected: true,
-  },
-];
+import { validatePhoneNumber, cleanPhoneNumber, formatPhoneNumber, allowOnlyDigits } from '../../lib/phone-validation';
+import { showToast } from '../../lib/toast';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from './ui/pagination';
 
 export function AdminVendors() {
-  const [vendors, setVendors] = useState(mockVendors);
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [editingVendor, setEditingVendor] = useState<any>(null);
   const [viewingVendor, setViewingVendor] = useState<any>(null);
-
-  const filteredVendors = vendors.filter(vendor => {
-    const matchesSearch = vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         vendor.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         vendor.storeName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || vendor.status === statusFilter;
-    return matchesSearch && matchesStatus;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
   });
+  const { callApi } = useApiCall();
+
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to avoid too many API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset to page 1 when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, debouncedSearchQuery]);
+
+  // Abort controller ref for search
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch vendors on mount and when filters/page change
+  useEffect(() => {
+    // Abort previous request if any
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
+    // Use debouncedSearchQuery instead of searchQuery
+    const fetchWithDebouncedSearch = async (signal?: AbortSignal) => {
+      try {
+        setLoading(true);
+        const status = statusFilter === 'all' ? '' : statusFilter;
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const url = `/api/admin/vendors?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}`;
+        const response = await fetch(url, { signal: signal || abortController.signal });
+        const data = await response.json();
+        
+        if (response.ok) {
+          setVendors(data.vendors || []);
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
+        } else {
+          showToast.error(data.error || 'Failed to fetch vendors');
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Fetch vendors error:', error);
+          showToast.error('Failed to fetch vendors');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    callApi(fetchWithDebouncedSearch);
+
+    // Cleanup: abort request on unmount or dependency change
+    return () => {
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+        searchAbortControllerRef.current = null;
+      }
+    };
+  }, [statusFilter, currentPage, debouncedSearchQuery, callApi, pagination.limit]);
 
   const stats = {
-    total: vendors.length,
+    total: pagination.total || vendors.length,
     active: vendors.filter(v => v.status === 'active').length,
-    totalProducts: vendors.reduce((sum, v) => sum + v.totalProducts, 0),
-    totalRevenue: vendors.reduce((sum, v) => sum + v.revenue, 0),
+    totalProducts: vendors.reduce((sum, v) => sum + (v.totalProducts || 0), 0),
+    totalRevenue: vendors.reduce((sum, v) => sum + (v.totalRevenue || 0), 0),
   };
 
-  const handleToggleStatus = (vendorId: string) => {
-    setVendors(prev =>
-      prev.map(v =>
-        v.id === vendorId ? { ...v, status: v.status === 'active' ? 'inactive' : 'active' } : v
-      )
-    );
-    toast.success('Vendor status updated');
+  const handleToggleStatus = async (vendorId: string) => {
+    try {
+      const vendor = vendors.find(v => v.id === vendorId);
+      if (!vendor) return;
+
+      const newStatus = vendor.status === 'active' ? 'inactive' : 'active';
+      
+      const response = await fetch(`/api/admin/users/${vendorId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: newStatus === 'active' }),
+      });
+
+      if (response.ok) {
+        setVendors(prev =>
+          prev.map(v =>
+            v.id === vendorId ? { ...v, status: newStatus } : v
+          )
+        );
+        showToast.success('Vendor status updated');
+      } else {
+        const data = await response.json();
+        showToast.error(data.error || 'Failed to update vendor status');
+      }
+    } catch (error) {
+      console.error('Toggle status error:', error);
+      showToast.error('Failed to update vendor status');
+    }
   };
 
-  const handleSaveVendor = (updatedVendor: any) => {
-    setVendors(prev =>
-      prev.map(v => (v.id === updatedVendor.id ? updatedVendor : v))
-    );
-    setEditingVendor(null);
-    toast.success('Vendor updated successfully!');
+  const handleSaveVendor = async (updatedVendor: any) => {
+    try {
+      const response = await fetch(`/api/admin/users/${updatedVendor.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: updatedVendor.name,
+          email: updatedVendor.email,
+          phone: updatedVendor.phone,
+          businessName: updatedVendor.storeName || updatedVendor.businessName,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Refresh vendors list
+        const status = statusFilter === 'all' ? '' : statusFilter;
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const url = `/api/admin/vendors?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}`;
+        const refreshResponse = await fetch(url);
+        const refreshData = await refreshResponse.json();
+        
+        if (refreshResponse.ok) {
+          setVendors(refreshData.vendors || []);
+        }
+        
+        setEditingVendor(null);
+        showToast.success('Vendor updated successfully!');
+      } else {
+        showToast.error(data.error || 'Failed to update vendor');
+      }
+    } catch (error) {
+      console.error('Save vendor error:', error);
+      showToast.error('Failed to update vendor');
+    }
   };
 
-  const handleDeleteVendor = (vendorId: string) => {
-    setVendors(prev => prev.filter(v => v.id !== vendorId));
-    toast.success('Vendor deleted successfully!');
+  const handleDeleteVendor = async (vendorId: string) => {
+    if (!confirm('Are you sure you want to delete this vendor?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/users/${vendorId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Refresh vendors list
+        const status = statusFilter === 'all' ? '' : statusFilter;
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const url = `/api/admin/vendors?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}`;
+        const refreshResponse = await fetch(url);
+        const refreshData = await refreshResponse.json();
+        
+        if (refreshResponse.ok) {
+          setVendors(refreshData.vendors || []);
+          if (refreshData.pagination) {
+            setPagination(refreshData.pagination);
+          }
+        }
+        
+        showToast.success('Vendor deleted successfully!');
+      } else {
+        const data = await response.json();
+        showToast.error(data.error || 'Failed to delete vendor');
+      }
+    } catch (error) {
+      console.error('Delete vendor error:', error);
+      showToast.error('Failed to delete vendor');
+    }
   };
 
   return (
@@ -208,12 +308,26 @@ export function AdminVendors() {
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <input
+            <Input
               type="text"
               placeholder="Search vendors by name, email, or store..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-slate-800 dark:border-slate-700"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' || e.which === 13 || e.keyCode === 13) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
+              className="pl-10"
             />
           </div>
           <div className="flex gap-2">
@@ -242,52 +356,43 @@ export function AdminVendors() {
         </div>
       </Card>
 
-      {/* Vendors Table */}
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 dark:bg-slate-800/50 border-b">
-              <tr>
-                <th className="text-left p-4 font-semibold">Vendor</th>
-                <th className="text-left p-4 font-semibold">Store</th>
-                <th className="text-left p-4 font-semibold">Contact</th>
-                <th className="text-left p-4 font-semibold">Products</th>
-                <th className="text-left p-4 font-semibold">Revenue</th>
-                <th className="text-left p-4 font-semibold">Status</th>
-                <th className="text-left p-4 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredVendors.map((vendor, index) => (
-                <motion.tr
-                  key={vendor.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="border-b last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-800/30"
-                >
-                  <td className="p-4">
-                    <div>
-                      <p className="font-semibold">{vendor.name}</p>
-                      <p className="text-sm text-muted-foreground">{vendor.email}</p>
+      {/* Vendors Grid */}
+      {loading ? (
+        <Card className="p-16">
+          <div className="text-center">
+            <Store className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50 animate-pulse" />
+            <p className="text-lg text-muted-foreground">Loading vendors...</p>
+          </div>
+        </Card>
+      ) : vendors.length === 0 ? (
+        <Card className="p-16">
+          <div className="text-center">
+            <Store className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+            <p className="text-lg text-muted-foreground">No vendors found</p>
+          </div>
+        </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {vendors.map((vendor, index) => (
+              <motion.div
+                key={vendor.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+              >
+                <Card className="p-6 hover:shadow-lg transition-shadow group">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-lg mb-1">{vendor.name || vendor.fullName}</h3>
+                      {(vendor.storeName || vendor.businessName) && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Building2 className="w-3 h-3" />
+                          {vendor.storeName || vendor.businessName}
+                        </p>
+                      )}
                     </div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <Store className="w-4 h-4 text-purple-500" />
-                      <span className="font-medium">{vendor.storeName}</span>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <p className="text-sm">{vendor.phone}</p>
-                  </td>
-                  <td className="p-4">
-                    <Badge variant="outline">{vendor.totalProducts} items</Badge>
-                  </td>
-                  <td className="p-4">
-                    <p className="font-semibold">${vendor.revenue.toLocaleString()}</p>
-                  </td>
-                  <td className="p-4">
                     <Badge
                       variant={vendor.status === 'active' ? 'default' : 'secondary'}
                       className={cn(
@@ -303,38 +408,148 @@ export function AdminVendors() {
                       )}
                       {vendor.status}
                     </Badge>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setViewingVendor(vendor)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditingVendor(vendor)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteVendor(vendor.id)}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
+                  </div>
+
+                  {/* Contact Info */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Mail className="w-4 h-4" />
+                      <span className="truncate">{vendor.email}</span>
                     </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                    {vendor.phone && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Phone className="w-4 h-4" />
+                        <span>{vendor.phone}</span>
+                      </div>
+                    )}
+                    {vendor.address && (
+                      <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4 mt-0.5" />
+                        <span className="line-clamp-2">{vendor.address}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-2 mb-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">Products</p>
+                      <p className="font-bold">{vendor.totalProducts || 0}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">Orders</p>
+                      <p className="font-bold">{vendor.totalOrders || 0}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">Revenue</p>
+                      <p className="font-bold">${((vendor.totalRevenue || vendor.revenue || 0) / 1000).toFixed(1)}K</p>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-4 border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setViewingVendor(vendor)}
+                      className="flex-1"
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEditingVendor(vendor)}
+                      className="flex-1"
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteVendor(vendor.id)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} vendors
+                </div>
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious 
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage > 1) {
+                            setCurrentPage(currentPage - 1);
+                          }
+                        }}
+                        className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                      if (
+                        page === 1 ||
+                        page === pagination.totalPages ||
+                        (page >= currentPage - 1 && page <= currentPage + 1)
+                      ) {
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentPage(page);
+                              }}
+                              isActive={currentPage === page}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      } else if (page === currentPage - 2 || page === currentPage + 2) {
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        );
+                      }
+                      return null;
+                    })}
+                    <PaginationItem>
+                      <PaginationNext 
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage < pagination.totalPages) {
+                            setCurrentPage(currentPage + 1);
+                          }
+                        }}
+                        className={currentPage === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            </Card>
+          )}
+        </>
+      )}
 
       {/* Edit Vendor Modal */}
       <AnimatePresence>
@@ -368,9 +583,22 @@ export function AdminVendors() {
 // Edit Vendor Modal Component
 function EditVendorModal({ vendor, onClose, onSave, onToggleStatus }: any) {
   const [formData, setFormData] = useState(vendor);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Phone number validation
+    if (formData.phone && formData.phone.trim()) {
+      const phoneValidation = validatePhoneNumber(formData.phone);
+      if (!phoneValidation.isValid && phoneValidation.error) {
+        setPhoneError(phoneValidation.error);
+        toast.error(phoneValidation.error);
+        return;
+      }
+      setPhoneError(null);
+      // Clean phone number before saving
+      formData.phone = cleanPhoneNumber(formData.phone);
+    }
     onSave(formData);
   };
 
@@ -409,8 +637,8 @@ function EditVendorModal({ vendor, onClose, onSave, onToggleStatus }: any) {
                   <Input
                     id="vendor-name"
                     type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    value={formData.name || formData.fullName}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value, fullName: e.target.value })}
                     required
                   />
                 </div>
@@ -419,8 +647,8 @@ function EditVendorModal({ vendor, onClose, onSave, onToggleStatus }: any) {
                   <Input
                     id="store-name"
                     type="text"
-                    value={formData.storeName}
-                    onChange={(e) => setFormData({ ...formData, storeName: e.target.value })}
+                    value={formData.storeName || formData.businessName}
+                    onChange={(e) => setFormData({ ...formData, storeName: e.target.value, businessName: e.target.value })}
                     required
                   />
                 </div>
@@ -442,22 +670,55 @@ function EditVendorModal({ vendor, onClose, onSave, onToggleStatus }: any) {
                   <Input
                     id="vendor-phone"
                     type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    value={formData.phone || formData.phoneNumber || ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Allow only digits
+                      const digitsOnly = allowOnlyDigits(value);
+                      // Format the phone number
+                      const formatted = formatPhoneNumber(digitsOnly);
+                      
+                      setFormData({ ...formData, phone: formatted, phoneNumber: formatted });
+                      // Real-time validation
+                      if (digitsOnly && digitsOnly.trim()) {
+                        const validation = validatePhoneNumber(digitsOnly);
+                        if (!validation.isValid && validation.error) {
+                          setPhoneError(validation.error);
+                        } else {
+                          setPhoneError(null);
+                        }
+                      } else {
+                        setPhoneError(null);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      // Allow: backspace, delete, tab, escape, enter, and numbers
+                      if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+                        // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                        (e.keyCode === 65 && e.ctrlKey === true) ||
+                        (e.keyCode === 67 && e.ctrlKey === true) ||
+                        (e.keyCode === 86 && e.ctrlKey === true) ||
+                        (e.keyCode === 88 && e.ctrlKey === true) ||
+                        // Allow: home, end, left, right
+                        (e.keyCode >= 35 && e.keyCode <= 39)) {
+                        return;
+                      }
+                      // Ensure that it is a number and stop the keypress
+                      if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    className={phoneError ? "border-red-500" : ""}
+                    placeholder="12345678901"
                     required
                   />
+                  {phoneError && (
+                    <p className="text-sm text-red-500 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {phoneError}
+                    </p>
+                  )}
                 </div>
-              </div>
-
-              <div>
-                <Label htmlFor="vendor-address" className="block text-sm font-semibold mb-2">Address</Label>
-                <Input
-                  id="vendor-address"
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  required
-                />
               </div>
 
               <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
@@ -522,7 +783,7 @@ function ViewVendorModal({ vendor, onClose, onEdit }: any) {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-2xl font-bold">{vendor.name}</h2>
+              <h2 className="text-2xl font-bold">{vendor.name || vendor.fullName}</h2>
               <p className="text-sm text-muted-foreground">Vendor Details</p>
             </div>
             <div className="flex gap-2">
@@ -556,15 +817,15 @@ function ViewVendorModal({ vendor, onClose, onEdit }: any) {
             <div className="grid grid-cols-3 gap-4">
               <Card className="p-4 bg-purple-50 dark:bg-purple-900/20">
                 <p className="text-sm text-muted-foreground font-medium mb-1">Products</p>
-                <p className="text-2xl font-bold">{vendor.totalProducts}</p>
+                <p className="text-2xl font-bold">{vendor.totalProducts || 0}</p>
               </Card>
               <Card className="p-4 bg-blue-50 dark:bg-blue-900/20">
                 <p className="text-sm text-muted-foreground font-medium mb-1">Orders</p>
-                <p className="text-2xl font-bold">{vendor.totalOrders}</p>
+                <p className="text-2xl font-bold">{vendor.totalOrders || 0}</p>
               </Card>
               <Card className="p-4 bg-green-50 dark:bg-green-900/20">
                 <p className="text-sm text-muted-foreground font-medium mb-1">Revenue</p>
-                <p className="text-2xl font-bold">${vendor.revenue.toLocaleString()}</p>
+                <p className="text-2xl font-bold">${((vendor.totalRevenue || vendor.revenue || 0) / 1000).toFixed(1)}K</p>
               </Card>
             </div>
 
@@ -579,53 +840,43 @@ function ViewVendorModal({ vendor, onClose, onEdit }: any) {
                     <p className="font-medium">{vendor.email}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Phone className="w-5 h-5 text-cyan-500" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Phone</p>
-                    <p className="font-medium">{vendor.phone}</p>
+                {(vendor.phone || vendor.phoneNumber) && (
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-5 h-5 text-cyan-500" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Phone</p>
+                      <p className="font-medium">{vendor.phone || vendor.phoneNumber}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Building2 className="w-5 h-5 text-indigo-500" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Store Name</p>
-                    <p className="font-medium">{vendor.storeName}</p>
+                )}
+                {(vendor.storeName || vendor.businessName) && (
+                  <div className="flex items-center gap-3">
+                    <Building2 className="w-5 h-5 text-indigo-500" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Store Name</p>
+                      <p className="font-medium">{vendor.storeName || vendor.businessName}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Calendar className="w-5 h-5 text-green-500" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Join Date</p>
-                    <p className="font-medium">{vendor.joinDate}</p>
+                )}
+                {(vendor.joinDate || vendor.joinedDate) && (
+                  <div className="flex items-center gap-3">
+                    <Calendar className="w-5 h-5 text-green-500" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Join Date</p>
+                      <p className="font-medium">{vendor.joinDate || vendor.joinedDate}</p>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <MapPin className="w-5 h-5 text-red-500 mt-1" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Address</p>
-                  <p className="font-medium">{vendor.address}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Info */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
-              <h3 className="font-bold mb-2">Payment Status</h3>
-              <div className="flex items-center gap-2">
-                {vendor.stripeConnected ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    <span className="font-medium">Stripe Connected</span>
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="w-5 h-5 text-red-500" />
-                    <span className="font-medium">Stripe Not Connected</span>
-                  </>
                 )}
               </div>
+              {vendor.address && (
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-5 h-5 text-red-500 mt-1" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Address</p>
+                    <p className="font-medium">{vendor.address}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </Card>

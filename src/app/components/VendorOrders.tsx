@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useApiCall } from '../../hooks/useApiCall';
 import { motion } from 'motion/react';
 import {
   Package,
@@ -57,57 +58,108 @@ import {
 } from './ui/table';
 import { Separator } from './ui/separator';
 import { showToast } from '../../lib/toast';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from './ui/pagination';
 
 export function VendorOrders() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const fetchingRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const { callApi } = useApiCall();
 
-  // Fetch orders
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to avoid too many API calls
   useEffect(() => {
-    if (!user?.id || fetchingRef.current) return;
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
 
-    fetchingRef.current = true;
-    setLoading(true);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-    const fetchOrders = async () => {
+  // Reset to page 1 when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, debouncedSearchQuery]);
+
+  // Abort controller ref for search
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch orders on mount and when filters/page change
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Abort previous request if any
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
+    // Use debouncedSearchQuery instead of searchQuery
+    const fetchWithDebouncedSearch = async (signal?: AbortSignal) => {
       try {
+        setLoading(true);
         const params = new URLSearchParams();
         params.append('vendorId', user.id);
+        params.append('page', currentPage.toString());
+        params.append('limit', pagination.limit.toString());
         if (statusFilter !== 'all') params.append('status', statusFilter);
+        if (debouncedSearchQuery) params.append('search', debouncedSearchQuery);
 
-        const response = await fetch(`/api/vendor/orders?${params.toString()}`);
+        const response = await fetch(`/api/vendor/orders?${params.toString()}`, { 
+          signal: signal || abortController.signal 
+        });
         const data = await response.json();
 
         if (response.ok) {
           setOrders(data.orders || []);
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
         } else {
           showToast.error(data.error || 'Failed to fetch orders');
         }
-      } catch (error) {
-        console.error('Fetch orders error:', error);
-        showToast.error('Failed to fetch orders');
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Fetch orders error:', error);
+          showToast.error('Failed to fetch orders');
+        }
       } finally {
         setLoading(false);
-        fetchingRef.current = false;
       }
     };
 
-    fetchOrders();
-  }, [user?.id, statusFilter]);
+    callApi(fetchWithDebouncedSearch);
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch =
-      order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer?.email?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+    // Cleanup: abort request on unmount or dependency change
+    return () => {
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+        searchAbortControllerRef.current = null;
+      }
+    };
+  }, [user?.id, statusFilter, currentPage, debouncedSearchQuery, callApi, pagination.limit]);
 
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
     try {
@@ -180,7 +232,7 @@ export function VendorOrders() {
   };
 
   const stats = {
-    total: orders.length,
+    total: pagination.total || orders.length,
     revenue: orders.reduce((sum, o) => sum + (o.total || 0), 0),
     pending: orders.filter(o => o.status === 'pending').length,
     processing: orders.filter(o => o.status === 'processing').length,
@@ -263,9 +315,24 @@ export function VendorOrders() {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
             <Input
+              type="text"
               placeholder="Search by order ID or customer name..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' || e.which === 13 || e.keyCode === 13) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
               className="pl-10"
             />
           </div>
@@ -287,7 +354,7 @@ export function VendorOrders() {
       </Card>
 
       {/* Orders Table */}
-      {filteredOrders.length > 0 ? (
+      {orders.length > 0 ? (
         <Card>
           <Table>
             <TableHeader>
@@ -302,7 +369,7 @@ export function VendorOrders() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredOrders.map((order, index) => {
+              {orders.map((order, index) => {
                 const statusConfig = getStatusConfig(order.status);
                 const StatusIcon = statusConfig.icon;
 
@@ -538,6 +605,75 @@ export function VendorOrders() {
             </TableBody>
           </Table>
         </Card>
+
+        {/* Pagination */}
+        {!loading && pagination.totalPages > 1 && (
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} orders
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (currentPage > 1) {
+                          setCurrentPage(currentPage - 1);
+                        }
+                      }}
+                      className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                    if (
+                      page === 1 ||
+                      page === pagination.totalPages ||
+                      (page >= currentPage - 1 && page <= currentPage + 1)
+                    ) {
+                      return (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setCurrentPage(page);
+                            }}
+                            isActive={currentPage === page}
+                            className="cursor-pointer"
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    } else if (page === currentPage - 2 || page === currentPage + 2) {
+                      return (
+                        <PaginationItem key={page}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      );
+                    }
+                    return null;
+                  })}
+                  <PaginationItem>
+                    <PaginationNext 
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (currentPage < pagination.totalPages) {
+                          setCurrentPage(currentPage + 1);
+                        }
+                      }}
+                      className={currentPage === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          </Card>
+        )}
       ) : (
         <Card>
           <Table>

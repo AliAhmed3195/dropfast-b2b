@@ -50,6 +50,25 @@ export async function GET(request: NextRequest) {
       where.status = status.toUpperCase() as OrderStatus
     }
 
+    // Add search filter
+    const search = searchParams.get('search')
+    if (search && search.trim()) {
+      const searchTerm = search.trim()
+      where.OR = [
+        { orderNumber: { contains: searchTerm, mode: 'insensitive' } },
+        { customer: { name: { contains: searchTerm, mode: 'insensitive' } } },
+        { customer: { email: { contains: searchTerm, mode: 'insensitive' } } },
+      ]
+    }
+
+    // Pagination
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const skip = (page - 1) * limit
+
+    // Get total count for pagination
+    const total = await prisma.order.count({ where })
+
     const orders = await prisma.order.findMany({
       where,
       include: {
@@ -92,6 +111,8 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     })
 
     // Format response to match UI expectations
@@ -142,7 +163,15 @@ export async function GET(request: NextRequest) {
       createdAt: order.createdAt.toISOString(),
     }))
 
-    return NextResponse.json({ orders: formattedOrders })
+    return NextResponse.json({ 
+      orders: formattedOrders,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+    })
   } catch (error) {
     console.error('Get vendor orders error:', error)
     return NextResponse.json(

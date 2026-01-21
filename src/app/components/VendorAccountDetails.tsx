@@ -22,6 +22,8 @@ import {
   Landmark,
   Hash,
   Loader2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -59,6 +61,7 @@ export function VendorAccountDetails() {
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [accountData, setAccountData] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showAccountNumber, setShowAccountNumber] = useState(false);
   const [formData, setFormData] = useState({
     accountHolderName: '',
     bankName: '',
@@ -468,12 +471,19 @@ export function VendorAccountDetails() {
                       <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         id="accountNumber"
-                        type="password"
+                        type={showAccountNumber ? "text" : "password"}
                         placeholder="Enter account number"
                         value={formData.accountNumber}
                         onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-                        className="pl-10 h-11 border-2"
+                        className="pl-10 pr-10 h-11 border-2"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowAccountNumber(!showAccountNumber)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-purple-500 transition-colors"
+                      >
+                        {showAccountNumber ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
 

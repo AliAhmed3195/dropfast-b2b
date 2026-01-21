@@ -12,6 +12,7 @@ import {
   Package,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useApp } from '../contexts/AppContext';
 import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -21,44 +22,19 @@ import { EmptyState } from './ui/EmptyState';
 
 export function ShoppingCartComponent() {
   const { user } = useAuth();
+  const { cart, updateCartItem, removeFromCart, clearCart: clearContextCart, getCartTotal } = useApp();
   const router = useRouter();
-  
-  // Get cart from localStorage
-  const [cart, setCart] = useState<any[]>(() => {
-    if (typeof window !== 'undefined' && user?.id) {
-      const saved = localStorage.getItem(`cart_${user.id}`);
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
 
-  const getCartTotal = () => {
-    return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const updateQuantity = (productId: string, quantity: number) => {
+    updateCartItem(productId, quantity);
   };
 
-  const updateCartItem = (productId: string, quantity: number) => {
-    const updated = cart.map((item: any) =>
-      item.productId === productId ? { ...item, quantity } : item
-    ).filter((item: any) => item.quantity > 0);
-    setCart(updated);
-    if (user?.id && typeof window !== 'undefined') {
-      localStorage.setItem(`cart_${user.id}`, JSON.stringify(updated));
-    }
-  };
-
-  const removeFromCart = (productId: string) => {
-    const updated = cart.filter((item: any) => item.productId !== productId);
-    setCart(updated);
-    if (user?.id && typeof window !== 'undefined') {
-      localStorage.setItem(`cart_${user.id}`, JSON.stringify(updated));
-    }
+  const handleRemoveFromCart = (productId: string) => {
+    removeFromCart(productId);
   };
 
   const clearCart = () => {
-    setCart([]);
-    if (user?.id && typeof window !== 'undefined') {
-      localStorage.setItem(`cart_${user.id}`, JSON.stringify([]));
-    }
+    clearContextCart();
     showToast.success('Cart cleared');
   };
 
@@ -70,11 +46,11 @@ export function ShoppingCartComponent() {
   const handleUpdateQuantity = (productId: string, currentQuantity: number, delta: number) => {
     const newQuantity = currentQuantity + delta;
     if (newQuantity < 1) return;
-    updateCartItem(productId, newQuantity);
+    updateQuantity(productId, newQuantity);
   };
 
   const handleRemove = (productId: string) => {
-    removeFromCart(productId);
+    handleRemoveFromCart(productId);
     showToast.success('Item removed from cart');
   };
 

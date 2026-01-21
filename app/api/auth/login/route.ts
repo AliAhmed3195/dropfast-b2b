@@ -37,6 +37,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if user account is active
+    if (!user.isActive) {
+      return NextResponse.json(
+        { error: 'Your account has been deactivated. Please contact administrator.' },
+        { status: 403 }
+      )
+    }
+
     // Return user (without password)
     const { password: _, ...userWithoutPassword } = user
 

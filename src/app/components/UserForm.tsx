@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { User, Mail, Lock, Building2, FileText, Globe, DollarSign, MapPin, Phone, Calendar, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User, Mail, Lock, Building2, FileText, Globe, DollarSign, MapPin, Phone, Calendar, ArrowLeft, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -10,6 +10,7 @@ import { cn } from './ui/utils';
 import { countries as countriesData } from '../../data/countries';
 import { currencies as currenciesData, formatCurrency } from '../../data/currencies';
 import { showToast } from '../../lib/toast';
+import { validatePhoneNumber, cleanPhoneNumber, formatPhoneNumber, allowOnlyDigits } from '../../lib/phone-validation';
 
 interface UserFormProps {
   preSelectedRole?: 'supplier' | 'vendor' | 'customer';
@@ -54,6 +55,7 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(isEditMode);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   // Load user data when in edit mode
   useEffect(() => {
@@ -102,15 +104,15 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
             city: user.city || '',
             stateProvince: user.stateProvince || '',
             addressCountry: user.addressCountry || user.country || 'United States',
-            phoneNumber: user.phone || editUser.phoneNumber || '',
-            dateOfBirth: user.dateOfBirth || '',
+            phoneNumber: formatPhoneNumber(user.phone || editUser.phoneNumber || ''),
+            dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().split('T')[0] : '',
             // Supplier specific
             productCategories: user.productCategories || '',
             shippingLocations: user.shippingLocations || '',
             minimumOrderValue: user.minimumOrderValue?.toString() || '',
             // Vendor specific
-            storeName: '',
-            storeType: 'single',
+            storeName: user.storesAsVendor?.[0]?.name || '',
+            storeType: 'single', // TODO: Map if store type exists in schema
             commissionRate: user.commissionRate?.toString() || '15',
           });
         }
@@ -138,13 +140,46 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
   }, [isEditMode, editUser?.id, preSelectedRole]);
 
   const handleInputChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
+    // Phone number validation on input
+    if (field === 'phoneNumber') {
+      // Allow only digits
+      const digitsOnly = allowOnlyDigits(value);
+
+      // Format the phone number
+      const formatted = formatPhoneNumber(digitsOnly);
+
+      // Validate if there are digits
+      if (digitsOnly) {
+        const validation = validatePhoneNumber(digitsOnly);
+        if (!validation.isValid && validation.error) {
+          setErrors(prev => ({ ...prev, phoneNumber: validation.error }));
+        } else {
+          setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors.phoneNumber;
+            return newErrors;
+          });
+        }
+      } else {
+        // Clear error if field is empty
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.phoneNumber;
+          return newErrors;
+        });
+      }
+
+      // Store formatted phone number for display
+      setFormData(prev => ({ ...prev, [field]: formatted }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+      if (errors[field]) {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors[field];
+          return newErrors;
+        });
+      }
     }
   };
 
@@ -154,6 +189,10 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
     if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
     if (!formData.email.trim()) newErrors.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Invalid email format';
+
+    if (!formData.phoneNumber?.trim()) {
+      newErrors.phoneNumber = 'Phone number is required';
+    }
     // Password is only required for new users, not for editing
     if (!isEditMode && (!formData.password || formData.password.length < 6)) {
       newErrors.password = 'Password must be at least 6 characters';
@@ -163,10 +202,35 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
       newErrors.password = 'Password must be at least 6 characters';
     }
 
+    // Vendor Validation
+    if (formData.role === 'vendor') {
+      if (!formData.storeName?.trim()) {
+        newErrors.storeName = 'Store Name is required';
+      }
+    }
+
+    // Supplier Validation
+    if (formData.role === 'supplier') {
+      if (!formData.productCategories?.trim()) {
+        newErrors.productCategories = 'Product Categories are required';
+      }
+      if (!formData.shippingLocations?.trim()) {
+        newErrors.shippingLocations = 'Shipping Locations are required';
+      }
+    }
+
     if (formData.includeBusinessDetails) {
       if (!formData.businessName.trim()) newErrors.businessName = 'Business name is required';
       if (!formData.country) newErrors.country = 'Country is required';
       if (!formData.currency) newErrors.currency = 'Currency is required';
+    }
+
+    // Phone number validation
+    if (formData.phoneNumber && formData.phoneNumber.trim()) {
+      const phoneValidation = validatePhoneNumber(formData.phoneNumber);
+      if (!phoneValidation.isValid && phoneValidation.error) {
+        newErrors.phoneNumber = phoneValidation.error;
+      }
     }
 
     setErrors(newErrors);
@@ -175,18 +239,18 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
 
     setIsSubmitting(true);
-    
+
     try {
       if (isEditMode) {
         // Update existing user
         const payload: any = {
           name: formData.fullName,
           email: formData.email,
-          phone: formData.phoneNumber || null,
+          phone: formData.phoneNumber ? cleanPhoneNumber(formData.phoneNumber) : null,
           businessName: formData.includeBusinessDetails ? formData.businessName : null,
           businessType: formData.includeBusinessDetails ? formData.businessType : null,
           streetAddress: formData.streetAddress || null,
@@ -196,6 +260,10 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
           addressCountry: formData.addressCountry || null,
           country: formData.country || null,
           currency: formData.currency || null,
+          // Common business fields
+          registrationNumber: formData.includeBusinessDetails ? formData.registrationNumber : null,
+          vatNumber: formData.includeBusinessDetails ? formData.vatNumber : null,
+          dateOfBirth: formData.dateOfBirth || null,
         };
 
         // Add role-specific fields
@@ -205,6 +273,7 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
           payload.minimumOrderValue = formData.minimumOrderValue || null;
         } else if (formData.role === 'vendor') {
           payload.commissionRate = formData.commissionRate || '15.0';
+          payload.storeName = formData.storeName || null;
         }
 
         // Only include password if it's provided
@@ -231,17 +300,17 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
         }
       } else {
         // Create new user
-        const endpoint = formData.role === 'vendor' 
-          ? '/api/admin/vendors' 
+        const endpoint = formData.role === 'vendor'
+          ? '/api/admin/vendors'
           : formData.role === 'supplier'
-          ? '/api/admin/suppliers'
-          : '/api/admin/users';
+            ? '/api/admin/suppliers'
+            : '/api/admin/users';
 
         const payload: any = {
           name: formData.fullName,
           email: formData.email,
           password: formData.password,
-          phone: formData.phoneNumber || null,
+          phone: formData.phoneNumber ? cleanPhoneNumber(formData.phoneNumber) : null,
           businessName: formData.includeBusinessDetails ? formData.businessName : null,
           businessType: formData.includeBusinessDetails ? formData.businessType : null,
           streetAddress: formData.streetAddress || null,
@@ -251,6 +320,10 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
           addressCountry: formData.addressCountry || null,
           country: formData.country || null,
           currency: formData.currency || null,
+          // Common business fields
+          registrationNumber: formData.includeBusinessDetails ? formData.registrationNumber : null,
+          vatNumber: formData.includeBusinessDetails ? formData.vatNumber : null,
+          dateOfBirth: formData.dateOfBirth || null,
         };
 
         // Add role-specific fields
@@ -260,6 +333,7 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
           payload.minimumOrderValue = formData.minimumOrderValue || null;
         } else if (formData.role === 'vendor') {
           payload.commissionRate = formData.commissionRate || '15.0';
+          payload.storeName = formData.storeName || null;
         } else {
           payload.role = formData.role.toUpperCase();
         }
@@ -324,13 +398,15 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
             Back to {preSelectedRole ? `${preSelectedRole.charAt(0).toUpperCase()}${preSelectedRole.slice(1)}s` : 'Users'}
           </Button>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 bg-clip-text text-transparent">
-            {preSelectedRole 
-              ? `Add New ${preSelectedRole.charAt(0).toUpperCase()}${preSelectedRole.slice(1)}`
-              : 'Add New User'
+            {isEditMode
+              ? `Update ${preSelectedRole ? preSelectedRole.charAt(0).toUpperCase() + preSelectedRole.slice(1) : 'User'}`
+              : (preSelectedRole
+                ? `Add New ${preSelectedRole.charAt(0).toUpperCase()}${preSelectedRole.slice(1)}`
+                : 'Add New User')
             }
           </h1>
           <p className="text-muted-foreground mt-2">
-            {preSelectedRole 
+            {preSelectedRole
               ? `Create a new ${preSelectedRole} account with business details`
               : 'Create a new user account'
             }
@@ -380,9 +456,11 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
                   type="email"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
+                  disabled={isEditMode}
                   className={cn(
                     "h-11 bg-slate-50 dark:bg-slate-800/50 border-2",
-                    errors.email ? "border-red-500" : "border-slate-200 dark:border-slate-700"
+                    errors.email ? "border-red-500" : "border-slate-200 dark:border-slate-700",
+                    isEditMode && "opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-800"
                   )}
                   placeholder="admin@fastdrop.com"
                 />
@@ -401,17 +479,26 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
                   <Lock className="w-4 h-4 text-purple-500" />
                   Password <span className="text-red-500">*</span>
                 </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  className={cn(
-                    "h-11 bg-slate-50 dark:bg-slate-800/50 border-2",
-                    errors.password ? "border-red-500" : "border-slate-200 dark:border-slate-700"
-                  )}
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(e) => handleInputChange('password', e.target.value)}
+                    className={cn(
+                      "h-11 bg-slate-50 dark:bg-slate-800/50 border-2 pr-10",
+                      errors.password ? "border-red-500" : "border-slate-200 dark:border-slate-700"
+                    )}
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-purple-500 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
                 {errors.password && (
                   <p className="text-sm text-red-500 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
@@ -668,6 +755,7 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
                       <Button
                         type="button"
                         variant="outline"
+                        onClick={() => showToast.info('Please create the user first. You can add KYC details in the user profile after creation.')}
                         className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 hover:from-blue-600 hover:to-blue-700"
                       >
                         Add KYC Details
@@ -679,22 +767,168 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
             )}
           </div>
 
+          {/* Vendor Specific Details */}
+          {formData.role === 'vendor' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="space-y-6 pt-4 border-t-2 border-slate-200 dark:border-slate-800"
+            >
+              <div className="flex items-center gap-2 pb-2">
+                <Building2 className="w-5 h-5 text-cyan-500" />
+                <h3 className="font-semibold text-lg">Vendor Details</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="storeName" className="text-sm font-semibold">
+                    Store Name <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="storeName"
+                    value={formData.storeName}
+                    onChange={(e) => handleInputChange('storeName', e.target.value)}
+                    className={cn(
+                      "h-11 bg-slate-50 dark:bg-slate-800/50 border-2",
+                      errors.storeName ? "border-red-500" : "border-slate-200 dark:border-slate-700"
+                    )}
+                    placeholder="My Awesome Store"
+                  />
+                  {errors.storeName && (
+                    <p className="text-sm text-red-500 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {errors.storeName}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="commissionRate" className="text-sm font-semibold">Commission Rate (%)</Label>
+                  <Input
+                    id="commissionRate"
+                    type="number"
+                    step="0.1"
+                    value={formData.commissionRate}
+                    onChange={(e) => handleInputChange('commissionRate', e.target.value)}
+                    className="h-11 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700"
+                    placeholder="15.0"
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Supplier Specific Details */}
+          {formData.role === 'supplier' && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="space-y-6 pt-4 border-t-2 border-slate-200 dark:border-slate-800"
+            >
+              <div className="flex items-center gap-2 pb-2">
+                <Building2 className="w-5 h-5 text-blue-500" />
+                <h3 className="font-semibold text-lg">Supplier Details</h3>
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="productCategories" className="text-sm font-semibold">
+                    Product Categories <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="productCategories"
+                    value={formData.productCategories}
+                    onChange={(e) => handleInputChange('productCategories', e.target.value)}
+                    className={cn(
+                      "h-11 bg-slate-50 dark:bg-slate-800/50 border-2",
+                      errors.productCategories ? "border-red-500" : "border-slate-200 dark:border-slate-700"
+                    )}
+                    placeholder="Electronics, Fashion, Home..."
+                  />
+                  {errors.productCategories && (
+                    <p className="text-sm text-red-500 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {errors.productCategories}
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="shippingLocations" className="text-sm font-semibold">
+                      Shipping Locations <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="shippingLocations"
+                      value={formData.shippingLocations}
+                      onChange={(e) => handleInputChange('shippingLocations', e.target.value)}
+                      className={cn(
+                        "h-11 bg-slate-50 dark:bg-slate-800/50 border-2",
+                        errors.shippingLocations ? "border-red-500" : "border-slate-200 dark:border-slate-700"
+                      )}
+                      placeholder="US, CA, UK"
+                    />
+                    {errors.shippingLocations && (
+                      <p className="text-sm text-red-500 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {errors.shippingLocations}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="minimumOrderValue" className="text-sm font-semibold">Min Order Value</Label>
+                    <Input
+                      id="minimumOrderValue"
+                      type="number"
+                      value={formData.minimumOrderValue}
+                      onChange={(e) => handleInputChange('minimumOrderValue', e.target.value)}
+                      className="h-11 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700"
+                      placeholder="100"
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Additional Information */}
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="phoneNumber" className="text-sm font-semibold flex items-center gap-2">
                   <Phone className="w-4 h-4 text-purple-500" />
-                  Phone Number
+                  Phone Number <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="phoneNumber"
                   type="tel"
                   value={formData.phoneNumber}
                   onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
-                  className="h-11 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700"
-                  placeholder="+1 (555) 000-0000"
+                  onKeyDown={(e) => {
+                    // Allow: backspace, delete, tab, escape, enter, and numbers
+                    if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+                      // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                      (e.keyCode === 65 && e.ctrlKey === true) ||
+                      (e.keyCode === 67 && e.ctrlKey === true) ||
+                      (e.keyCode === 86 && e.ctrlKey === true) ||
+                      (e.keyCode === 88 && e.ctrlKey === true) ||
+                      // Allow: home, end, left, right
+                      (e.keyCode >= 35 && e.keyCode <= 39)) {
+                      return;
+                    }
+                    // Ensure that it is a number and stop the keypress
+                    if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  className={cn(
+                    "h-11 bg-slate-50 dark:bg-slate-800/50 border-2",
+                    errors.phoneNumber ? "border-red-500" : "border-slate-200 dark:border-slate-700"
+                  )}
+                  placeholder="12345678901"
                 />
+                {errors.phoneNumber && (
+                  <p className="text-sm text-red-500 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {errors.phoneNumber}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -741,9 +975,11 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4 mr-2" />
-                  {preSelectedRole 
-                    ? `Create ${preSelectedRole.charAt(0).toUpperCase()}${preSelectedRole.slice(1)}`
-                    : 'Create User'
+                  {isEditMode
+                    ? `Update ${preSelectedRole ? preSelectedRole.charAt(0).toUpperCase() + preSelectedRole.slice(1) : 'User'}`
+                    : (preSelectedRole
+                      ? `Create ${preSelectedRole.charAt(0).toUpperCase()}${preSelectedRole.slice(1)}`
+                      : 'Create User')
                   }
                 </>
               )}

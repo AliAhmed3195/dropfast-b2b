@@ -14,6 +14,8 @@ import {
   Home,
   MapPin,
   ShieldCheck,
+  AlertCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -25,9 +27,11 @@ import { showToast } from '../../../lib/toast';
 import { CartItem } from '../../contexts/AppContext';
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { validatePhoneNumber, cleanPhoneNumber, formatPhoneNumber, allowOnlyDigits } from '../../../lib/phone-validation';
 
 // Initialize Stripe
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
+const stripeKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
 
 interface CheckoutFormData {
   fullName: string;
@@ -61,6 +65,7 @@ export function StoreCheckout({
   const [currentStep, setCurrentStep] = useState(1);
   const [paymentIntentId, setPaymentIntentId] = useState<string | undefined>();
   const [clientSecret, setClientSecret] = useState<string | undefined>();
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [formData, setFormData] = useState<CheckoutFormData>({
     fullName: '',
     email: '',
@@ -79,7 +84,29 @@ export function StoreCheckout({
   const total = subtotal + shipping + tax;
 
   const handleInputChange = (field: keyof CheckoutFormData, value: string) => {
-    setFormData({ ...formData, [field]: value });
+    // Phone number validation on input
+    if (field === 'phone') {
+      // Allow only digits
+      const digitsOnly = allowOnlyDigits(value);
+      // Format the phone number
+      const formatted = formatPhoneNumber(digitsOnly);
+
+      // Validate if there are digits
+      if (digitsOnly && digitsOnly.trim()) {
+        const validation = validatePhoneNumber(digitsOnly);
+        if (!validation.isValid && validation.error) {
+          setPhoneError(validation.error);
+        } else {
+          setPhoneError(null);
+        }
+      } else {
+        setPhoneError(null);
+      }
+
+      setFormData({ ...formData, [field]: formatted });
+    } else {
+      setFormData({ ...formData, [field]: value });
+    }
   };
 
   const steps = [
@@ -284,381 +311,402 @@ export function StoreCheckout({
       );
     };
     return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-4">
-          <Button variant="ghost" onClick={onBack} className="gap-2">
-            <ArrowLeft className="w-4 h-4" />
-            Back to Cart
-          </Button>
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white border-b">
+          <div className="container mx-auto px-4 py-4">
+            <Button variant="ghost" onClick={onBack} className="gap-2">
+              <ArrowLeft className="w-4 h-4" />
+              Back to Cart
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Checkout</h1>
+        {/* Main Content */}
+        <div className="container mx-auto px-4 py-8">
+          <h1 className="text-3xl font-bold mb-8">Checkout</h1>
 
-        {/* Progress Steps */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between max-w-2xl mx-auto">
-            {steps.map((step, index) => (
-              <React.Fragment key={step.number}>
-                <div className="flex flex-col items-center flex-1">
-                  <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-colors ${
-                      currentStep >= step.number ? 'text-white' : 'bg-gray-200 text-gray-400'
-                    }`}
-                    style={{
-                      backgroundColor:
-                        currentStep >= step.number ? storeTheme.primaryColor : undefined,
-                    }}
-                  >
-                    <step.icon className="w-6 h-6" />
-                  </div>
-                  <span
-                    className={`text-sm font-medium ${
-                      currentStep >= step.number ? '' : 'text-gray-400'
-                    }`}
-                    style={{
-                      color: currentStep >= step.number ? storeTheme.primaryColor : undefined,
-                    }}
-                  >
-                    {step.title}
-                  </span>
-                </div>
-                {index < steps.length - 1 && (
-                  <div className="flex-1 h-0.5 bg-gray-200 mx-4 mb-8">
+          {/* Progress Steps */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between max-w-2xl mx-auto">
+              {steps.map((step, index) => (
+                <React.Fragment key={step.number}>
+                  <div className="flex flex-col items-center flex-1">
                     <div
-                      className="h-full transition-all duration-300"
+                      className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-colors ${currentStep >= step.number ? 'text-white' : 'bg-gray-200 text-gray-400'
+                        }`}
                       style={{
-                        width: currentStep > step.number ? '100%' : '0%',
-                        backgroundColor: storeTheme.primaryColor,
+                        backgroundColor:
+                          currentStep >= step.number ? storeTheme.primaryColor : undefined,
                       }}
-                    />
-                  </div>
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Checkout Form */}
-          <div className="lg:col-span-2">
-            {/* Step 1: Shipping Information */}
-            {currentStep === 1 && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Truck className="w-5 h-5" style={{ color: storeTheme.primaryColor }} />
-                      Shipping Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="fullName">
-                          Full Name <span className="text-red-500">*</span>
-                        </Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                          <Input
-                            id="fullName"
-                            placeholder="John Doe"
-                            value={formData.fullName}
-                            onChange={(e) => handleInputChange('fullName', e.target.value)}
-                            className="pl-10"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="email">
-                          Email <span className="text-red-500">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                          <Input
-                            id="email"
-                            type="email"
-                            placeholder="john@example.com"
-                            value={formData.email}
-                            onChange={(e) => handleInputChange('email', e.target.value)}
-                            className="pl-10"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">
-                        Phone Number <span className="text-red-500">*</span>
-                      </Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <Input
-                          id="phone"
-                          placeholder="+1 (555) 000-0000"
-                          value={formData.phone}
-                          onChange={(e) => handleInputChange('phone', e.target.value)}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="address">
-                        Street Address <span className="text-red-500">*</span>
-                      </Label>
-                      <div className="relative">
-                        <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <Input
-                          id="address"
-                          placeholder="123 Main Street"
-                          value={formData.address}
-                          onChange={(e) => handleInputChange('address', e.target.value)}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="city">City</Label>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                          <Input
-                            id="city"
-                            placeholder="New York"
-                            value={formData.city}
-                            onChange={(e) => handleInputChange('city', e.target.value)}
-                            className="pl-10"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="state">State</Label>
-                        <Input
-                          id="state"
-                          placeholder="NY"
-                          value={formData.state}
-                          onChange={(e) => handleInputChange('state', e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="zipCode">ZIP Code</Label>
-                        <Input
-                          id="zipCode"
-                          placeholder="10001"
-                          value={formData.zipCode}
-                          onChange={(e) => handleInputChange('zipCode', e.target.value)}
-                        />
-                      </div>
-                    </div>
-
-                    <Button
-                      className="w-full text-white"
-                      onClick={() => setCurrentStep(2)}
-                      style={{ backgroundColor: storeTheme.primaryColor }}
                     >
-                      Continue to Payment
-                    </Button>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-
-            {/* Step 2: Payment Method */}
-            {currentStep === 2 && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >
-                <PaymentStepComponent
-                  formData={formData}
-                  clientSecret={clientSecret}
-                  storeTheme={storeTheme}
-                  onPaymentMethodChange={(method) => handleInputChange('paymentMethod', method)}
-                  onBack={() => setCurrentStep(1)}
-                  onSuccess={() => setCurrentStep(3)}
-                />
-              </motion.div>
-            )}
-
-            {/* Step 3: Review & Place Order */}
-            {currentStep === 3 && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="space-y-6"
-              >
-                {/* Shipping Address Card */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Shipping Address</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-gray-700">
-                      <p className="font-medium">{formData.fullName}</p>
-                      <p>{formData.address}</p>
-                      <p>{formData.city}, {formData.state} {formData.zipCode}</p>
-                      <p>{formData.country}</p>
-                      <p className="mt-2">{formData.email}</p>
-                      <p>{formData.phone}</p>
+                      <step.icon className="w-6 h-6" />
                     </div>
-                    <button
-                      onClick={() => setCurrentStep(1)}
-                      className="mt-4 text-primary hover:underline text-sm font-medium"
-                      style={{ color: storeTheme.primaryColor }}
+                    <span
+                      className={`text-sm font-medium ${currentStep >= step.number ? '' : 'text-gray-400'
+                        }`}
+                      style={{
+                        color: currentStep >= step.number ? storeTheme.primaryColor : undefined,
+                      }}
                     >
-                      Edit Address
-                    </button>
-                  </CardContent>
-                </Card>
-
-                {/* Payment Method Card */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Payment Method</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="w-6 h-6 text-gray-600" />
-                      <span className="text-gray-700 capitalize">
-                        {formData.paymentMethod === 'credit_card' 
-                          ? 'Credit/Debit Card' 
-                          : formData.paymentMethod.replace('_', ' ')}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setCurrentStep(2)}
-                      className="mt-4 text-primary hover:underline text-sm font-medium"
-                      style={{ color: storeTheme.primaryColor }}
-                    >
-                      Edit Payment
-                    </button>
-                  </CardContent>
-                </Card>
-
-                {/* Order Items Card */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Order Items ({cartItems.length})</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {cartItems.map((item) => (
-                        <div key={item.productId} className="flex gap-4">
-                          <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                            <img
-                              src={item.productImage || 'https://via.placeholder.com/60'}
-                              alt={item.productName}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900">{item.productName}</div>
-                            <div className="text-sm text-gray-600">Qty: {item.quantity}</div>
-                          </div>
-                          <div className="font-medium text-gray-900">
-                            ${(item.price * item.quantity).toFixed(2)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Place Order Button */}
-                <button
-                  onClick={() => onPlaceOrder(formData, paymentIntentId)}
-                  className="w-full px-6 py-4 text-white font-semibold rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2"
-                  style={{ backgroundColor: storeTheme.primaryColor }}
-                >
-                  <ShieldCheck className="w-5 h-5" />
-                  Place Order - ${total.toFixed(2)}
-                </button>
-
-                <p className="text-sm text-gray-600 text-center">
-                  By placing this order, you agree to our Terms of Service and Privacy Policy
-                </p>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Order Summary Sidebar */}
-          <div className="lg:col-span-1">
-            <Card className="sticky top-24">
-              <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm text-gray-700">
-                    <span>Subtotal ({cartItems.length} items)</span>
-                    <span className="font-medium">${subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm text-gray-700">
-                    <span>Shipping</span>
-                    <span className="font-medium">
-                      {shipping === 0 ? (
-                        <span className="text-green-600">FREE</span>
-                      ) : (
-                        `$${shipping.toFixed(2)}`
-                      )}
+                      {step.title}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm text-gray-700">
-                    <span>Tax (10%)</span>
-                    <span className="font-medium">${tax.toFixed(2)}</span>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-lg font-semibold text-gray-900">Total</span>
-                    <span className="text-2xl font-bold text-gray-900">${total.toFixed(2)}</span>
-                  </div>
-                </div>
+                  {index < steps.length - 1 && (
+                    <div className="flex-1 h-0.5 bg-gray-200 mx-4 mb-8">
+                      <div
+                        className="h-full transition-all duration-300"
+                        style={{
+                          width: currentStep > step.number ? '100%' : '0%',
+                          backgroundColor: storeTheme.primaryColor,
+                        }}
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
 
-                {/* Trust Badges */}
-                <div className="space-y-3 pt-4 border-t border-gray-200">
-                  <div className="flex items-center gap-3 text-sm text-gray-700">
-                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span>Secure checkout</span>
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Checkout Form */}
+            <div className="lg:col-span-2">
+              {/* Step 1: Shipping Information */}
+              {currentStep === 1 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                >
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Truck className="w-5 h-5" style={{ color: storeTheme.primaryColor }} />
+                        Shipping Information
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="fullName">
+                            Full Name <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Input
+                              id="fullName"
+                              placeholder="John Doe"
+                              value={formData.fullName}
+                              onChange={(e) => handleInputChange('fullName', e.target.value)}
+                              className="pl-10"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="email">
+                            Email <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Input
+                              id="email"
+                              type="email"
+                              placeholder="john@example.com"
+                              value={formData.email}
+                              onChange={(e) => handleInputChange('email', e.target.value)}
+                              className="pl-10"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">
+                          Phone Number <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <Input
+                            id="phone"
+                            placeholder="12345678901"
+                            value={formData.phone}
+                            onChange={(e) => handleInputChange('phone', e.target.value)}
+                            onKeyDown={(e) => {
+                              // Allow: backspace, delete, tab, escape, enter, and numbers
+                              if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+                                // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                                (e.keyCode === 65 && e.ctrlKey === true) ||
+                                (e.keyCode === 67 && e.ctrlKey === true) ||
+                                (e.keyCode === 86 && e.ctrlKey === true) ||
+                                (e.keyCode === 88 && e.ctrlKey === true) ||
+                                // Allow: home, end, left, right
+                                (e.keyCode >= 35 && e.keyCode <= 39)) {
+                                return;
+                              }
+                              // Ensure that it is a number and stop the keypress
+                              if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                                e.preventDefault();
+                              }
+                            }}
+                            className={phoneError ? "pl-10 border-red-500" : "pl-10"}
+                          />
+                          {phoneError && (
+                            <p className="text-sm text-red-500 mt-1 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              {phoneError}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="address">
+                          Street Address <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <Input
+                            id="address"
+                            placeholder="123 Main Street"
+                            value={formData.address}
+                            onChange={(e) => handleInputChange('address', e.target.value)}
+                            className="pl-10"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="city">City</Label>
+                          <div className="relative">
+                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Input
+                              id="city"
+                              placeholder="New York"
+                              value={formData.city}
+                              onChange={(e) => handleInputChange('city', e.target.value)}
+                              className="pl-10"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="state">State</Label>
+                          <Input
+                            id="state"
+                            placeholder="NY"
+                            value={formData.state}
+                            onChange={(e) => handleInputChange('state', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="zipCode">ZIP Code</Label>
+                          <Input
+                            id="zipCode"
+                            placeholder="10001"
+                            value={formData.zipCode}
+                            onChange={(e) => handleInputChange('zipCode', e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        className="w-full text-white"
+                        onClick={() => setCurrentStep(2)}
+                        style={{ backgroundColor: storeTheme.primaryColor }}
+                      >
+                        Continue to Payment
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {/* Step 2: Payment Method */}
+              {currentStep === 2 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                >
+                  <PaymentStepComponent
+                    formData={formData}
+                    clientSecret={clientSecret}
+                    storeTheme={storeTheme}
+                    onPaymentMethodChange={(method) => handleInputChange('paymentMethod', method)}
+                    onBack={() => setCurrentStep(1)}
+                    onSuccess={() => setCurrentStep(3)}
+                  />
+                </motion.div>
+              )}
+
+              {/* Step 3: Review & Place Order */}
+              {currentStep === 3 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="space-y-6"
+                >
+                  {/* Shipping Address Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Shipping Address</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-gray-700">
+                        <p className="font-medium">{formData.fullName}</p>
+                        <p>{formData.address}</p>
+                        <p>{formData.city}, {formData.state} {formData.zipCode}</p>
+                        <p>{formData.country}</p>
+                        <p className="mt-2">{formData.email}</p>
+                        <p>{formData.phone}</p>
+                      </div>
+                      <button
+                        onClick={() => setCurrentStep(1)}
+                        className="mt-4 text-primary hover:underline text-sm font-medium"
+                        style={{ color: storeTheme.primaryColor }}
+                      >
+                        Edit Address
+                      </button>
+                    </CardContent>
+                  </Card>
+
+                  {/* Payment Method Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Payment Method</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center gap-3">
+                        <CreditCard className="w-6 h-6 text-gray-600" />
+                        <span className="text-gray-700 capitalize">
+                          {formData.paymentMethod === 'credit_card'
+                            ? 'Credit/Debit Card'
+                            : formData.paymentMethod.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setCurrentStep(2)}
+                        className="mt-4 text-primary hover:underline text-sm font-medium"
+                        style={{ color: storeTheme.primaryColor }}
+                      >
+                        Edit Payment
+                      </button>
+                    </CardContent>
+                  </Card>
+
+                  {/* Order Items Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Order Items ({cartItems.length})</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {cartItems.map((item) => (
+                          <div key={item.productId} className="flex gap-4">
+                            <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                              <img
+                                src={item.productImage || 'https://via.placeholder.com/60'}
+                                alt={item.productName}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900">{item.productName}</div>
+                              <div className="text-sm text-gray-600">Qty: {item.quantity}</div>
+                            </div>
+                            <div className="font-medium text-gray-900">
+                              ${(item.price * item.quantity).toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Place Order Button */}
+                  <button
+                    onClick={() => onPlaceOrder(formData, paymentIntentId)}
+                    className="w-full px-6 py-4 text-white font-semibold rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2"
+                    style={{ backgroundColor: storeTheme.primaryColor }}
+                  >
+                    <ShieldCheck className="w-5 h-5" />
+                    Place Order - ${total.toFixed(2)}
+                  </button>
+
+                  <p className="text-sm text-gray-600 text-center">
+                    By placing this order, you agree to our Terms of Service and Privacy Policy
+                  </p>
+                </motion.div>
+              )}
+            </div>
+
+            {/* Order Summary Sidebar */}
+            <div className="lg:col-span-1">
+              <Card className="sticky top-24">
+                <CardHeader>
+                  <CardTitle>Order Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm text-gray-700">
+                      <span>Subtotal ({cartItems.length} items)</span>
+                      <span className="font-medium">${subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-700">
+                      <span>Shipping</span>
+                      <span className="font-medium">
+                        {shipping === 0 ? (
+                          <span className="text-green-600">FREE</span>
+                        ) : (
+                          `$${shipping.toFixed(2)}`
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-700">
+                      <span>Tax (10%)</span>
+                      <span className="font-medium">${tax.toFixed(2)}</span>
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg font-semibold text-gray-900">Total</span>
+                      <span className="text-2xl font-bold text-gray-900">${total.toFixed(2)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-gray-700">
-                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span>Money-back guarantee</span>
+
+                  {/* Trust Badges */}
+                  <div className="space-y-3 pt-4 border-t border-gray-200">
+                    <div className="flex items-center gap-3 text-sm text-gray-700">
+                      <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <span>Secure checkout</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-gray-700">
+                      <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <span>Money-back guarantee</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-gray-700">
+                      <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      <span>Encrypted payment</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-gray-700">
-                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span>Encrypted payment</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       </div>
-    </div>
     );
   };
 
-  if (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+  if (stripeKey && stripePromise) {
     return (
-      <Elements 
-        stripe={stripePromise} 
+      <Elements
+        stripe={stripePromise}
         options={getElementsOptions()}
         key={clientSecret || 'initial'}
       >
@@ -666,5 +714,11 @@ export function StoreCheckout({
       </Elements>
     );
   }
-  return <CheckoutForm />;
+  return (
+    <div className="p-8 text-center bg-red-50 border border-red-200 rounded-lg">
+      <h3 className="text-red-800 font-bold mb-2">Checkout Error</h3>
+      <p className="text-red-600 mb-4">Stripe is not configured. Please add NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY to your environment variables.</p>
+      <Button onClick={onBack} variant="outline">Back to Cart</Button>
+    </div>
+  );
 }

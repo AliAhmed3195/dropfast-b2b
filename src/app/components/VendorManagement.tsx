@@ -1,12 +1,39 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useApiCall } from '../../hooks/useApiCall';
+import { motion } from 'motion/react';
 import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Mail, Phone, Building2, MapPin, CheckCircle2, XCircle, Store } from 'lucide-react';
 import { UserForm } from './UserForm';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Card } from './ui/card';
+import { Badge } from './ui/badge';
 import { showToast } from '../../lib/toast';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from './ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+import { Avatar, AvatarFallback } from './ui/avatar';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from './ui/pagination';
 
 interface Vendor {
   id: string;
@@ -29,109 +56,100 @@ export function VendorManagement() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
-  const fetchingVendorsRef = useRef(false);
-  const currentAbortControllerRef = useRef<AbortController | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const { callApi } = useApiCall();
 
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to avoid too many API calls
   useEffect(() => {
-    // Prevent duplicate calls
-    if (fetchingVendorsRef.current) {
-      return;
-    }
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
 
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset to page 1 when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStatus, debouncedSearchQuery]);
+
+  // Abort controller ref for search
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch vendors on mount and when filters/page change
+  useEffect(() => {
     // Abort previous request if any
-    if (currentAbortControllerRef.current) {
-      currentAbortControllerRef.current.abort();
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
     }
 
-    let isMounted = true;
+    // Create new abort controller
     const abortController = new AbortController();
-    currentAbortControllerRef.current = abortController;
-    fetchingVendorsRef.current = true;
+    searchAbortControllerRef.current = abortController;
 
-    const loadVendors = async () => {
-      if (!isMounted) return;
-
+    // Use debouncedSearchQuery instead of searchQuery
+    const fetchWithDebouncedSearch = async (signal?: AbortSignal) => {
       try {
         setLoading(true);
         const status = filterStatus === 'all' ? '' : filterStatus;
-        const url = status ? `/api/admin/vendors?status=${status}` : '/api/admin/vendors';
-        const response = await fetch(url, {
-          signal: abortController.signal,
-        });
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const url = `/api/admin/vendors?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}`;
+        const response = await fetch(url, { signal: signal || abortController.signal });
         const data = await response.json();
         
-        if (isMounted && response.ok) {
+        if (response.ok) {
           setVendors(data.vendors || []);
-        } else if (isMounted && !response.ok) {
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
+        } else {
           showToast.error(data.error || 'Failed to fetch vendors');
         }
       } catch (error: any) {
-        if (error.name !== 'AbortError' && isMounted) {
+        if (error.name !== 'AbortError') {
           console.error('Fetch vendors error:', error);
           showToast.error('Failed to fetch vendors');
         }
       } finally {
-        if (isMounted) {
-          setLoading(false);
-          fetchingVendorsRef.current = false;
-        }
+        setLoading(false);
       }
     };
 
-    loadVendors();
+    callApi(fetchWithDebouncedSearch);
 
+    // Cleanup: abort request on unmount or dependency change
     return () => {
-      isMounted = false;
-      abortController.abort();
-      currentAbortControllerRef.current = null;
-      fetchingVendorsRef.current = false;
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+        searchAbortControllerRef.current = null;
+      }
     };
-  }, [filterStatus]);
-
-  const fetchVendors = async () => {
-    // Prevent duplicate calls
-    if (fetchingVendorsRef.current) {
-      return;
-    }
-
-    // Abort previous request if any
-    if (currentAbortControllerRef.current) {
-      currentAbortControllerRef.current.abort();
-    }
-
-    const abortController = new AbortController();
-    currentAbortControllerRef.current = abortController;
-    fetchingVendorsRef.current = true;
-
-    try {
-      setLoading(true);
-      const status = filterStatus === 'all' ? '' : filterStatus;
-      const url = status ? `/api/admin/vendors?status=${status}` : '/api/admin/vendors';
-      const response = await fetch(url, {
-        signal: abortController.signal,
-      });
-      const data = await response.json();
-      
-      if (response.ok) {
-        setVendors(data.vendors || []);
-      } else {
-        showToast.error(data.error || 'Failed to fetch vendors');
-      }
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        console.error('Fetch vendors error:', error);
-        showToast.error('Failed to fetch vendors');
-      }
-    } finally {
-      setLoading(false);
-      fetchingVendorsRef.current = false;
-      currentAbortControllerRef.current = null;
-    }
-  };
+  }, [filterStatus, currentPage, debouncedSearchQuery, callApi, pagination.limit]);
 
   const handleFormSuccess = async () => {
     setShowForm(false);
-    await fetchVendors();
+    // Refresh vendors list
+    const status = filterStatus === 'all' ? '' : filterStatus;
+    const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+    const url = `/api/admin/vendors?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (response.ok) {
+      setVendors(data.vendors || []);
+      if (data.pagination) {
+        setPagination(data.pagination);
+      }
+    }
     // Toast message is already shown in UserForm
   };
 
@@ -145,7 +163,20 @@ export function VendorManagement() {
       });
 
       if (response.ok) {
-        await fetchVendors();
+        // Refresh vendors list
+        const status = filterStatus === 'all' ? '' : filterStatus;
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const url = `/api/admin/vendors?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}`;
+        const refreshResponse = await fetch(url);
+        const refreshData = await refreshResponse.json();
+        
+        if (refreshResponse.ok) {
+          setVendors(refreshData.vendors || []);
+          if (refreshData.pagination) {
+            setPagination(refreshData.pagination);
+          }
+        }
+        
         showToast.success('Vendor deleted successfully!');
       } else {
         const data = await response.json();
@@ -156,17 +187,6 @@ export function VendorManagement() {
       showToast.error('Failed to delete vendor');
     }
   };
-
-  const filteredVendors = vendors.filter(vendor => {
-    const matchesSearch = 
-      vendor.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      vendor.businessName?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesFilter = filterStatus === 'all' || vendor.status === filterStatus;
-    
-    return matchesSearch && matchesFilter;
-  });
 
   if (showForm || editingVendor) {
     return (
@@ -180,7 +200,19 @@ export function VendorManagement() {
         onSuccess={async () => {
           setShowForm(false);
           setEditingVendor(null);
-          await fetchVendors();
+          // Refresh vendors list
+          const status = filterStatus === 'all' ? '' : filterStatus;
+          const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+          const url = `/api/admin/vendors?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}`;
+          const response = await fetch(url);
+          const data = await response.json();
+          
+          if (response.ok) {
+            setVendors(data.vendors || []);
+            if (data.pagination) {
+              setPagination(data.pagination);
+            }
+          }
           // Toast message is already shown in UserForm
         }}
       />
@@ -249,9 +281,24 @@ export function VendorManagement() {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
+              type="text"
               placeholder="Search vendors by name, email, or company..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' || e.which === 13 || e.keyCode === 13) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
               className="pl-10 h-11 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700"
             />
           </div>
@@ -271,140 +318,212 @@ export function VendorManagement() {
         </div>
       </motion.div>
 
-      {/* Vendors Grid */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-      >
-        <AnimatePresence>
-          {filteredVendors.map((vendor, idx) => (
-            <motion.div
-              key={vendor.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ delay: idx * 0.05 }}
-              className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden hover:shadow-xl transition-all group"
-            >
-              {/* Header */}
-              <div className={`h-2 bg-gradient-to-r ${vendor.status === 'active' ? 'from-green-500 to-green-600' : 'from-red-500 to-red-600'}`} />
-              
-              <div className="p-6 space-y-4">
-                {/* Name and Status */}
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-bold text-lg">{vendor.fullName}</h3>
-                    {vendor.businessName && (
-                      <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                        <Building2 className="w-3 h-3" />
-                        {vendor.businessName}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                      vendor.status === 'active'
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                    }`}>
+      {/* Vendors Table */}
+      <Card>
+        {loading ? (
+          <div className="text-center py-16">
+            <Store className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50 animate-pulse" />
+            <p className="text-lg text-muted-foreground">Loading vendors...</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="font-semibold">Vendor</TableHead>
+                <TableHead className="font-semibold">Store</TableHead>
+                <TableHead className="font-semibold">Contact</TableHead>
+                <TableHead className="font-semibold">Stores</TableHead>
+                <TableHead className="font-semibold">Orders</TableHead>
+                <TableHead className="font-semibold">Revenue</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {vendors.map((vendor, index) => (
+                <motion.tr
+                  key={vendor.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="hover:bg-muted/50"
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarFallback className="bg-gradient-to-br from-purple-500 to-cyan-500 text-white">
+                          {(vendor.fullName || vendor.name || 'V').slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{vendor.fullName || vendor.name}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Mail className="w-3 h-3" />
+                          {vendor.email}
+                        </p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-medium">{vendor.businessName || vendor.storeName || 'N/A'}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      {vendor.phoneNumber && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Phone className="w-3 h-3" />
+                          <span>{vendor.phoneNumber}</span>
+                        </div>
+                      )}
+                      {vendor.country && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <MapPin className="w-3 h-3" />
+                          <span>{vendor.country}</span>
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{vendor.totalStores || 0}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{vendor.totalOrders || 0}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-semibold">${((vendor.totalRevenue || vendor.revenue || 0) / 1000).toFixed(1)}K</p>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      className={
+                        vendor.status === 'active'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                          : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                      }
+                    >
+                      {vendor.status === 'active' ? (
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                      ) : (
+                        <XCircle className="w-3 h-3 mr-1" />
+                      )}
                       {vendor.status}
-                    </span>
-                    <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            setEditingVendor(vendor);
+                            setShowForm(false);
+                          }}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit Vendor
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleDeleteVendor(vendor.id)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </motion.tr>
+              ))}
+            </TableBody>
+          </Table>
+        )}
 
-                {/* Contact Info */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Mail className="w-4 h-4 text-cyan-500" />
-                    <span className="truncate">{vendor.email}</span>
-                  </div>
-                  {vendor.phoneNumber && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Phone className="w-4 h-4 text-cyan-500" />
-                      <span>{vendor.phoneNumber}</span>
-                    </div>
-                  )}
-                  {vendor.country && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="w-4 h-4 text-cyan-500" />
-                      <span>{vendor.country}</span>
-                    </div>
-                  )}
-                </div>
+        {!loading && vendors.length === 0 && (
+          <div className="text-center py-16">
+            <Store className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+            <p className="text-lg text-muted-foreground">No vendors found</p>
+            <Button onClick={() => setShowForm(true)} className="mt-4">
+              <Plus className="w-4 h-4 mr-2" />
+              Add First Vendor
+            </Button>
+          </div>
+        )}
+      </Card>
 
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Stores</p>
-                    <p className="text-lg font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-                      {vendor.totalStores}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Orders</p>
-                    <p className="text-lg font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                      {vendor.totalOrders}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Revenue</p>
-                    <p className="text-lg font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                      ${(vendor.totalRevenue / 1000).toFixed(0)}k
-                    </p>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2 pt-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="flex-1"
-                    onClick={() => {
-                      setEditingVendor(vendor);
-                      setShowForm(false);
+      {/* Pagination */}
+      {!loading && pagination.totalPages > 1 && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} vendors
+            </div>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious 
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage > 1) {
+                        setCurrentPage(currentPage - 1);
+                      }
                     }}
-                  >
-                    <Edit className="w-3 h-3 mr-1" />
-                    Edit
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="flex-1 hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-500 hover:text-red-600"
-                    onClick={() => handleDeleteVendor(vendor.id)}
-                  >
-                    <Trash2 className="w-3 h-3 mr-1" />
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </motion.div>
-
-      {filteredVendors.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center py-12 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-xl border border-slate-200 dark:border-slate-800"
-        >
-          <Store className="w-16 h-16 mx-auto text-muted-foreground/50 mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No vendors found</h3>
-          <p className="text-muted-foreground mb-4">Try adjusting your search or filters</p>
-          <Button onClick={() => setShowForm(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add First Vendor
-          </Button>
-        </motion.div>
+                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                  if (
+                    page === 1 ||
+                    page === pagination.totalPages ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  ) {
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage(page);
+                          }}
+                          isActive={currentPage === page}
+                          className="cursor-pointer"
+                        >
+                          {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  } else if (page === currentPage - 2 || page === currentPage + 2) {
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    );
+                  }
+                  return null;
+                })}
+                <PaginationItem>
+                  <PaginationNext 
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage < pagination.totalPages) {
+                        setCurrentPage(currentPage + 1);
+                      }
+                    }}
+                    className={currentPage === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        </Card>
       )}
-
     </div>
   );
 }

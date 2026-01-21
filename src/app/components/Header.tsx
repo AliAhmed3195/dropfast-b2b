@@ -32,6 +32,11 @@ export function Header() {
   const router = useRouter();
   const [isDark, setIsDark] = React.useState(false);
 
+  const handleLogout = () => {
+    logout();
+    router.push('/');
+  };
+
   const toggleTheme = () => {
     setIsDark(!isDark);
     document.documentElement.classList.toggle('dark');
@@ -189,17 +194,23 @@ export function Header() {
                   <p className="text-xs text-muted-foreground mt-1 font-medium">{user?.company}</p>
                 </div>
                 <DropdownMenuSeparator className="my-2" />
-                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20">
+                <DropdownMenuItem 
+                  onClick={() => router.push(`/dashboard/${user?.role}/settings`)}
+                  className="rounded-lg py-2.5 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                >
                   <User className="w-4 h-4 mr-3 text-purple-600" />
                   <span className="font-medium">Profile</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-900/20">
+                <DropdownMenuItem 
+                  onClick={() => router.push(`/dashboard/${user?.role}/settings`)}
+                  className="rounded-lg py-2.5 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-900/20"
+                >
                   <Settings className="w-4 h-4 mr-3 text-cyan-600" />
                   <span className="font-medium">Settings</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="my-2" />
                 <DropdownMenuItem 
-                  onClick={logout} 
+                  onClick={handleLogout} 
                   className="rounded-lg py-2.5 cursor-pointer text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium"
                 >
                   <LogOut className="w-4 h-4 mr-3" />

@@ -30,23 +30,21 @@ import { getRoute } from '../../lib/routeMap';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts';
 import { showToast } from '../../lib/toast';
+import dynamic from 'next/dynamic';
+
+// Dynamically import Recharts components with type casting to avoid generic issues
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer as any), { ssr: false });
+const AreaChart = dynamic(() => import('recharts').then(mod => mod.AreaChart as any), { ssr: false });
+const Area = dynamic(() => import('recharts').then(mod => mod.Area as any), { ssr: false });
+const CartesianGrid = dynamic(() => import('recharts').then(mod => mod.CartesianGrid as any), { ssr: false });
+const XAxis = dynamic(() => import('recharts').then(mod => mod.XAxis as any), { ssr: false });
+const YAxis = dynamic(() => import('recharts').then(mod => mod.YAxis as any), { ssr: false });
+const Tooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip as any), { ssr: false });
+const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart as any), { ssr: false });
+const Pie = dynamic(() => import('recharts').then(mod => mod.Pie as any), { ssr: false });
+const Cell = dynamic(() => import('recharts').then(mod => mod.Cell as any), { ssr: false });
+
 
 export function VendorDashboard() {
   const { user } = useAuth();
@@ -209,7 +207,7 @@ export function VendorDashboard() {
             <Store className="w-4 h-4 mr-2" />
             Manage Stores
           </Button>
-          <Button 
+          <Button
             onClick={() => router.push('/dashboard/vendor/products')}
             className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
           >
@@ -229,16 +227,15 @@ export function VendorDashboard() {
             transition={{ delay: idx * 0.1 }}
           >
             <Card className="relative p-6 overflow-hidden group hover:shadow-xl transition-all duration-300 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700">
-              
+
               <div className="relative z-10">
                 <div className="flex items-start justify-between mb-4">
                   <div className="p-3 rounded-xl bg-indigo-600 shadow-sm">
                     <stat.icon className="w-6 h-6 text-white" />
                   </div>
                   {stat.trend !== 'neutral' && (
-                    <div className={`flex items-center gap-1 text-sm font-semibold ${
-                      stat.trend === 'up' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                    }`}>
+                    <div className={`flex items-center gap-1 text-sm font-semibold ${stat.trend === 'up' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                      }`}>
                       {stat.trend === 'up' ? (
                         <ArrowUpRight className="w-4 h-4" />
                       ) : (
@@ -285,14 +282,14 @@ export function VendorDashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
-                <XAxis 
-                  dataKey="date" 
-                  stroke="#64748b" 
+                <XAxis
+                  dataKey="date"
+                  stroke="#64748b"
                   fontSize={12}
                   tickLine={false}
                 />
-                <YAxis 
-                  stroke="#64748b" 
+                <YAxis
+                  stroke="#64748b"
                   fontSize={12}
                   tickLine={false}
                   axisLine={false}
@@ -383,9 +380,8 @@ export function VendorDashboard() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-muted-foreground">{metric.label}</span>
                 {metric.change && metric.trend !== 'neutral' && (
-                  <div className={`flex items-center gap-1 text-xs font-semibold ${
-                    metric.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                  }`}>
+                  <div className={`flex items-center gap-1 text-xs font-semibold ${metric.trend === 'up' ? 'text-green-600' : 'text-red-600'
+                    }`}>
                     {metric.trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                     {metric.change}
                   </div>
@@ -436,9 +432,8 @@ export function VendorDashboard() {
                   <div className="text-right">
                     <p className="font-bold text-lg">${product.revenue?.toLocaleString() || '0'}</p>
                     {product.trend !== undefined && product.trend !== 0 && (
-                      <div className={`flex items-center gap-1 text-xs font-semibold ${
-                        product.trend > 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                      <div className={`flex items-center gap-1 text-xs font-semibold ${product.trend > 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
                         {product.trend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                         {Math.abs(product.trend)}%
                       </div>
@@ -475,18 +470,16 @@ export function VendorDashboard() {
                   transition={{ delay: 0.7 + idx * 0.1 }}
                   className="flex items-start gap-3 pb-4 border-b last:border-0"
                 >
-                  <div className={`p-2 rounded-lg ${
-                    activity.type === 'order' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                  <div className={`p-2 rounded-lg ${activity.type === 'order' ? 'bg-blue-100 dark:bg-blue-900/30' :
                     activity.type === 'product' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
-                    activity.type === 'review' ? 'bg-purple-100 dark:bg-purple-900/30' :
-                    'bg-green-100 dark:bg-green-900/30'
-                  }`}>
-                    <ShoppingCart className={`w-4 h-4 ${
-                      activity.type === 'order' ? 'text-blue-600' :
+                      activity.type === 'review' ? 'bg-purple-100 dark:bg-purple-900/30' :
+                        'bg-green-100 dark:bg-green-900/30'
+                    }`}>
+                    <ShoppingCart className={`w-4 h-4 ${activity.type === 'order' ? 'text-blue-600' :
                       activity.type === 'product' ? 'text-yellow-600' :
-                      activity.type === 'review' ? 'text-purple-600' :
-                      'text-green-600'
-                    }`} />
+                        activity.type === 'review' ? 'text-purple-600' :
+                          'text-green-600'
+                      }`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium line-clamp-2">{activity.message}</p>

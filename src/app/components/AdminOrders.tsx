@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useApiCall } from '../../hooks/useApiCall';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ShoppingCart,
@@ -54,6 +55,15 @@ import {
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from './ui/pagination';
 
 const statusOptions = [
   { value: 'pending', label: 'Pending', icon: Clock, color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' },
@@ -69,77 +79,93 @@ export function AdminOrders() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [showStatusUpdate, setShowStatusUpdate] = useState(false);
-  const fetchingOrdersRef = useRef(false);
-  const currentAbortControllerRef = useRef<AbortController | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const { callApi } = useApiCall();
 
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to avoid too many API calls
   useEffect(() => {
-    // Prevent duplicate calls
-    if (fetchingOrdersRef.current) {
-      return;
-    }
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
 
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset to page 1 when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, debouncedSearchQuery, dateFrom, dateTo]);
+
+  // Abort controller ref for search
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch orders on mount and when filters/page change
+  useEffect(() => {
     // Abort previous request if any
-    if (currentAbortControllerRef.current) {
-      currentAbortControllerRef.current.abort();
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
     }
 
-    let isMounted = true;
+    // Create new abort controller
     const abortController = new AbortController();
-    currentAbortControllerRef.current = abortController;
-    fetchingOrdersRef.current = true;
+    searchAbortControllerRef.current = abortController;
 
-    const fetchOrders = async () => {
-      if (!isMounted) return;
-
+    // Use debouncedSearchQuery instead of searchQuery
+    const fetchWithDebouncedSearch = async (signal?: AbortSignal) => {
       try {
         setLoading(true);
         const status = statusFilter === 'all' ? '' : statusFilter;
-        const url = status ? `/api/admin/orders?status=${status}` : '/api/admin/orders';
-        const response = await fetch(url, {
-          signal: abortController.signal,
-        });
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const dateFromParam = dateFrom ? `&dateFrom=${dateFrom}` : '';
+        const dateToParam = dateTo ? `&dateTo=${dateTo}` : '';
+        const url = `/api/admin/orders?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}${dateFromParam}${dateToParam}`;
+        const response = await fetch(url, { signal: signal || abortController.signal });
         const data = await response.json();
         
-        if (isMounted && response.ok) {
+        if (response.ok) {
           setOrders(data.orders || []);
-        } else if (isMounted && !response.ok) {
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
+        } else {
           showToast.error(data.error || 'Failed to fetch orders');
         }
       } catch (error: any) {
-        if (error.name !== 'AbortError' && isMounted) {
+        if (error.name !== 'AbortError') {
           console.error('Fetch orders error:', error);
           showToast.error('Failed to fetch orders');
         }
       } finally {
-        if (isMounted) {
-          setLoading(false);
-          fetchingOrdersRef.current = false;
-        }
+        setLoading(false);
       }
     };
 
-    fetchOrders();
+    callApi(fetchWithDebouncedSearch);
 
+    // Cleanup: abort request on unmount or dependency change
     return () => {
-      isMounted = false;
-      abortController.abort();
-      currentAbortControllerRef.current = null;
-      fetchingOrdersRef.current = false;
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+        searchAbortControllerRef.current = null;
+      }
     };
-  }, [statusFilter]);
+  }, [statusFilter, currentPage, debouncedSearchQuery, dateFrom, dateTo, callApi, pagination.limit]);
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch =
-      order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer?.email?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  // Calculate current month orders
+  // Calculate current month orders (from all orders, not just current page)
+  // Note: For accurate stats, we might need a separate stats endpoint
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   const currentMonthOrders = orders.filter(order => {
@@ -147,11 +173,27 @@ export function AdminOrders() {
     return orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear;
   });
 
+  // Calculate current week orders
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+  startOfWeek.setHours(0, 0, 0, 0);
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6); // Saturday
+  endOfWeek.setHours(23, 59, 59, 999);
+  
+  const currentWeekOrders = orders.filter(order => {
+    const orderDate = new Date(order.createdAt);
+    return orderDate >= startOfWeek && orderDate <= endOfWeek;
+  });
+
   const stats = {
-    total: orders.length,
+    total: pagination.total || orders.length,
     pending: orders.filter(o => o.status === 'pending').length,
     currentMonth: currentMonthOrders.length,
     currentMonthRevenue: currentMonthOrders.reduce((sum, o) => sum + o.total, 0),
+    currentWeek: currentWeekOrders.length,
+    currentWeekRevenue: currentWeekOrders.reduce((sum, o) => sum + o.total, 0),
   };
 
   const getStatusConfig = (status: string) => {
@@ -172,10 +214,18 @@ export function AdminOrders() {
 
       if (response.ok) {
         // Refetch orders
-        const refetchResponse = await fetch('/api/admin/orders');
+        const status = statusFilter === 'all' ? '' : statusFilter;
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const dateFromParam = dateFrom ? `&dateFrom=${dateFrom}` : '';
+        const dateToParam = dateTo ? `&dateTo=${dateTo}` : '';
+        const url = `/api/admin/orders?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${searchParam}${dateFromParam}${dateToParam}`;
+        const refetchResponse = await fetch(url);
         if (refetchResponse.ok) {
           const refetchData = await refetchResponse.json();
           setOrders(refetchData.orders || []);
+          if (refetchData.pagination) {
+            setPagination(refetchData.pagination);
+          }
         }
         const statusLabel = statusOptions.find(s => s.value === statusValue)?.label || statusValue;
         showToast.success(`Order status updated to ${statusLabel}`);
@@ -203,7 +253,7 @@ export function AdminOrders() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="p-6">
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500 to-cyan-500">
@@ -232,6 +282,21 @@ export function AdminOrders() {
 
         <Card className="p-6">
           <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500">
+              <Calendar className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground font-medium">This Week</p>
+              <p className="text-3xl font-bold">{stats.currentWeek}</p>
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                ${stats.currentWeekRevenue.toFixed(2)} revenue
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500">
               <Calendar className="w-6 h-6 text-white" />
             </div>
@@ -252,9 +317,24 @@ export function AdminOrders() {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
             <Input
+              type="text"
               placeholder="Search by order number, customer name or email..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' || e.which === 13 || e.keyCode === 13) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
               className="pl-10"
             />
           </div>
@@ -272,6 +352,51 @@ export function AdminOrders() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+        
+        {/* Date Filters */}
+        <div className="flex flex-col md:flex-row gap-4 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+          <div className="flex-1 md:flex-none md:w-48">
+            <Label htmlFor="dateFrom" className="text-sm font-medium mb-2 block flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-purple-500" />
+              From Date
+            </Label>
+            <input
+              id="dateFrom"
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+          <div className="flex-1 md:flex-none md:w-48">
+            <Label htmlFor="dateTo" className="text-sm font-medium mb-2 block flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-purple-500" />
+              To Date
+            </Label>
+            <input
+              id="dateTo"
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+          {(dateFrom || dateTo) && (
+            <div className="flex items-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+                className="h-10"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Clear Dates
+              </Button>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -303,7 +428,7 @@ export function AdminOrders() {
                   </div>
                 </TableCell>
               </TableRow>
-            ) : filteredOrders.length === 0 ? (
+            ) : orders.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-12">
                   <div className="flex flex-col items-center gap-3">
@@ -322,7 +447,7 @@ export function AdminOrders() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredOrders.map((order, index) => {
+              orders.map((order, index) => {
                 const statusConfig = getStatusConfig(order.status);
                 const StatusIcon = statusConfig.icon;
 
@@ -401,6 +526,75 @@ export function AdminOrders() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Pagination */}
+      {!loading && pagination.totalPages > 1 && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} orders
+            </div>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious 
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage > 1) {
+                        setCurrentPage(currentPage - 1);
+                      }
+                    }}
+                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                  if (
+                    page === 1 ||
+                    page === pagination.totalPages ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  ) {
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage(page);
+                          }}
+                          isActive={currentPage === page}
+                          className="cursor-pointer"
+                        >
+                          {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  } else if (page === currentPage - 2 || page === currentPage + 2) {
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    );
+                  }
+                  return null;
+                })}
+                <PaginationItem>
+                  <PaginationNext 
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage < pagination.totalPages) {
+                        setCurrentPage(currentPage + 1);
+                      }
+                    }}
+                    className={currentPage === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        </Card>
+      )}
 
       {/* Order Detail Modal */}
       <AnimatePresence>

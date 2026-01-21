@@ -16,6 +16,7 @@ import {
   Home,
   Building,
   Globe,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -27,6 +28,7 @@ import { Separator } from './ui/separator';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Badge } from './ui/badge';
 import { showToast } from '../../lib/toast';
+import { validatePhoneNumber, cleanPhoneNumber, formatPhoneNumber, allowOnlyDigits } from '../../lib/phone-validation';
 
 interface CheckoutFormData {
   fullName: string;
@@ -44,6 +46,7 @@ export function Checkout() {
   const { user } = useAuth();
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [formData, setFormData] = useState<CheckoutFormData>({
     fullName: user?.name || '',
     email: user?.email || '',
@@ -76,7 +79,7 @@ export function Checkout() {
     cost: number;
     estimatedDays: string;
   }
-  
+
   const getAllShippingMethods = (): ShippingMethod[] => {
     const methodMap = new Map<string, ShippingMethod>();
     cart.forEach((item: any) => {
@@ -94,7 +97,7 @@ export function Checkout() {
 
   const availableMethods = getAllShippingMethods();
   const [selectedShippingMethod, setSelectedShippingMethod] = useState<string>('');
-  
+
   // Get default shipping method or fallback
   useEffect(() => {
     if (availableMethods.length > 0 && !selectedShippingMethod) {
@@ -131,7 +134,29 @@ export function Checkout() {
   const total = subtotal + shipping + tax;
 
   const handleInputChange = (field: keyof CheckoutFormData, value: string) => {
-    setFormData({ ...formData, [field]: value });
+    // Phone number validation on input
+    if (field === 'phone') {
+      // Allow only digits
+      const digitsOnly = allowOnlyDigits(value);
+      // Format the phone number
+      const formatted = formatPhoneNumber(digitsOnly);
+
+      // Validate if there are digits
+      if (digitsOnly && digitsOnly.trim()) {
+        const validation = validatePhoneNumber(digitsOnly);
+        if (!validation.isValid && validation.error) {
+          setPhoneError(validation.error);
+        } else {
+          setPhoneError(null);
+        }
+      } else {
+        setPhoneError(null);
+      }
+
+      setFormData({ ...formData, [field]: formatted });
+    } else {
+      setFormData({ ...formData, [field]: value });
+    }
   };
 
   const validateStep1 = () => {
@@ -142,6 +167,16 @@ export function Checkout() {
     if (!/\S+@\S+\.\S+/.test(formData.email)) {
       showToast.error('Please enter a valid email address');
       return false;
+    }
+    // Phone number validation
+    if (formData.phone && formData.phone.trim()) {
+      const phoneValidation = validatePhoneNumber(formData.phone);
+      if (!phoneValidation.isValid && phoneValidation.error) {
+        setPhoneError(phoneValidation.error);
+        showToast.error(phoneValidation.error);
+        return false;
+      }
+      setPhoneError(null);
     }
     return true;
   };
@@ -222,7 +257,7 @@ export function Checkout() {
           body: JSON.stringify({
             storeId: storeOrder.storeId,
             customerEmail: formData.email,
-            customerPhone: formData.phone,
+            customerPhone: formData.phone ? cleanPhoneNumber(formData.phone) : '',
             customerName: formData.fullName,
             shippingFullName: formData.fullName,
             shippingAddress: formData.address,
@@ -230,7 +265,7 @@ export function Checkout() {
             shippingState: formData.state,
             shippingZipCode: formData.zipCode,
             shippingCountry: formData.country,
-            shippingPhone: formData.phone,
+            shippingPhone: formData.phone ? cleanPhoneNumber(formData.phone) : '',
             paymentMethod: formData.paymentMethod,
             items: storeOrder.items,
             subtotal: orderSubtotal,
@@ -256,7 +291,7 @@ export function Checkout() {
       if (user?.id && typeof window !== 'undefined') {
         localStorage.setItem(`cart_${user.id}`, JSON.stringify([]));
       }
-      
+
       setIsProcessing(false);
       showToast.success('Order placed successfully!');
       router.push('/dashboard/customer/orders');
@@ -291,11 +326,10 @@ export function Checkout() {
             <React.Fragment key={step.number}>
               <div className="flex items-center gap-3">
                 <div
-                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                    currentStep >= step.number
+                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${currentStep >= step.number
                       ? 'bg-gradient-to-r from-purple-500 to-cyan-500 text-white shadow-lg'
                       : 'bg-muted text-muted-foreground'
-                  }`}
+                    }`}
                 >
                   {currentStep > step.number ? (
                     <CheckCircle2 className="w-6 h-6" />
@@ -378,11 +412,34 @@ export function Checkout() {
                       <Input
                         id="phone"
                         type="tel"
-                        placeholder="+1 (555) 000-0000"
+                        placeholder="12345678901"
                         value={formData.phone}
                         onChange={e => handleInputChange('phone', e.target.value)}
-                        className="pl-10"
+                        onKeyDown={(e) => {
+                          // Allow: backspace, delete, tab, escape, enter, and numbers
+                          if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+                            // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                            (e.keyCode === 65 && e.ctrlKey === true) ||
+                            (e.keyCode === 67 && e.ctrlKey === true) ||
+                            (e.keyCode === 86 && e.ctrlKey === true) ||
+                            (e.keyCode === 88 && e.ctrlKey === true) ||
+                            // Allow: home, end, left, right
+                            (e.keyCode >= 35 && e.keyCode <= 39)) {
+                            return;
+                          }
+                          // Ensure that it is a number and stop the keypress
+                          if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                            e.preventDefault();
+                          }
+                        }}
+                        className={phoneError ? "pl-10 border-red-500" : "pl-10"}
                       />
+                      {phoneError && (
+                        <p className="text-sm text-red-500 mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          {phoneError}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -528,11 +585,10 @@ export function Checkout() {
                   className="space-y-3"
                 >
                   <div
-                    className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                      formData.paymentMethod === 'credit_card'
+                    className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${formData.paymentMethod === 'credit_card'
                         ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/10'
                         : 'border-border hover:border-purple-300'
-                    }`}
+                      }`}
                     onClick={() => handleInputChange('paymentMethod', 'credit_card')}
                   >
                     <RadioGroupItem value="credit_card" id="credit_card" />
@@ -548,11 +604,10 @@ export function Checkout() {
                   </div>
 
                   <div
-                    className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                      formData.paymentMethod === 'paypal'
+                    className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${formData.paymentMethod === 'paypal'
                         ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/10'
                         : 'border-border hover:border-purple-300'
-                    }`}
+                      }`}
                     onClick={() => handleInputChange('paymentMethod', 'paypal')}
                   >
                     <RadioGroupItem value="paypal" id="paypal" />
@@ -570,11 +625,10 @@ export function Checkout() {
                   </div>
 
                   <div
-                    className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                      formData.paymentMethod === 'bank_transfer'
+                    className={`flex items-center gap-4 p-4 rounded-lg border-2 transition-all cursor-pointer ${formData.paymentMethod === 'bank_transfer'
                         ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/10'
                         : 'border-border hover:border-purple-300'
-                    }`}
+                      }`}
                     onClick={() => handleInputChange('paymentMethod', 'bank_transfer')}
                   >
                     <RadioGroupItem value="bank_transfer" id="bank_transfer" />
@@ -605,11 +659,10 @@ export function Checkout() {
                       {availableMethods.map((method) => (
                         <div
                           key={method.name}
-                          className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
-                            selectedShippingMethod === method.name
+                          className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${selectedShippingMethod === method.name
                               ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/10'
                               : 'border-border hover:border-purple-300'
-                          }`}
+                            }`}
                           onClick={() => setSelectedShippingMethod(method.name)}
                         >
                           <RadioGroupItem value={method.name} id={method.name} />

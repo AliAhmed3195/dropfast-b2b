@@ -8,11 +8,30 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status') // Filter by status: active, inactive
+    const search = searchParams.get('search') // Search query
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const skip = (page - 1) * limit
+
+    const where: any = {
+      role: UserType.SUPPLIER,
+    }
+
+    // Add search filter
+    if (search && search.trim()) {
+      const searchTerm = search.trim()
+      where.OR = [
+        { name: { contains: searchTerm, mode: 'insensitive' } },
+        { email: { contains: searchTerm, mode: 'insensitive' } },
+        { businessName: { contains: searchTerm, mode: 'insensitive' } },
+      ]
+    }
+
+    // Get total count for pagination
+    const total = await prisma.user.count({ where })
 
     const suppliers = await prisma.user.findMany({
-      where: {
-        role: UserType.SUPPLIER,
-      },
+      where,
       include: {
         productsAsSupplier: {
           select: {
@@ -23,6 +42,8 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     })
 
     // Calculate total revenue (would need to join with orders, simplified for now)
@@ -33,19 +54,27 @@ export async function GET(request: NextRequest) {
       businessName: supplier.businessName || null,
       country: supplier.country || null,
       phoneNumber: supplier.phone || null,
-      status: 'active', // Default status
+      status: supplier.isActive ? 'active' : 'inactive',
       joinedDate: supplier.createdAt.toISOString().split('T')[0],
       totalProducts: supplier.productsAsSupplier.length,
       totalRevenue: 0, // Would need to calculate from orders
     }))
 
-    // Filter by status if provided
+    // Filter by status if provided (after pagination)
     let filteredSuppliers = formattedSuppliers
     if (status && status !== 'all') {
       filteredSuppliers = formattedSuppliers.filter(s => s.status === status)
     }
 
-    return NextResponse.json({ suppliers: filteredSuppliers })
+    return NextResponse.json({
+      suppliers: filteredSuppliers,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+    })
   } catch (error) {
     console.error('Get suppliers error:', error)
     return NextResponse.json(
@@ -76,6 +105,9 @@ export async function POST(request: NextRequest) {
       productCategories,
       shippingLocations,
       minimumOrderValue,
+      registrationNumber,
+      vatNumber,
+      dateOfBirth,
     } = body
 
     // Validate required fields
@@ -121,6 +153,9 @@ export async function POST(request: NextRequest) {
         productCategories: productCategories || null,
         shippingLocations: shippingLocations || null,
         minimumOrderValue: minimumOrderValue ? parseFloat(minimumOrderValue) : null,
+        registrationNumber: body.registrationNumber || null,
+        vatNumber: body.vatNumber || null,
+        dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
       },
       select: {
         id: true,

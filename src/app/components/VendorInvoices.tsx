@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useApiCall } from '../../hooks/useApiCall';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText,
@@ -43,6 +44,15 @@ import {
 } from './ui/table';
 import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from './ui/pagination';
 
 export function VendorInvoices() {
   const { user } = useAuth();
@@ -54,38 +64,88 @@ export function VendorInvoices() {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [stores, setStores] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const fetchingRef = useRef(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const { callApi } = useApiCall();
 
-  // Fetch invoices
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to avoid too many API calls
   useEffect(() => {
-    if (!user?.id || fetchingRef.current) return;
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
 
-    fetchingRef.current = true;
-    setLoading(true);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-    const fetchInvoices = async () => {
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStatus, filterStore, debouncedSearchQuery]);
+
+  // Abort controller ref for search
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch invoices on mount and when filters/page change
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Abort previous request if any
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
+    // Use debouncedSearchQuery instead of searchQuery
+    const fetchWithDebouncedSearch = async (signal?: AbortSignal) => {
       try {
-        const url = `/api/vendor/invoices?vendorId=${user.id}${filterStatus !== 'all' ? `&status=${filterStatus}` : ''}${filterStore !== 'all' ? `&store=${filterStore}` : ''}`;
-        const response = await fetch(url);
+        setLoading(true);
+        const statusParam = filterStatus !== 'all' ? `&status=${filterStatus}` : '';
+        const storeParam = filterStore !== 'all' ? `&store=${filterStore}` : '';
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const url = `/api/vendor/invoices?vendorId=${user.id}&page=${currentPage}&limit=${pagination.limit}${statusParam}${storeParam}${searchParam}`;
+        const response = await fetch(url, { signal: signal || abortController.signal });
         const data = await response.json();
 
         if (response.ok) {
           setInvoices(data.invoices || []);
           setStores(data.stores || []);
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
         } else {
           showToast.error(data.error || 'Failed to fetch invoices');
         }
-      } catch (error) {
-        console.error('Fetch invoices error:', error);
-        showToast.error('Failed to fetch invoices');
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Fetch invoices error:', error);
+          showToast.error('Failed to fetch invoices');
+        }
       } finally {
         setLoading(false);
-        fetchingRef.current = false;
       }
     };
 
-    fetchInvoices();
-  }, [user?.id, filterStatus, filterStore]);
+    callApi(fetchWithDebouncedSearch);
+
+    // Cleanup: abort request on unmount or dependency change
+    return () => {
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+        searchAbortControllerRef.current = null;
+      }
+    };
+  }, [user?.id, filterStatus, filterStore, currentPage, debouncedSearchQuery, callApi, pagination.limit]);
 
   const handleViewInvoice = (invoice: any) => {
     setSelectedInvoice(invoice);
@@ -102,17 +162,8 @@ export function VendorInvoices() {
     }
   };
 
-  const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = 
-      invoice.invoiceNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    return matchesSearch;
-  });
-
   const stats = {
-    total: invoices.length,
+    total: pagination.total || invoices.length,
     paid: invoices.filter(i => i.status === 'paid').length,
     pending: invoices.filter(i => i.status === 'pending').length,
     overdue: invoices.filter(i => i.status === 'overdue').length,
@@ -238,9 +289,24 @@ export function VendorInvoices() {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
+              type="text"
               placeholder="Search by invoice ID, customer, or order..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' || e.which === 13 || e.keyCode === 13) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return false;
+                }
+              }}
               className="pl-10"
             />
           </div>
@@ -291,7 +357,7 @@ export function VendorInvoices() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredInvoices.map((invoice, index) => (
+              {invoices.map((invoice, index) => (
                 <motion.tr
                   key={invoice.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -364,13 +430,82 @@ export function VendorInvoices() {
           </Table>
         </div>
 
-        {filteredInvoices.length === 0 && (
+        {invoices.length === 0 && !loading && (
           <div className="text-center py-16">
             <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
             <p className="text-lg text-muted-foreground">No invoices found</p>
           </div>
         )}
       </Card>
+
+      {/* Pagination */}
+      {!loading && pagination.totalPages > 1 && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} invoices
+            </div>
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious 
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage > 1) {
+                        setCurrentPage(currentPage - 1);
+                      }
+                    }}
+                    className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                  if (
+                    page === 1 ||
+                    page === pagination.totalPages ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  ) {
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage(page);
+                          }}
+                          isActive={currentPage === page}
+                          className="cursor-pointer"
+                        >
+                          {page}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  } else if (page === currentPage - 2 || page === currentPage + 2) {
+                    return (
+                      <PaginationItem key={page}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    );
+                  }
+                  return null;
+                })}
+                <PaginationItem>
+                  <PaginationNext 
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (currentPage < pagination.totalPages) {
+                        setCurrentPage(currentPage + 1);
+                      }
+                    }}
+                    className={currentPage === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        </Card>
+      )}
 
       {/* Invoice Preview Modal */}
       <AnimatePresence>

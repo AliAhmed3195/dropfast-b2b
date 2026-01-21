@@ -33,7 +33,7 @@ function getRequestKey(url: string, method: string = 'GET', body?: string): stri
   if (method === 'GET' || method === 'HEAD') {
     return `${url}_${method}`;
   }
-  
+
   // For POST/PUT/PATCH, include body hash to differentiate requests
   // Simple hash of body (first 50 chars) to identify similar requests
   const bodyHash = body ? body.substring(0, 50).replace(/\s/g, '') : '';
@@ -48,30 +48,30 @@ export function setGlobalLoadingManager(manager: {
   stopLoading: () => void;
 }) {
   globalLoadingManager = manager;
-  
+
   // Override global fetch to automatically show loading
   if (typeof window !== 'undefined' && !(window as any).__fetchIntercepted) {
     const originalFetch = window.fetch;
-    
+
     window.fetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
       // Extract URL string
-      const urlString = typeof url === 'string' 
-        ? url 
-        : url instanceof URL 
-          ? url.pathname 
+      const urlString = typeof url === 'string'
+        ? url
+        : url instanceof URL
+          ? url.pathname
           : (url as Request).url;
-      
+
       // Only apply duplicate prevention and loading for API calls
       const isApiCall = urlString.startsWith('/api/');
-      
+
       if (isApiCall) {
         // Get request method and body
         const method = init?.method || 'GET';
         const body = init?.body ? (typeof init.body === 'string' ? init.body : JSON.stringify(init.body)) : undefined;
-        
+
         // Generate unique key for this request
         const requestKey = getRequestKey(urlString, method, body);
-        
+
         // Cancel previous duplicate request if exists (React StrictMode fix)
         if (activeApiCalls.has(requestKey)) {
           const previousController = activeApiCalls.get(requestKey);
@@ -80,26 +80,26 @@ export function setGlobalLoadingManager(manager: {
           }
           activeApiCalls.delete(requestKey);
         }
-        
+
         // Create new abort controller for this request
         const abortController = new AbortController();
         activeApiCalls.set(requestKey, abortController);
-        
+
         // Merge with existing signal if provided (for manual cancellation)
         let finalSignal = abortController.signal;
         if (init?.signal) {
           // If both signals exist, create a combined signal
           const combinedController = new AbortController();
           const abort = () => combinedController.abort();
-          
+
           abortController.signal.addEventListener('abort', abort);
           if (init.signal instanceof AbortSignal) {
             init.signal.addEventListener('abort', abort);
           }
-          
+
           finalSignal = combinedController.signal;
         }
-        
+
         const mergedInit = {
           ...init,
           signal: finalSignal,
@@ -113,15 +113,15 @@ export function setGlobalLoadingManager(manager: {
 
           // Make the actual API call
           const response = await originalFetch(url, mergedInit);
-          
+
           // Remove from active calls on success
           activeApiCalls.delete(requestKey);
-          
+
           return response;
         } catch (error: any) {
           // Remove from active calls on error
           activeApiCalls.delete(requestKey);
-          
+
           // Handle AbortError (expected for cancelled duplicates)
           if (error.name === 'AbortError') {
             // Silently handle abort errors from duplicate prevention
@@ -142,7 +142,7 @@ export function setGlobalLoadingManager(manager: {
         return originalFetch(url, init);
       }
     };
-    
+
     (window as any).__fetchIntercepted = true;
   }
 }

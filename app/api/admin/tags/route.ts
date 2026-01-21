@@ -2,9 +2,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../src/lib/prisma'
 
 // GET /api/admin/tags - List all tags
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const searchParams = request.nextUrl.searchParams
+    const search = searchParams.get('search') // Search query
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const skip = (page - 1) * limit
+
+    const where: any = {}
+
+    // Add search filter
+    if (search && search.trim()) {
+      const searchTerm = search.trim()
+      where.OR = [
+        { name: { contains: searchTerm, mode: 'insensitive' } },
+      ]
+    }
+
+    // Get total count for pagination
+    const total = await prisma.tag.count({ where })
+
     const tags = await prisma.tag.findMany({
+      where,
       include: {
         products: {
           select: {
@@ -15,6 +35,8 @@ export async function GET() {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     })
 
     // Format response
@@ -26,7 +48,15 @@ export async function GET() {
       createdAt: tag.createdAt.toISOString().split('T')[0],
     }))
 
-    return NextResponse.json({ tags: formattedTags })
+    return NextResponse.json({ 
+      tags: formattedTags,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+    })
   } catch (error) {
     console.error('Get tags error:', error)
     return NextResponse.json(

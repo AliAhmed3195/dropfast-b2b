@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 
 export type UserType = 'admin' | 'supplier' | 'vendor' | 'customer';
 
@@ -66,8 +66,121 @@ const MOCK_USERS: Record<string, { password: string; user: User }> = {
   },
 };
 
+const STORAGE_KEY = 'fastdrop_user';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  // Load user from localStorage on mount
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (error) {
+          console.error('Error parsing stored user:', error);
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    }
+    return null;
+  });
+
+  // Ref to track if we're updating user internally (to prevent infinite loop)
+  const isInternalUpdate = useRef(false);
+
+  // Save user to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !isInternalUpdate.current) {
+      if (user) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        // Dispatch custom event for same-tab synchronization
+        isInternalUpdate.current = true;
+        window.dispatchEvent(new CustomEvent('fastdrop-storage-change', {
+          detail: { key: STORAGE_KEY, value: JSON.stringify(user) }
+        }));
+        // Reset flag after a small delay
+        setTimeout(() => {
+          isInternalUpdate.current = false;
+        }, 0);
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+        // Dispatch custom event for logout
+        isInternalUpdate.current = true;
+        window.dispatchEvent(new CustomEvent('fastdrop-storage-change', {
+          detail: { key: STORAGE_KEY, value: null }
+        }));
+        // Reset flag after a small delay
+        setTimeout(() => {
+          isInternalUpdate.current = false;
+        }, 0);
+      }
+    }
+  }, [user]);
+
+  // Listen for storage changes (cross-tab synchronization)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) {
+        if (e.newValue) {
+          try {
+            const newUser = JSON.parse(e.newValue);
+            setUser(newUser);
+          } catch (error) {
+            console.error('Error parsing user from storage event:', error);
+            setUser(null);
+          }
+        } else {
+          // User was removed (logout in another tab)
+          setUser(null);
+        }
+      }
+    };
+
+    // Listen for storage events from other tabs
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also listen for custom events for same-tab synchronization
+    const handleCustomStorageChange = (e: CustomEvent) => {
+      // Skip if this is our own update to prevent infinite loop
+      if (isInternalUpdate.current) {
+        return;
+      }
+
+      if (e.detail?.key === STORAGE_KEY) {
+        if (e.detail.value) {
+          try {
+            const newUser = JSON.parse(e.detail.value);
+            // Only update if user actually changed
+            setUser(prevUser => {
+              if (JSON.stringify(prevUser) === JSON.stringify(newUser)) {
+                return prevUser; // No change, return previous value
+              }
+              return newUser;
+            });
+          } catch (error) {
+            console.error('Error parsing user from custom event:', error);
+            setUser(null);
+          }
+        } else {
+          setUser(prevUser => {
+            if (prevUser === null) {
+              return prevUser; // Already null, no change
+            }
+            return null;
+          });
+        }
+      }
+    };
+
+    window.addEventListener('fastdrop-storage-change', handleCustomStorageChange as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('fastdrop-storage-change', handleCustomStorageChange as EventListener);
+    };
+  }, []);
 
   const login = async (email: string, password: string): Promise<User | null> => {
     try {
@@ -106,6 +219,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   };
 
   return (

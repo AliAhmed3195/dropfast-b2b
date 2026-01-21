@@ -42,10 +42,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Helper to get country code
+    const getCountryCode = (country: string | null) => {
+      if (!country) return 'US';
+      const map: Record<string, string> = {
+        'United States': 'US',
+        'United Kingdom': 'GB',
+        'Canada': 'CA',
+        'Australia': 'AU',
+        'Germany': 'DE',
+        'France': 'FR',
+        'Italy': 'IT',
+        'Spain': 'ES',
+        'Netherlands': 'NL',
+        'Belgium': 'BE',
+        'Austria': 'AT',
+        'Ireland': 'IE',
+        'Poland': 'PL',
+        'Portugal': 'PT',
+        'Switzerland': 'CH',
+        'Sweden': 'SE',
+        'Norway': 'NO',
+        'Denmark': 'DK',
+        'Finland': 'FI',
+        'New Zealand': 'NZ',
+        'Singapore': 'SG',
+        'India': 'IN',
+        'China': 'CN',
+        'Japan': 'JP',
+        'South Korea': 'KR',
+        'Brazil': 'BR',
+        'Mexico': 'MX',
+      };
+      return map[country] || country;
+    }
+
+    const countryCode = getCountryCode(supplier.country || supplier.addressCountry);
+
     // Create Stripe Connect account
     const account = await createConnectAccount(
       supplier.email,
-      supplier.country || supplier.addressCountry || 'US',
+      countryCode,
       'express'
     )
 

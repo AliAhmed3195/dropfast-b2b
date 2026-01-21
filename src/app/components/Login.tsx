@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
-import { Mail, Lock, Zap, TrendingUp, ShoppingBag, Package, Sparkles } from 'lucide-react';
+import { Mail, Lock, Zap, TrendingUp, ShoppingBag, Package, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -15,6 +15,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     // If already authenticated, redirect to dashboard
@@ -31,17 +32,24 @@ export function Login() {
     try {
       const loggedInUser = await login(email, password);
       if (loggedInUser && loggedInUser.role) {
-        // Role-based redirect
+        // Small delay to ensure state is updated before redirect
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        // Role-based redirect using replace to avoid back button issues
         if (loggedInUser.role === 'customer') {
-          router.push('/dashboard/customer/browse');
+          router.replace('/dashboard/customer/browse');
         } else {
-          router.push(`/dashboard/${loggedInUser.role}/overview`);
+          router.replace(`/dashboard/${loggedInUser.role}/overview`);
         }
+        
+        // Don't set loading to false here as we're redirecting
+        // The component will unmount on redirect
       } else {
         setError('Invalid email or password');
         setIsLoading(false);
       }
     } catch (err) {
+      console.error('Login error:', err);
       setError('An error occurred. Please try again.');
       setIsLoading(false);
     }
@@ -58,22 +66,29 @@ export function Login() {
     const cred = credentials[role as keyof typeof credentials];
     setEmail(cred.email);
     setPassword(cred.password);
+    setError('');
     setIsLoading(true);
 
     try {
       const loggedInUser = await login(cred.email, cred.password);
       if (loggedInUser && loggedInUser.role) {
-        // Role-based redirect
+        // Small delay to ensure state is updated before redirect
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        // Role-based redirect using replace to avoid back button issues
         if (loggedInUser.role === 'customer') {
-          router.push('/dashboard/customer/browse');
+          router.replace('/dashboard/customer/browse');
         } else {
-          router.push(`/dashboard/${loggedInUser.role}/overview`);
+          router.replace(`/dashboard/${loggedInUser.role}/overview`);
         }
+        
+        // Don't set loading to false here as we're redirecting
       } else {
         setError('Login failed');
         setIsLoading(false);
       }
     } catch (err) {
+      console.error('Quick login error:', err);
       setError('Login failed');
       setIsLoading(false);
     }
@@ -251,13 +266,20 @@ export function Login() {
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-purple-500 transition-colors" />
                   <Input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-12 h-14 bg-white/50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/20 transition-all rounded-xl"
+                    className="pl-12 pr-12 h-14 bg-white/50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/20 transition-all rounded-xl"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-purple-500 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
               </motion.div>
 

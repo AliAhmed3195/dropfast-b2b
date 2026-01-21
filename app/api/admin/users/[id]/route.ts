@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../../src/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { UserType } from '@prisma/client'
+import { validatePhoneNumber, cleanPhoneNumber } from '../../../../../src/lib/phone-validation'
 
 // GET /api/admin/users/[id] - Get user by ID
 export async function GET(
@@ -38,6 +39,13 @@ export async function GET(
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        storesAsVendor: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+          }
+        }
       },
     })
 
@@ -94,6 +102,9 @@ export async function PUT(
       commissionRate,
       isActive,
       status, // Support both isActive and status for backward compatibility
+      registrationNumber,
+      vatNumber,
+      dateOfBirth,
     } = body
 
     // Check if user exists
@@ -122,12 +133,28 @@ export async function PUT(
       }
     }
 
+    // Validate and clean phone number if provided
+    let cleanedPhone: string | null | undefined = phone
+    if (phone !== undefined && phone && phone.trim()) {
+      const phoneValidation = validatePhoneNumber(phone)
+      if (!phoneValidation.isValid && phoneValidation.error) {
+        return NextResponse.json(
+          { error: phoneValidation.error },
+          { status: 400 }
+        )
+      }
+      // Clean phone number before saving
+      cleanedPhone = phoneValidation.cleaned || cleanPhoneNumber(phone)
+    } else if (phone !== undefined && (!phone || !phone.trim())) {
+      cleanedPhone = null
+    }
+
     // Prepare update data
     const updateData: any = {}
 
     if (name) updateData.name = name
     if (email) updateData.email = email.toLowerCase()
-    if (phone !== undefined) updateData.phone = phone || null
+    if (phone !== undefined) updateData.phone = cleanedPhone || null
     if (businessName !== undefined) updateData.businessName = businessName || null
     if (businessType !== undefined) updateData.businessType = businessType || null
     if (streetAddress !== undefined) updateData.streetAddress = streetAddress || null
@@ -142,7 +169,40 @@ export async function PUT(
     if (minimumOrderValue !== undefined) updateData.minimumOrderValue = minimumOrderValue ? parseFloat(minimumOrderValue) : null
     if (commissionRate !== undefined) updateData.commissionRate = commissionRate ? parseFloat(commissionRate) : null
     if (role) updateData.role = role.toUpperCase() as UserType
-    
+
+    // Add missing fields
+    if (registrationNumber !== undefined) updateData.registrationNumber = registrationNumber || null
+    if (vatNumber !== undefined) updateData.vatNumber = vatNumber || null
+    if (dateOfBirth) updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null
+
+    // Handle Store Name update (Vendor only)
+    const storeName = body.storeName
+    if (storeName && (role === 'vendor' || existingUser.role === 'VENDOR')) {
+      const existingStore = await prisma.store.findFirst({
+        where: { vendorId: params.id }
+      })
+
+      if (existingStore) {
+        await prisma.store.update({
+          where: { id: existingStore.id },
+          data: { name: storeName }
+        })
+      } else {
+        // Create store if not exists
+        const baseSlug = storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        const uniqueSlug = `${baseSlug}-${Date.now()}`
+        await prisma.store.create({
+          data: {
+            name: storeName,
+            slug: uniqueSlug,
+            vendorId: params.id,
+            status: 'ACTIVE',
+            description: `Store for ${existingUser.name}`,
+          }
+        })
+      }
+    }
+
     // Handle status (support both isActive boolean and status string)
     if (isActive !== undefined) {
       updateData.isActive = isActive

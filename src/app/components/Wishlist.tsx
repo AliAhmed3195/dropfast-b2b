@@ -13,6 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useApp } from '../contexts/AppContext';
 import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -21,11 +22,12 @@ import { showToast } from '../../lib/toast';
 
 export function Wishlist() {
   const { user } = useAuth();
+  const { cart, addToCart } = useApp();
   const router = useRouter();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const fetchingRef = useRef(false);
-  
+
   // In a real app, wishlist would be stored in state/database
   // For now, using localStorage
   const [wishlistIds, setWishlistIds] = useState<string[]>(() => {
@@ -67,15 +69,6 @@ export function Wishlist() {
 
   const wishlistProducts = products.filter((p: any) => wishlistIds.includes(p.id));
 
-  // Get cart from localStorage
-  const [cart, setCart] = useState<any[]>(() => {
-    if (typeof window !== 'undefined' && user?.id) {
-      const saved = localStorage.getItem(`cart_${user.id}`);
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
-
   const removeFromWishlist = (productId: string) => {
     const updated = wishlistIds.filter(id => id !== productId);
     setWishlistIds(updated);
@@ -86,32 +79,17 @@ export function Wishlist() {
   };
 
   const handleAddToCart = (product: any) => {
-    try {
-      const cartItems = JSON.parse(localStorage.getItem(`cart_${user?.id}`) || '[]');
-      const existingItem = cartItems.find((item: any) => item.productId === product.id);
-      
-      if (existingItem) {
-        existingItem.quantity += 1;
-      } else {
-        cartItems.push({
-          productId: product.id,
-          productName: product.name,
-          productImage: product.images?.[0] || '',
-          quantity: 1,
-          price: product.price,
-          storeId: 'store-1', // TODO: Get from product/store relationship
-          storeName: 'Store',
-        });
-      }
-      
-      if (user?.id && typeof window !== 'undefined') {
-        localStorage.setItem(`cart_${user.id}`, JSON.stringify(cartItems));
-        setCart(cartItems);
-      }
-      showToast.success('Added to cart!');
-    } catch (error) {
-      showToast.error('Failed to add to cart');
-    }
+    // Add to cart via AppContext (which automatically syncs with localStorage)
+    addToCart({
+      productId: product.id,
+      productName: product.name,
+      productImage: product.images?.[0] || '',
+      quantity: 1,
+      price: product.sellingPrice || product.price,
+      storeId: 'store-1', // TODO: Get from product/store relationship
+      storeName: 'Store',
+    });
+    showToast.success('Added to cart!');
   };
 
   const isInCart = (productId: string) => {
@@ -180,7 +158,7 @@ export function Wishlist() {
         </div>
       ) : wishlistProducts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {wishlistProducts.map((product: any, index: number) => (
+          {wishlistProducts.map((product: any, index: number) => (
             <motion.div
               key={product.id}
               initial={{ opacity: 0, y: 20 }}
@@ -201,7 +179,7 @@ export function Wishlist() {
                       <Package className="w-16 h-16 text-muted-foreground" />
                     </div>
                   )}
-                  
+
                   {/* Remove Button */}
                   <Button
                     size="sm"
@@ -267,11 +245,10 @@ export function Wishlist() {
                       {[...Array(5)].map((_, i) => (
                         <Star
                           key={i}
-                          className={`w-3 h-3 ${
-                            i < Math.floor(product.rating)
-                              ? 'fill-yellow-400 text-yellow-400'
-                              : 'text-gray-300'
-                          }`}
+                          className={`w-3 h-3 ${i < Math.floor(product.rating)
+                            ? 'fill-yellow-400 text-yellow-400'
+                            : 'text-gray-300'
+                            }`}
                         />
                       ))}
                     </div>

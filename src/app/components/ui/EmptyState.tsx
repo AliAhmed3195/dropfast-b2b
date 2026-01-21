@@ -30,12 +30,13 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({
-  icon: Icon,
+  icon,
   title,
   description,
   action,
   variant = 'default',
 }: EmptyStateProps) {
+  const Icon = icon;
   const getVariantStyles = () => {
     switch (variant) {
       case 'error':
@@ -65,7 +66,7 @@ export function EmptyState({
           <div
             className={`w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br ${styles.iconBg} flex items-center justify-center`}
           >
-            {typeof Icon === 'function' ? (
+            {typeof Icon === 'function' || (Icon as any).$$typeof ? (
               <Icon className={`w-10 h-10 ${styles.iconColor}`} />
             ) : (
               Icon

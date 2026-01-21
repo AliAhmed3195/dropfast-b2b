@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../src/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { UserType } from '@prisma/client'
+import { validatePhoneNumber, cleanPhoneNumber } from '../../../../src/lib/phone-validation'
 
 // GET /api/admin/users - List all users
 export async function GET(request: NextRequest) {
@@ -9,14 +10,37 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const role = searchParams.get('role') // Filter by role: admin, supplier, vendor, customer
     const status = searchParams.get('status') // Filter by status (if needed)
+    const search = searchParams.get('search') // Search query
+    const excludeUserId = searchParams.get('excludeUserId') // Exclude current logged-in user
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const skip = (page - 1) * limit
 
     const where: any = {}
-    
+
     if (role && role !== 'all') {
       // Convert lowercase role to uppercase enum
       const roleUpper = role.toUpperCase() as UserType
       where.role = roleUpper
     }
+
+    // Exclude current logged-in user
+    if (excludeUserId) {
+      where.id = { not: excludeUserId }
+    }
+
+    // Add search filter
+    if (search && search.trim()) {
+      const searchTerm = search.trim()
+      where.OR = [
+        { name: { contains: searchTerm } },
+        { email: { contains: searchTerm } },
+        { businessName: { contains: searchTerm } },
+      ]
+    }
+
+    // Get total count for pagination
+    const total = await prisma.user.count({ where })
 
     const users = await prisma.user.findMany({
       where,
@@ -35,6 +59,8 @@ export async function GET(request: NextRequest) {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     })
 
     // Format response to match UI expectations
@@ -52,7 +78,15 @@ export async function GET(request: NextRequest) {
       organization: user.businessName || 'N/A',
     }))
 
-    return NextResponse.json({ users: formattedUsers })
+    return NextResponse.json({
+      users: formattedUsers,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+    })
   } catch (error) {
     console.error('Get users error:', error)
     return NextResponse.json(
@@ -87,6 +121,9 @@ export async function POST(request: NextRequest) {
       minimumOrderValue,
       // Vendor specific
       commissionRate,
+      registrationNumber,
+      vatNumber,
+      dateOfBirth,
     } = body
 
     // Validate required fields
@@ -109,6 +146,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate and clean phone number if provided
+    let cleanedPhone: string | null = null
+    if (phone && phone.trim()) {
+      const phoneValidation = validatePhoneNumber(phone)
+      if (!phoneValidation.isValid && phoneValidation.error) {
+        return NextResponse.json(
+          { error: phoneValidation.error },
+          { status: 400 }
+        )
+      }
+      // Clean phone number before saving
+      cleanedPhone = phoneValidation.cleaned || cleanPhoneNumber(phone)
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
 
@@ -122,7 +173,7 @@ export async function POST(request: NextRequest) {
         email: email.toLowerCase(),
         password: hashedPassword,
         role: roleUpper,
-        phone: phone || null,
+        phone: cleanedPhone || null,
         businessName: businessName || null,
         businessType: businessType || null,
         streetAddress: streetAddress || null,
@@ -138,6 +189,10 @@ export async function POST(request: NextRequest) {
         minimumOrderValue: minimumOrderValue ? parseFloat(minimumOrderValue) : null,
         // Vendor specific
         commissionRate: commissionRate ? parseFloat(commissionRate) : null,
+        // Common business fields
+        registrationNumber: body.registrationNumber || null,
+        vatNumber: body.vatNumber || null,
+        dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
       },
       select: {
         id: true,

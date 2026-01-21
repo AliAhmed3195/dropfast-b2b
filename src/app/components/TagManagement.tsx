@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useApiCall } from '../../hooks/useApiCall';
 import { motion } from 'motion/react';
 import {
   Tag as TagIcon,
@@ -37,6 +38,15 @@ import {
 } from './ui/table';
 import { showToast } from '../../lib/toast';
 import { cn } from './ui/utils';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from './ui/pagination';
 
 // Predefined color options
 const colorOptions = [
@@ -56,94 +66,78 @@ export function TagManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingTag, setEditingTag] = useState<any>(null);
-  const fetchingTagsRef = useRef(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+  const { callApi } = useApiCall();
 
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to avoid too many API calls
   useEffect(() => {
-    // Prevent duplicate calls - check before setting
-    if (fetchingTagsRef.current) {
-      return;
-    }
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
 
-    let isMounted = true;
-    fetchingTagsRef.current = true;
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-    const loadTags = async () => {
-      if (!isMounted) return;
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchQuery]);
 
+  // Fetch tags on mount and when filters/page change
+  useEffect(() => {
+    // Use debouncedSearchQuery instead of searchQuery
+    const fetchWithDebouncedSearch = async (signal?: AbortSignal) => {
       try {
         setLoading(true);
-        // Global interceptor handles duplicate prevention and AbortController
-        const response = await fetch('/api/admin/tags');
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const url = `/api/admin/tags?page=${currentPage}&limit=${pagination.limit}${searchParam}`;
+        const response = await fetch(url, { signal });
         const data = await response.json();
         
-        if (isMounted && response.ok) {
-          const tagsArray = data.tags || [];
-          setTags(tagsArray);
-          // Ensure loading is set to false after setting tags
-          setLoading(false);
-        } else if (isMounted && !response.ok) {
+        if (response.ok) {
+          setTags(data.tags || []);
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
+        } else {
           showToast.error(data.error || 'Failed to fetch tags');
-          setLoading(false);
         }
       } catch (error: any) {
-        // AbortError is expected from global interceptor's duplicate prevention
-        if (error.name !== 'AbortError' && isMounted) {
+        if (error.name !== 'AbortError') {
           console.error('Fetch tags error:', error);
           showToast.error('Failed to fetch tags');
-          setLoading(false);
         }
       } finally {
-        if (isMounted) {
-          fetchingTagsRef.current = false;
-        }
+        setLoading(false);
       }
     };
 
-    loadTags();
-
-    return () => {
-      isMounted = false;
-      fetchingTagsRef.current = false;
-    };
-  }, []);
+    callApi(fetchWithDebouncedSearch);
+  }, [currentPage, debouncedSearchQuery, callApi, pagination.limit]);
 
   const fetchTags = async () => {
-    // Prevent duplicate calls
-    if (fetchingTagsRef.current) {
-      return;
-    }
-
-    let isMounted = true;
-    fetchingTagsRef.current = true;
-
-    try {
-      setLoading(true);
-      // Global interceptor handles duplicate prevention and AbortController
-      const response = await fetch('/api/admin/tags');
-      const data = await response.json();
-      
-      if (isMounted && response.ok) {
-        setTags(data.tags || []);
-      } else if (isMounted && !response.ok) {
-        showToast.error(data.error || 'Failed to fetch tags');
-      }
-    } catch (error: any) {
-      // AbortError is expected from global interceptor's duplicate prevention
-      if (error.name !== 'AbortError' && isMounted) {
-        console.error('Fetch tags error:', error);
-        showToast.error('Failed to fetch tags');
-      }
-    } finally {
-      if (isMounted) {
-        setLoading(false);
-        fetchingTagsRef.current = false;
+    // Refresh tags list
+    const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+    const url = `/api/admin/tags?page=${currentPage}&limit=${pagination.limit}${searchParam}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (response.ok) {
+      setTags(data.tags || []);
+      if (data.pagination) {
+        setPagination(data.pagination);
       }
     }
   };
-
-  const filteredTags = tags.filter(tag =>
-    tag.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const handleEdit = (tag: any) => {
     setEditingTag(tag);
@@ -248,9 +242,24 @@ export function TagManagement() {
             <div className="relative">
               <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
               <Input
+                type="text"
                 placeholder="Search tags..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                  }
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' || e.which === 13 || e.keyCode === 13) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                  }
+                }}
                 className="pl-10"
               />
             </div>
@@ -268,104 +277,180 @@ export function TagManagement() {
                 <p className="text-muted-foreground">Loading tags...</p>
               </div>
             </Card>
+          ) : tags.length === 0 ? (
+            <Card className="p-12">
+              <div className="flex flex-col items-center gap-4">
+                <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800">
+                  <TagIcon className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <div className="text-center">
+                  <p className="font-semibold text-lg">No tags found</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {searchQuery
+                      ? 'Try adjusting your search or filters.'
+                      : 'No tags have been created yet. Click "Add Tag" to create your first tag.'}
+                  </p>
+                </div>
+                {!searchQuery && (
+                  <Button
+                    onClick={handleAddNew}
+                    className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white mt-2"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Tag
+                  </Button>
+                )}
+              </div>
+            </Card>
           ) : (
             <>
-              {filteredTags.length === 0 ? (
-                <Card className="p-12">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="p-4 rounded-full bg-slate-100 dark:bg-slate-800">
-                      <TagIcon className="w-8 h-8 text-muted-foreground" />
+              <Card>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="font-semibold">Tag</TableHead>
+                      <TableHead className="font-semibold">Color</TableHead>
+                      <TableHead className="font-semibold">Products</TableHead>
+                      <TableHead className="font-semibold">Created</TableHead>
+                      <TableHead className="font-semibold">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tags.map((tag, index) => {
+                      const colorClasses = getColorClasses(tag.color);
+                      return (
+                        <motion.tr
+                          key={tag.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="hover:bg-muted/50"
+                        >
+                          <TableCell>
+                            <Badge className={`${colorClasses.bgClass} ${colorClasses.textClass} text-sm px-3 py-1`}>
+                              <TagIcon className="w-3 h-3 mr-1" />
+                              {tag.name}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-6 h-6 rounded-full border-2 border-slate-200 dark:border-slate-700"
+                                style={{ backgroundColor: tag.color }}
+                              />
+                              <span className="font-mono text-xs">{tag.color}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-semibold text-purple-600">{tag.productCount || 0}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">{new Date(tag.createdAt).toLocaleDateString()}</span>
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreVertical className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleEdit(tag)}>
+                                  <Edit className="w-4 h-4 mr-2" />
+                                  Edit Tag
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDelete(tag.id)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete Tag
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </motion.tr>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Card>
+
+              {/* Pagination */}
+              {!loading && pagination.totalPages > 1 && (
+                <Card className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} tags
                     </div>
-                    <div className="text-center">
-                      <p className="font-semibold text-lg">No tags found</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {searchQuery
-                          ? 'Try adjusting your search or filters.'
-                          : 'No tags have been created yet. Click "Add Tag" to create your first tag.'}
-                      </p>
-                    </div>
-                    {!searchQuery && (
-                      <Button
-                        onClick={handleAddNew}
-                        className="bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-600 hover:to-cyan-600 text-white mt-2"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Tag
-                      </Button>
-                    )}
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious 
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (currentPage > 1) {
+                                setCurrentPage(currentPage - 1);
+                              }
+                            }}
+                            className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          />
+                        </PaginationItem>
+                        {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                          if (
+                            page === 1 ||
+                            page === pagination.totalPages ||
+                            (page >= currentPage - 1 && page <= currentPage + 1)
+                          ) {
+                            return (
+                              <PaginationItem key={page}>
+                                <PaginationLink
+                                  href="#"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setCurrentPage(page);
+                                  }}
+                                  isActive={currentPage === page}
+                                  className="cursor-pointer"
+                                >
+                                  {page}
+                                </PaginationLink>
+                              </PaginationItem>
+                            );
+                          } else if (page === currentPage - 2 || page === currentPage + 2) {
+                            return (
+                              <PaginationItem key={page}>
+                                <PaginationEllipsis />
+                              </PaginationItem>
+                            );
+                          }
+                          return null;
+                        })}
+                        <PaginationItem>
+                          <PaginationNext 
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (currentPage < pagination.totalPages) {
+                                setCurrentPage(currentPage + 1);
+                              }
+                            }}
+                            className={currentPage === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
                   </div>
                 </Card>
-              ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredTags.map((tag, index) => {
-                const colorClasses = getColorClasses(tag.color);
-                return (
-                  <motion.div
-                    key={tag.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                  >
-                    <Card className="p-6 hover:shadow-lg transition-shadow">
-                      <div className="flex items-start justify-between mb-4">
-                        <Badge className={`${colorClasses.bgClass} ${colorClasses.textClass} text-sm px-3 py-1`}>
-                          <TagIcon className="w-3 h-3 mr-1" />
-                          {tag.name}
-                        </Badge>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEdit(tag)}>
-                              <Edit className="w-4 h-4 mr-2" />
-                              Edit Tag
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(tag.id)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete Tag
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Color</span>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-6 h-6 rounded-full border-2 border-slate-200 dark:border-slate-700"
-                              style={{ backgroundColor: tag.color }}
-                            />
-                            <span className="font-mono text-xs">{tag.color}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Products</span>
-                          <span className="font-semibold text-purple-600">{tag.productCount || 0}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Created</span>
-                          <span className="text-xs">{new Date(tag.createdAt).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                    </Card>
-                  </motion.div>
-                );
-              })}
-            </div>
               )}
             </>
           )}
         </>
       ) : (
-        <TagForm
-          tag={editingTag}
+          <TagForm
+            tag={editingTag}
           onCancel={() => {
             setShowForm(false);
             setEditingTag(null);

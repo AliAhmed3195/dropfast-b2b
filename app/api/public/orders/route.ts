@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       // Create guest customer with random password (they can reset later)
       const randomPassword = Math.random().toString(36).slice(-12) + Date.now().toString(36)
       const hashedPassword = await bcrypt.hash(randomPassword, 10)
-      
+
       customer = await prisma.user.create({
         data: {
           email: customerEmail,
@@ -105,12 +105,20 @@ export async function POST(request: NextRequest) {
         select: { id: true, name: true, shippingCountries: true },
       })
 
+      // Resolve shipping country name to code if possible
+      // This handles the case where frontend sends "United States" but DB stores "US"
+      const { getCountryByName } = await import('../../../../src/data/countries')
+      const resolvedCountry = getCountryByName(shippingCountry)
+      const countryCode = resolvedCountry ? resolvedCountry.code : shippingCountry
+
       // Check if shipping country is valid for all products
       const invalidProducts = products.filter((product) => {
         if (!product.shippingCountries || product.shippingCountries.length === 0) {
           return false // Empty array means all countries allowed
         }
-        return !product.shippingCountries.includes(shippingCountry)
+        // Check both code and name for maximum compatibility
+        return !product.shippingCountries.includes(countryCode) &&
+          !product.shippingCountries.includes(shippingCountry)
       })
 
       if (invalidProducts.length > 0) {
@@ -164,16 +172,40 @@ export async function POST(request: NextRequest) {
         }
 
         // Get storeProduct details
-        const storeProduct = await prisma.storeProduct.findUnique({
-          where: { id: storeProductId },
-          select: {
-            id: true,
-            sellingPrice: true,
-          },
-        })
+        let storeProduct = null;
+
+        // 1. Try finding by storeProductId if provided
+        if (storeProductId) {
+          storeProduct = await prisma.storeProduct.findUnique({
+            where: { id: storeProductId },
+            select: { id: true, sellingPrice: true, storeId: true },
+          })
+        }
+
+        // 2. Fallback: If not found or belongs to different store, find by store & product
+        if (!storeProduct || storeProduct.storeId !== store.id) {
+          console.log(`StoreProduct lookup fallback for product ${item.productName}. Found: ${!!storeProduct}, Wrong Store: ${storeProduct?.storeId !== store.id}`)
+          storeProduct = await prisma.storeProduct.findFirst({
+            where: {
+              storeId: store.id,
+              productId: productId,
+            },
+            select: {
+              id: true,
+              sellingPrice: true,
+              storeId: true,
+            },
+          })
+        }
 
         if (!storeProduct) {
-          throw new Error(`StoreProduct not found: ${storeProductId}`)
+          console.error('StoreProduct Not Found Details:', {
+            productName: item.productName,
+            productId,
+            storeProductId,
+            requestedStoreId: store.id
+          })
+          throw new Error(`StoreProduct not found for product ${item.productName} (ID: ${productId}) in store ${store.id}`)
         }
 
         // Convert prices to USD
@@ -190,11 +222,11 @@ export async function POST(request: NextRequest) {
         // If vendorPrice is 0 or invalid, assign all fee to supplier
         let stripeFeeSupplierUSD = 0
         let stripeFeeVendorUSD = 0
-        
+
         if (vendorPriceUSD > 0 && itemTotalUSD > 0) {
           const supplierPortion = supplierPriceUSD / itemTotalUSD
           const vendorPortion = vendorPriceUSD / itemTotalUSD
-          
+
           stripeFeeSupplierUSD = supplierPortion * stripeFeeUSD
           stripeFeeVendorUSD = vendorPortion * stripeFeeUSD
         } else {

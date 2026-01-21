@@ -8,6 +8,7 @@ import { StoreCart } from './StoreCart';
 import { StoreCheckout } from './StoreCheckout';
 import { showToast } from '../../../lib/toast';
 import { Loader2 } from 'lucide-react';
+import { cleanPhoneNumber } from '../../../lib/phone-validation';
 
 interface PublicStoreProps {
   storeData: any;
@@ -15,7 +16,7 @@ interface PublicStoreProps {
   initialView?: PublicStoreView;
 }
 
-type PublicStoreView = 
+type PublicStoreView =
   | { type: 'landing' }
   | { type: 'product'; productId: string }
   | { type: 'cart' }
@@ -58,7 +59,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
   const params = useParams();
   const slug = params.slug as string || storeData.slug;
   const [currentView, setCurrentView] = useState<PublicStoreView>(initialView || { type: 'landing' });
-  
+
   // Load cart from localStorage on mount
   const [storeCart, setStoreCart] = useState<CartItem[]>(() => {
     if (typeof window !== 'undefined' && slug) {
@@ -67,11 +68,11 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
     }
     return [];
   });
-  
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<any>(storeData);
-  
+
   // Save cart to localStorage whenever it changes
   useEffect(() => {
     if (typeof window !== 'undefined' && slug) {
@@ -81,35 +82,45 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
 
   // Fetch store and products from API
   useEffect(() => {
+    let active = true;
+
     const fetchStoreData = async () => {
       if (!storeData.slug) {
-        setLoading(false);
+        if (active) setLoading(false);
         return;
       }
 
       try {
         // Fetch store data
         const storeResponse = await fetch(`/api/public/store/${storeData.slug}`);
+        if (!active) return;
+
         if (storeResponse.ok) {
           const storeData = await storeResponse.json();
-          setStore(storeData.store);
+          if (active) setStore(storeData.store);
         }
 
         // Fetch products
         const productsResponse = await fetch(`/api/public/store/${storeData.slug}/products`);
+        if (!active) return;
+
         if (productsResponse.ok) {
           const productsData = await productsResponse.json();
-          setProducts(productsData.products || []);
+          if (active) setProducts(productsData.products || []);
         }
-      } catch (error) {
+      } catch (error: any) {
+        if (!active) return;
         console.error('Fetch store data error:', error);
         showToast.error('Failed to load store data');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     fetchStoreData();
+    return () => {
+      active = false;
+    };
   }, [storeData.slug]);
 
   // Get store theme
@@ -124,40 +135,40 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
 
   // Handle add to cart
   const handleAddToCart = (product: Product, quantity: number) => {
-    const existingItem = storeCart.find((item) => item.productId === product.id);
+    setStoreCart((prev) => {
+      const existingItem = prev.find((item) => item.productId === product.id);
 
-    if (existingItem) {
-      setStoreCart(
-        storeCart.map((item) =>
+      if (existingItem) {
+        return prev.map((item) =>
           item.productId === product.id
             ? { ...item, quantity: item.quantity + quantity }
             : item
-        )
-      );
-    } else {
-      setStoreCart([
-        ...storeCart,
-        {
-          productId: product.id,
-          storeProductId: (product as any).storeProductId, // From API response
-          productName: product.name,
-          productImage: product.image || product.images?.[0] || '',
-          quantity,
-          price: product.price,
-          storeId: store?.id || storeData.id,
-          storeName: store?.name || storeData.name,
-          shippingCost: (product as any).shippingCost || 0,
-          shippingMethods: (product as any).shippingMethods || null,
-          sku: product.sku || (product as any).sku || undefined,
-        },
-      ]);
-    }
+        );
+      } else {
+        return [
+          ...prev,
+          {
+            productId: product.id,
+            storeProductId: (product as any).storeProductId, // From API response
+            productName: product.name,
+            productImage: product.image || product.images?.[0] || '',
+            quantity,
+            price: product.price,
+            storeId: store?.id || storeData.id,
+            storeName: store?.name || storeData.name,
+            shippingCost: (product as any).shippingCost || 0,
+            shippingMethods: (product as any).shippingMethods || null,
+            sku: product.sku || (product as any).sku || undefined,
+          },
+        ];
+      }
+    });
   };
 
   // Handle update cart quantity
   const handleUpdateCartQuantity = (productId: string, quantity: number) => {
-    setStoreCart(
-      storeCart.map((item) =>
+    setStoreCart((prev) =>
+      prev.map((item) =>
         item.productId === productId ? { ...item, quantity } : item
       )
     );
@@ -165,7 +176,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
 
   // Handle remove from cart
   const handleRemoveFromCart = (productId: string) => {
-    setStoreCart(storeCart.filter((item) => item.productId !== productId));
+    setStoreCart((prev) => prev.filter((item) => item.productId !== productId));
   };
 
   // Handle place order with Stripe payment
@@ -190,7 +201,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
         body: JSON.stringify({
           storeId: store.id,
           customerEmail: formData.email,
-          customerPhone: formData.phone,
+          customerPhone: formData.phone ? cleanPhoneNumber(formData.phone) : '',
           customerName: formData.fullName,
           shippingFullName: formData.fullName,
           shippingAddress: formData.address,
@@ -198,7 +209,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
           shippingState: formData.state,
           shippingZipCode: formData.zipCode,
           shippingCountry: formData.country,
-          shippingPhone: formData.phone,
+          shippingPhone: formData.phone ? cleanPhoneNumber(formData.phone) : '',
           paymentMethod: formData.paymentMethod || 'credit_card',
           customerCurrency,
           items: storeCart.map((item) => ({

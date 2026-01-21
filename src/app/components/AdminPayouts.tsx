@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useApiCall } from '../../hooks/useApiCall';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   DollarSign,
@@ -53,6 +54,15 @@ import {
 } from './ui/tabs';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from './ui/pagination';
 
 // Mock pending payouts data
 const mockPendingPayouts = [
@@ -158,54 +168,95 @@ export function AdminPayouts() {
   const [selectedPayout, setSelectedPayout] = useState<any>(null);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [activeTab, setActiveTab] = useState('pending');
-  const fetchingPayoutsRef = useRef(false);
-
-  const fetchPayouts = async () => {
-    if (fetchingPayoutsRef.current) return;
-    fetchingPayoutsRef.current = true;
-    
-    try {
-      setLoading(true);
-      const status = activeTab === 'pending' ? 'pending' : activeTab === 'completed' ? 'completed' : '';
-      const url = status ? `/api/admin/payouts?status=${status}` : '/api/admin/payouts';
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (response.ok) {
-        setPayouts(data.payouts || []);
-      } else {
-        toast.error(data.error || 'Failed to fetch payouts');
-      }
-    } catch (error) {
-      console.error('Fetch payouts error:', error);
-      toast.error('Failed to fetch payouts');
-    } finally {
-      setLoading(false);
-      fetchingPayoutsRef.current = false;
-    }
-  };
-
-  useEffect(() => {
-    if (fetchingPayoutsRef.current) return;
-    fetchPayouts();
-  }, [typeFilter, activeTab]);
-
-  const filteredPayouts = payouts.filter(payout => {
-    const matchesSearch =
-      payout.recipientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payout.email?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = typeFilter === 'all' || payout.recipientType === typeFilter;
-    return matchesSearch && matchesType;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
   });
+  const { callApi } = useApiCall();
 
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+
+  // Debounce search query to avoid too many API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset to page 1 when filter or tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [typeFilter, activeTab, debouncedSearchQuery]);
+
+  // Abort controller ref for search
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch payouts on mount and when filters/page change
+  useEffect(() => {
+    // Abort previous request if any
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
+    // Use debouncedSearchQuery instead of searchQuery
+    const fetchWithDebouncedSearch = async (signal?: AbortSignal) => {
+      try {
+        setLoading(true);
+        const status = activeTab === 'pending' ? 'pending' : activeTab === 'history' ? 'completed' : '';
+        const typeParam = typeFilter !== 'all' ? `&type=${typeFilter}` : '';
+        const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : '';
+        const url = `/api/admin/payouts?status=${status || 'all'}&page=${currentPage}&limit=${pagination.limit}${typeParam}${searchParam}`;
+        const response = await fetch(url, { signal: signal || abortController.signal });
+        const data = await response.json();
+        
+        if (response.ok) {
+          setPayouts(data.payouts || []);
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
+        } else {
+          toast.error(data.error || 'Failed to fetch payouts');
+        }
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('Fetch payouts error:', error);
+          toast.error('Failed to fetch payouts');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    callApi(fetchWithDebouncedSearch);
+
+    // Cleanup: abort request on unmount or dependency change
+    return () => {
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+        searchAbortControllerRef.current = null;
+      }
+    };
+  }, [activeTab, typeFilter, currentPage, debouncedSearchQuery, callApi, pagination.limit]);
+
+  // Stats calculation (using current page data, for accurate stats we'd need a separate endpoint)
   const pendingPayouts = payouts.filter(p => p.status === 'pending');
   const completedPayouts = payouts.filter(p => p.status === 'completed');
 
   const stats = {
     totalPending: pendingPayouts.reduce((sum, p) => sum + (p.dueAmount || p.amount || 0), 0),
     totalCompleted: completedPayouts.reduce((sum, p) => sum + (p.amount || 0), 0),
-    pendingCount: pendingPayouts.length,
-    completedCount: completedPayouts.length,
+    pendingCount: pagination.total || pendingPayouts.length,
+    completedCount: pagination.total || completedPayouts.length,
   };
 
   const handleProcessPayout = (payout: any) => {
@@ -325,9 +376,24 @@ export function AdminPayouts() {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                 <Input
+                  type="text"
                   placeholder="Search by name or email..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                  }}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' || e.which === 13 || e.keyCode === 13) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return false;
+                    }
+                  }}
                   className="pl-10"
                 />
               </div>
@@ -368,7 +434,7 @@ export function AdminPayouts() {
                       <p className="text-muted-foreground">Loading payouts...</p>
                     </TableCell>
                   </TableRow>
-                ) : filteredPayouts.length === 0 ? (
+                ) : payouts.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">
                       <Wallet className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
@@ -377,7 +443,7 @@ export function AdminPayouts() {
                   </TableRow>
                 ) : (
                   <>
-                    {filteredPayouts.map((payout, index) => (
+                    {payouts.map((payout, index) => (
                       <motion.tr
                         key={payout.id}
                         initial={{ opacity: 0, y: 10 }}
@@ -479,7 +545,7 @@ export function AdminPayouts() {
                       <p className="text-muted-foreground">Loading transactions...</p>
                     </TableCell>
                   </TableRow>
-                ) : completedPayouts.length === 0 ? (
+                ) : payouts.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">
                       <History className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-50" />
@@ -487,7 +553,7 @@ export function AdminPayouts() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  completedPayouts.map((txn, index) => (
+                  payouts.map((txn, index) => (
                   <motion.tr
                     key={txn.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -566,6 +632,75 @@ export function AdminPayouts() {
               </TableBody>
             </Table>
           </Card>
+
+          {/* Pagination for History Tab */}
+          {!loading && pagination.totalPages > 1 && (
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} transactions
+                </div>
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious 
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage > 1) {
+                            setCurrentPage(currentPage - 1);
+                          }
+                        }}
+                        className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                      if (
+                        page === 1 ||
+                        page === pagination.totalPages ||
+                        (page >= currentPage - 1 && page <= currentPage + 1)
+                      ) {
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentPage(page);
+                              }}
+                              isActive={currentPage === page}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      } else if (page === currentPage - 2 || page === currentPage + 2) {
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        );
+                      }
+                      return null;
+                    })}
+                    <PaginationItem>
+                      <PaginationNext 
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (currentPage < pagination.totalPages) {
+                            setCurrentPage(currentPage + 1);
+                          }
+                        }}
+                        className={currentPage === pagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

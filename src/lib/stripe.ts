@@ -4,13 +4,20 @@
 
 import Stripe from 'stripe'
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set in environment variables')
+const stripeKey = process.env.STRIPE_SECRET_KEY!;
+
+if (!stripeKey) {
+  throw new Error('STRIPE_SECRET_KEY is missing in environment variables');
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-12-15.clover',
+export const stripe = new Stripe(stripeKey, {
+  apiVersion: '2025-12-15.clover' as any, // Use verified type or cast if types are outdated
+  typescript: true,
 })
+
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.warn('STRIPE_SECRET_KEY is not set. Stripe features will fail if used.')
+}
 
 /**
  * Create a PaymentIntent

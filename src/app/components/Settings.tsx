@@ -16,6 +16,9 @@ import {
   Building,
   Save,
   Shield,
+  Eye,
+  EyeOff,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from './ThemeProvider';
@@ -27,6 +30,7 @@ import { Switch } from './ui/switch';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { showToast } from '../../lib/toast';
+import { validatePhoneNumber, cleanPhoneNumber, formatPhoneNumber, allowOnlyDigits } from '../../lib/phone-validation';
 
 export function Settings() {
   const { user } = useAuth();
@@ -42,6 +46,10 @@ export function Settings() {
     newPassword: '',
     confirmPassword: '',
   });
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Profile Settings
   const [profileData, setProfileData] = useState({
@@ -66,15 +74,15 @@ export function Settings() {
   // Fetch full user details from API
   useEffect(() => {
     if (!user?.id || fetchingUserRef.current) return;
-    
+
     const fetchUserDetails = async () => {
       fetchingUserRef.current = true;
       setLoading(true);
-      
+
       try {
         const response = await fetch(`/api/admin/users/${user.id}`);
         const data = await response.json();
-        
+
         if (response.ok && data.user) {
           const userData = data.user;
           setProfileData({
@@ -103,7 +111,7 @@ export function Settings() {
 
   const handleSaveProfile = async () => {
     if (savingProfileRef.current || !user) return;
-    
+
     // Validation
     if (!profileData.name || !profileData.email) {
       showToast.error('Name and email are required');
@@ -114,10 +122,21 @@ export function Settings() {
       showToast.error('Please enter a valid email address');
       return;
     }
-    
+
+    // Phone number validation
+    if (profileData.phone && profileData.phone.trim()) {
+      const phoneValidation = validatePhoneNumber(profileData.phone);
+      if (!phoneValidation.isValid && phoneValidation.error) {
+        setPhoneError(phoneValidation.error);
+        showToast.error(phoneValidation.error);
+        return;
+      }
+      setPhoneError(null);
+    }
+
     savingProfileRef.current = true;
     setIsSaving(true);
-    
+
     try {
       const response = await fetch(`/api/admin/users/${user.id}`, {
         method: 'PUT',
@@ -125,7 +144,7 @@ export function Settings() {
         body: JSON.stringify({
           name: profileData.name,
           email: profileData.email,
-          phone: profileData.phone || null,
+          phone: profileData.phone ? cleanPhoneNumber(profileData.phone) : null,
           businessName: profileData.company || null,
           streetAddress: profileData.address || null,
           city: profileData.city || null,
@@ -168,15 +187,15 @@ export function Settings() {
 
   const handleSaveNotifications = async () => {
     if (savingNotificationsRef.current) return;
-    
+
     savingNotificationsRef.current = true;
     setIsSaving(true);
-    
+
     try {
       // TODO: Create API endpoint for notification preferences
       // For now, save to localStorage
       localStorage.setItem('notificationPreferences', JSON.stringify(notifications));
-      
+
       await new Promise(resolve => setTimeout(resolve, 500));
       showToast.success('Notification preferences saved');
     } catch (error) {
@@ -208,7 +227,7 @@ export function Settings() {
 
     savingPasswordRef.current = true;
     setIsSaving(true);
-    
+
     try {
       const response = await fetch(`/api/admin/users/${user.id}`, {
         method: 'PUT',
@@ -321,9 +340,52 @@ export function Settings() {
                     <Input
                       id="phone"
                       value={profileData.phone}
-                      onChange={e => setProfileData({ ...profileData, phone: e.target.value })}
-                      className="pl-10"
+                      onChange={e => {
+                        const value = e.target.value;
+                        // Allow only digits
+                        const digitsOnly = allowOnlyDigits(value);
+                        // Format the phone number
+                        const formatted = formatPhoneNumber(digitsOnly);
+
+                        setProfileData({ ...profileData, phone: formatted });
+                        // Real-time validation
+                        if (digitsOnly && digitsOnly.trim()) {
+                          const validation = validatePhoneNumber(digitsOnly);
+                          if (!validation.isValid && validation.error) {
+                            setPhoneError(validation.error);
+                          } else {
+                            setPhoneError(null);
+                          }
+                        } else {
+                          setPhoneError(null);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        // Allow: backspace, delete, tab, escape, enter, and numbers
+                        if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+                          // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                          (e.keyCode === 65 && e.ctrlKey === true) ||
+                          (e.keyCode === 67 && e.ctrlKey === true) ||
+                          (e.keyCode === 86 && e.ctrlKey === true) ||
+                          (e.keyCode === 88 && e.ctrlKey === true) ||
+                          // Allow: home, end, left, right
+                          (e.keyCode >= 35 && e.keyCode <= 39)) {
+                          return;
+                        }
+                        // Ensure that it is a number and stop the keypress
+                        if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      className={phoneError ? "pl-10 border-red-500" : "pl-10"}
+                      placeholder="12345678901"
                     />
+                    {phoneError && (
+                      <p className="text-sm text-red-500 mt-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {phoneError}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -547,12 +609,19 @@ export function Settings() {
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="currentPassword"
-                    type="password"
+                    type={showCurrentPassword ? "text" : "password"}
                     placeholder="Enter current password"
-                    className="pl-10"
+                    className="pl-10 pr-10"
                     value={passwordData.currentPassword}
                     onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-purple-500 transition-colors"
+                  >
+                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 
@@ -564,12 +633,19 @@ export function Settings() {
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="newPassword"
-                    type="password"
+                    type={showNewPassword ? "text" : "password"}
                     placeholder="Enter new password"
-                    className="pl-10"
+                    className="pl-10 pr-10"
                     value={passwordData.newPassword}
                     onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-purple-500 transition-colors"
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 
@@ -581,12 +657,19 @@ export function Settings() {
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="confirmPassword"
-                    type="password"
+                    type={showConfirmPassword ? "text" : "password"}
                     placeholder="Confirm new password"
-                    className="pl-10"
+                    className="pl-10 pr-10"
                     value={passwordData.confirmPassword}
                     onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-purple-500 transition-colors"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
             </div>
@@ -646,11 +729,10 @@ export function Settings() {
                 <div className="grid grid-cols-3 gap-4">
                   <button
                     onClick={() => setTheme('light')}
-                    className={`p-4 rounded-lg border-2 transition-all ${
-                      theme === 'light'
+                    className={`p-4 rounded-lg border-2 transition-all ${theme === 'light'
                         ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                         : 'border-border hover:border-purple-300'
-                    }`}
+                      }`}
                   >
                     <Sun className="w-6 h-6 mx-auto mb-2" />
                     <p className="text-sm font-semibold">Light</p>
@@ -658,11 +740,10 @@ export function Settings() {
 
                   <button
                     onClick={() => setTheme('dark')}
-                    className={`p-4 rounded-lg border-2 transition-all ${
-                      theme === 'dark'
+                    className={`p-4 rounded-lg border-2 transition-all ${theme === 'dark'
                         ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                         : 'border-border hover:border-purple-300'
-                    }`}
+                      }`}
                   >
                     <Moon className="w-6 h-6 mx-auto mb-2" />
                     <p className="text-sm font-semibold">Dark</p>
@@ -670,11 +751,10 @@ export function Settings() {
 
                   <button
                     onClick={() => setTheme('system')}
-                    className={`p-4 rounded-lg border-2 transition-all ${
-                      theme === 'system'
+                    className={`p-4 rounded-lg border-2 transition-all ${theme === 'system'
                         ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                         : 'border-border hover:border-purple-300'
-                    }`}
+                      }`}
                   >
                     <Globe className="w-6 h-6 mx-auto mb-2" />
                     <p className="text-sm font-semibold">System</p>
