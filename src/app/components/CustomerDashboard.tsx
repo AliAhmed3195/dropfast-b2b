@@ -18,76 +18,26 @@ import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
-const products = [
-  {
-    id: 1,
-    name: 'Premium Wireless Headphones',
-    price: 79.99,
-    rating: 4.8,
-    reviews: 324,
-    image: 'https://images.unsplash.com/photo-1578517581165-61ec5ab27a19?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx3aXJlbGVzcyUyMGhlYWRwaG9uZXMlMjBwcm9kdWN0fGVufDF8fHx8MTc2NjUwMzIxMXww&ixlib=rb-4.1.0&q=80&w=1080',
-    category: 'Electronics',
-    vendor: 'TechStore Pro',
-    inStock: true,
-  },
-  {
-    id: 2,
-    name: 'Smart Watch Pro Series',
-    price: 199.99,
-    rating: 4.9,
-    reviews: 567,
-    image: 'https://images.unsplash.com/photo-1668760180303-fcfe2b899e20?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFydCUyMHdhdGNoJTIwdGVjaG5vbG9neXxlbnwxfHx8fDE3NjY0NzAzMTV8MA&ixlib=rb-4.1.0&q=80&w=1080',
-    category: 'Wearables',
-    vendor: 'Digital Marketplace',
-    inStock: true,
-  },
-  {
-    id: 3,
-    name: 'Ultra Thin Laptop 15"',
-    price: 1299.99,
-    rating: 4.7,
-    reviews: 189,
-    image: 'https://images.unsplash.com/flagged/photo-1576697010739-6373b63f3204?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsYXB0b3AlMjBjb21wdXRlciUyMHdvcmtzcGFjZXxlbnwxfHx8fDE3NjY1NDE1MjR8MA&ixlib=rb-4.1.0&q=80&w=1080',
-    category: 'Computers',
-    vendor: 'TechGear Store',
-    inStock: true,
-  },
-  {
-    id: 4,
-    name: 'Professional Camera Kit',
-    price: 899.99,
-    rating: 4.9,
-    reviews: 423,
-    image: 'https://images.unsplash.com/photo-1764557359097-f15dd0c0a17b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjYW1lcmElMjBwaG90b2dyYXBoeSUyMGVxdWlwbWVudHxlbnwxfHx8fDE3NjY1NzgwODh8MA&ixlib=rb-4.1.0&q=80&w=1080',
-    category: 'Photography',
-    vendor: 'Photo World',
-    inStock: true,
-  },
-];
+// Customer data starts empty – to be populated with real orders/products
+const products: Array<{
+  id: string | number;
+  name: string;
+  price: number;
+  rating: number;
+  reviews: number;
+  image: string;
+  category: string;
+  vendor: string;
+  inStock: boolean;
+}> = [];
 
-const orders = [
-  {
-    id: 'ORD-2024-5678',
-    product: 'Wireless Headphones',
-    amount: 79.99,
-    status: 'delivered',
-    date: '2024-12-20',
-  },
-  {
-    id: 'ORD-2024-5679',
-    product: 'Smart Watch',
-    amount: 199.99,
-    status: 'shipped',
-    date: '2024-12-22',
-  },
-  {
-    id: 'ORD-2024-5680',
-    product: 'USB-C Hub',
-    amount: 45.99,
-    status: 'processing',
-    date: '2024-12-23',
-  },
-];
+const orders: Array<{
+  id: string;
+  product: string;
+  amount: number;
+  status: string;
+  date: string;
+}> = [];
 
 export function CustomerDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,19 +46,19 @@ export function CustomerDashboard() {
   const stats = [
     {
       title: 'Total Orders',
-      value: '24',
+      value: '0',
       icon: ShoppingBag,
       color: 'from-blue-500 to-cyan-500',
     },
     {
       title: 'Wishlist Items',
-      value: '12',
+      value: '0',
       icon: Heart,
       color: 'from-pink-500 to-rose-500',
     },
     {
       title: 'In Cart',
-      value: '3',
+      value: '0',
       icon: ShoppingCart,
       color: 'from-purple-500 to-indigo-500',
     },
