@@ -29,61 +29,47 @@ import {
   Legend,
 } from 'recharts';
 
-const revenueData = [
-  { month: 'Jan', revenue: 45000, orders: 234 },
-  { month: 'Feb', revenue: 52000, orders: 289 },
-  { month: 'Mar', revenue: 48000, orders: 267 },
-  { month: 'Apr', revenue: 61000, orders: 334 },
-  { month: 'May', revenue: 58000, orders: 312 },
-  { month: 'Jun', revenue: 72000, orders: 401 },
-];
+// Analytics datasets – start empty, ready for real metrics from the backend
+const revenueData: Array<{ month: string; revenue: number; orders: number }> = [];
 
-const userDistribution = [
-  { name: 'Suppliers', value: 145, color: '#8b5cf6' },
-  { name: 'Vendors', value: 423, color: '#06b6d4' },
-  { name: 'Customers', value: 2891, color: '#10b981' },
-];
+const userDistribution: Array<{ name: string; value: number; color: string }> = [];
 
-const topPerformers = [
-  { name: 'Digital Marketplace', type: 'Vendor', revenue: 145200, growth: 23.5 },
-  { name: 'TechSupply Co.', type: 'Supplier', revenue: 132400, growth: 18.2 },
-  { name: 'Global Traders', type: 'Vendor', revenue: 98700, growth: 15.8 },
-  { name: 'Prime Electronics', type: 'Supplier', revenue: 87300, growth: 12.3 },
-];
+const topPerformers: Array<{ name: string; type: string; revenue: number; growth: number }> = [];
 
 export function AdminDashboard() {
   const [timeRange, setTimeRange] = useState('6m');
 
+  // Placeholder stats without hard-coded dummy numbers
   const stats = [
     {
       title: 'Total Revenue',
-      value: '$336K',
-      change: '+12.5%',
-      trend: 'up',
+      value: '$0',
+      change: 'No data yet',
+      trend: 'neutral' as const,
       icon: DollarSign,
       color: 'from-green-500 to-emerald-500',
     },
     {
       title: 'Active Users',
-      value: '3,459',
-      change: '+8.2%',
-      trend: 'up',
+      value: '0',
+      change: 'No data yet',
+      trend: 'neutral' as const,
       icon: Users,
       color: 'from-blue-500 to-cyan-500',
     },
     {
       title: 'Total Orders',
-      value: '1,837',
-      change: '+15.3%',
-      trend: 'up',
+      value: '0',
+      change: 'No data yet',
+      trend: 'neutral' as const,
       icon: ShoppingCart,
       color: 'from-purple-500 to-pink-500',
     },
     {
       title: 'Products Listed',
-      value: '12,458',
-      change: '+6.7%',
-      trend: 'up',
+      value: '0',
+      change: 'No data yet',
+      trend: 'neutral' as const,
       icon: Package,
       color: 'from-orange-500 to-red-500',
     },

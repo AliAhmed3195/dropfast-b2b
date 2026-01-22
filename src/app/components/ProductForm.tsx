@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -31,6 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from './ui/switch';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 // Currency exchange rates (mock - in production, fetch from API)
 const EXCHANGE_RATES: Record<string, number> = {
@@ -91,6 +92,7 @@ const STEPS = [
 ];
 
 export function ProductForm({ onClose, product }: ProductFormProps) {
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -202,6 +204,91 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     setVariants(variants.filter((_, i) => i !== index));
   };
 
+  // Image upload functionality
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleImageUpload = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const validFiles: File[] = [];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
+    Array.from(files).forEach((file) => {
+      // Check file type
+      if (!allowedTypes.includes(file.type)) {
+        toast.error(`${file.name} is not a valid image format. Please use PNG, JPG, or WEBP.`);
+        return;
+      }
+
+      // Check file size
+      if (file.size > maxSize) {
+        toast.error(`${file.name} is too large. Maximum size is 10MB.`);
+        return;
+      }
+
+      validFiles.push(file);
+    });
+
+    // Check total images limit (5)
+    if (productImages.length + validFiles.length > 5) {
+      toast.error('Maximum 5 images allowed. Please remove some images first.');
+      return;
+    }
+
+    // Convert files to base64 for preview
+    validFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        if (result) {
+          setProductImages((prev) => [...prev, result]);
+        }
+      };
+      reader.onerror = () => {
+        toast.error(`Failed to load ${file.name}`);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (validFiles.length > 0) {
+      toast.success(`${validFiles.length} image(s) added successfully!`);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleImageUpload(e.target.files);
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    handleImageUpload(e.dataTransfer.files);
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setProductImages((prev) => prev.filter((_, i) => i !== index));
+    toast.success('Image removed');
+  };
+
   // Validation for each step
   const validateStep = (step: number): boolean => {
     switch (step) {
@@ -286,7 +373,11 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
         return true;
 
       case 5: // Media & Variants
-        // Optional step - no validation required
+        // At least one image is required
+        if (!productImages || productImages.length === 0) {
+          toast.error('At least one product image is required');
+          return false;
+        }
         return true;
 
       default:
@@ -308,11 +399,14 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
     }
   };
 
-  // Prevent Enter key from triggering form submission
+  // Prevent Enter key from triggering form submission - ONLY Confirm button should submit
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && currentStep < 5) {
-      e.preventDefault();
-      handleNext();
+    if (e.key === 'Enter') {
+      e.preventDefault(); // Always prevent Enter from submitting
+      if (currentStep < 5) {
+        handleNext(); // On Steps 1-4, move to next step
+      }
+      // On Step 5, do nothing - user must click Confirm button
     }
   };
 
@@ -336,51 +430,68 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
 
     setIsSubmitting(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const productData = {
-      productName,
-      description,
-      brandName,
-      sku,
-      barcode,
-      productStatus,
-      baseCurrency,
-      baseCostPrice: parseFloat(baseCostPrice),
-      baseSellingPrice: parseFloat(baseSellingPrice),
-      usdCostPrice,
-      usdSellingPrice,
-      profitMargin,
-      stock: parseInt(stock),
-      moq: parseInt(moq),
-      stockAlertThreshold: parseInt(stockAlertThreshold),
-      category,
-      subcategory,
-      tags,
-      productCondition,
-      warrantyPeriod,
-      leadTime,
-      shippingMethodName,
-      estimatedDeliveryDays: parseInt(estimatedDeliveryDays),
-      weight: parseFloat(weight),
-      weightUnit,
-      dimensions: {
+    try {
+      // Prepare product data
+      const productData = {
+        productName,
+        description,
+        brandName,
+        sku,
+        barcode,
+        productStatus,
+        baseCurrency,
+        baseCostPrice: parseFloat(baseCostPrice),
+        baseSellingPrice: parseFloat(baseSellingPrice),
+        stock: parseInt(stock),
+        moq: parseInt(moq),
+        stockAlertThreshold: parseInt(stockAlertThreshold),
+        category,
+        subcategory,
+        tags,
+        productCondition,
+        warrantyPeriod,
+        leadTime,
+        shippingMethodName,
+        estimatedDeliveryDays: parseInt(estimatedDeliveryDays),
+        weight: parseFloat(weight),
+        weightUnit,
         length: parseFloat(length),
         width: parseFloat(width),
         height: parseFloat(height),
-        unit: dimensionUnit,
-      },
-      shippingCost: shippingCost ? parseFloat(shippingCost) : 0,
-      hasVariants,
-      variants,
-      productImages,
-    };
-    
-    console.log('Product Data:', productData);
-    toast.success(product ? 'Product updated successfully!' : 'Product added successfully!');
-    setIsSubmitting(false);
-    onClose();
+        dimensionUnit,
+        shippingCost: shippingCost ? parseFloat(shippingCost) : 0,
+        productImages,
+        hasVariants,
+        variants,
+        createdByUserId: user?.id || null,
+        createdByUserType: user?.role?.toUpperCase() || null,
+        supplierId: user?.role === 'supplier' ? user?.id : null,
+      };
+      
+      // Call API to create product
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(productData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create product');
+      }
+
+      console.log('Product created:', data.product);
+      toast.success(product ? 'Product updated successfully!' : 'Product added successfully!');
+      setIsSubmitting(false);
+      onClose(); // This will trigger handleBackToList which refreshes products
+    } catch (error: any) {
+      console.error('Error creating product:', error);
+      toast.error(error.message || 'Failed to create product. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -1234,26 +1345,78 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
               <div className="space-y-6">
                 {/* Product Images */}
                 <div className="space-y-3">
-                  <Label>Product Images</Label>
-                  <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-8 text-center hover:border-purple-400 transition-colors cursor-pointer">
-                    <Upload className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                    <p className="font-semibold mb-1">Click to upload or drag and drop</p>
-                    <p className="text-sm text-muted-foreground">
-                      PNG, JPG up to 10MB (Maximum 5 images)
+                  <Label>Product Images <span className="text-red-500">*</span></Label>
+                  
+                  {/* Hidden File Input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    multiple
+                    onChange={handleFileInputChange}
+                    className="hidden"
+                  />
+
+                  {/* Upload Area */}
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={cn(
+                      "border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer",
+                      isDragging
+                        ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 scale-105"
+                        : "border-slate-300 dark:border-slate-700 hover:border-purple-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    )}
+                  >
+                    <Upload className={cn(
+                      "w-12 h-12 mx-auto mb-3 transition-colors",
+                      isDragging ? "text-purple-500" : "text-muted-foreground"
+                    )} />
+                    <p className="font-semibold mb-1">
+                      {isDragging ? "Drop images here" : "Click to upload or drag and drop"}
                     </p>
+                    <p className="text-sm text-muted-foreground">
+                      PNG, JPG, WEBP up to 10MB (Maximum 5 images)
+                    </p>
+                    {productImages.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {productImages.length} of 5 images uploaded
+                      </p>
+                    )}
                   </div>
+
+                  {/* Image Preview Grid */}
                   {productImages.length > 0 && (
-                    <div className="grid grid-cols-5 gap-3 mt-3">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-3">
                       {productImages.map((img, idx) => (
-                        <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border">
-                          <img src={img} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
+                        <motion.div
+                          key={idx}
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0, opacity: 0 }}
+                          className="relative aspect-square rounded-lg overflow-hidden border-2 border-slate-200 dark:border-slate-700 group"
+                        >
+                          <img 
+                            src={img} 
+                            alt={`Product ${idx + 1}`} 
+                            className="w-full h-full object-cover"
+                          />
                           <button
                             type="button"
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveImage(idx);
+                            }}
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1.5 hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="w-3.5 h-3.5" />
                           </button>
-                        </div>
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs py-1 px-2 text-center">
+                            Image {idx + 1}
+                          </div>
+                        </motion.div>
                       ))}
                     </div>
                   )}
@@ -1437,7 +1600,7 @@ export function ProductForm({ onClose, product }: ProductFormProps) {
               ) : (
                 <>
                   <Check className="w-4 h-4 mr-2" />
-                  {product ? 'Update Product' : 'Create Product'}
+                  Confirm
                 </>
               )}
             </Button>

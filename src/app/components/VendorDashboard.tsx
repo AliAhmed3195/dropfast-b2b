@@ -44,39 +44,19 @@ import {
   Cell,
 } from 'recharts';
 
-// Enhanced mock data
-const salesData = [
-  { date: 'Mon', sales: 2400, orders: 24, revenue: 2400 },
-  { date: 'Tue', sales: 3200, orders: 32, revenue: 3200 },
-  { date: 'Wed', sales: 2800, orders: 28, revenue: 2800 },
-  { date: 'Thu', sales: 4100, orders: 41, revenue: 4100 },
-  { date: 'Fri', sales: 3800, orders: 38, revenue: 3800 },
-  { date: 'Sat', sales: 5200, orders: 52, revenue: 5200 },
-  { date: 'Sun', sales: 4600, orders: 46, revenue: 4600 },
-];
+// Analytics datasets – start empty, to be filled with real data from backend later
+const salesData: Array<{ date: string; sales: number; orders: number; revenue: number }> = [];
 
-const categoryData = [
-  { name: 'Electronics', value: 35, color: '#6366f1' },
-  { name: 'Fashion', value: 25, color: '#8b5cf6' },
-  { name: 'Home', value: 20, color: '#06b6d4' },
-  { name: 'Sports', value: 12, color: '#10b981' },
-  { name: 'Others', value: 8, color: '#f59e0b' },
-];
+const categoryData: Array<{ name: string; value: number; color: string }> = [];
 
-const topProducts = [
-  { name: 'Premium Headphones', sales: 234, revenue: 18720, rating: 4.8, trend: 12 },
-  { name: 'Smart Watch Pro', sales: 189, revenue: 37800, rating: 4.9, trend: 8 },
-  { name: 'Laptop Stand', sales: 156, revenue: 7176, rating: 4.6, trend: -3 },
-  { name: 'Wireless Mouse', sales: 145, revenue: 4350, rating: 4.7, trend: 15 },
-  { name: 'USB-C Hub', sales: 134, revenue: 4020, rating: 4.5, trend: 5 },
-];
+const topProducts: Array<{ name: string; sales: number; revenue: number; rating: number; trend: number }> = [];
 
-const recentActivity = [
-  { type: 'order', message: 'New order #ORD-1234 from John Smith', time: '5 min ago', icon: ShoppingCart },
-  { type: 'product', message: 'Low stock alert: Wireless Mouse', time: '12 min ago', icon: AlertCircle },
-  { type: 'review', message: 'New 5-star review on Smart Watch Pro', time: '1 hour ago', icon: Star },
-  { type: 'shipment', message: 'Order #ORD-1230 delivered', time: '2 hours ago', icon: CheckCircle },
-];
+const recentActivity: Array<{
+  type: 'order' | 'product' | 'review' | 'shipment';
+  message: string;
+  time: string;
+  icon: typeof ShoppingCart;
+}> = [];
 
 export function VendorDashboard() {
   const { user } = useAuth();
@@ -88,17 +68,18 @@ export function VendorDashboard() {
   const myOrders = user ? getOrdersByVendor(user.id) : [];
   const totalProducts = myStores.reduce((sum, store) => sum + store.products.length, 0);
 
-  // Calculate stats
-  const totalSales = salesData.reduce((sum, day) => sum + day.sales, 0);
-  const avgOrderValue = totalSales / salesData.reduce((sum, day) => sum + day.orders, 0);
-  const totalRevenue = totalSales;
-  const pendingOrders = Math.floor(myOrders.length * 0.3);
+  // Calculate stats from real orders when available (fallback to zeros)
+  const totalRevenue = myOrders.reduce((sum, order) => sum + order.total, 0);
+  const totalOrders = myOrders.length;
+  const avgOrderValue =
+    totalOrders > 0 ? totalRevenue / totalOrders : 0;
+  const pendingOrders = myOrders.filter(order => order.status === 'pending').length;
 
   const stats = [
     {
       title: 'Total Revenue',
       value: `$${totalRevenue.toLocaleString()}`,
-      change: '+24.5%',
+      change: totalOrders > 0 ? 'Live data' : 'No data yet',
       trend: 'up',
       icon: DollarSign,
       color: 'from-green-500 to-emerald-600',
@@ -106,8 +87,8 @@ export function VendorDashboard() {
     },
     {
       title: 'Total Orders',
-      value: salesData.reduce((sum, day) => sum + day.orders, 0).toString(),
-      change: '+12.3%',
+      value: totalOrders.toString(),
+      change: totalOrders > 0 ? 'Live data' : 'No data yet',
       trend: 'up',
       icon: ShoppingCart,
       color: 'from-blue-500 to-cyan-600',

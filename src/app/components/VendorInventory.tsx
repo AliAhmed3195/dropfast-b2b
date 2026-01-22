@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { cn } from './ui/utils';
 import { ProductForm } from './ProductForm';
 import { UnifiedImportModal } from './UnifiedImportModal';
+import { useAuth } from '../contexts/AuthContext';
 
 // Mock data - Supplier Products
 const supplierProducts = [
@@ -117,8 +118,8 @@ const supplierProducts = [
   },
 ];
 
-// Mock data - Vendor's own created products
-const myCreatedProducts = [
+// Mock data - Vendor's own created products (initial)
+const initialMyCreatedProducts = [
   {
     id: 101,
     name: 'Custom Branded Laptop Bag',
@@ -149,16 +150,11 @@ const myCreatedProducts = [
   },
 ];
 
-// Combine all products
-const allAvailableProducts = [...supplierProducts, ...myCreatedProducts];
-
 // Get unique suppliers
 const uniqueSuppliers = Array.from(new Set(supplierProducts.map(p => p.supplier)));
 
-// Get unique categories
-const uniqueCategories = Array.from(new Set(allAvailableProducts.map(p => p.category)));
-
 export function VendorInventory() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [productTypeFilter, setProductTypeFilter] = useState<'all' | 'supplier' | 'own'>('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -166,6 +162,51 @@ export function VendorInventory() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'list' | 'create'>('list');
+  const [myCreatedProducts, setMyCreatedProducts] = useState<any[]>(initialMyCreatedProducts);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch vendor's own products from API
+  const fetchMyProducts = async () => {
+    try {
+      setIsLoading(true);
+      // Fetch products created by this vendor
+      const response = await fetch('/api/products');
+      const data = await response.json();
+
+      if (response.ok && data.products) {
+        // Filter products created by current vendor
+        const vendorProducts = data.products
+          .filter((p: any) => 
+            p.createdByUserId === user?.id && 
+            p.createdByUserType === 'VENDOR'
+          )
+          .map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            sku: p.sku,
+            supplier: 'Self Created',
+            category: p.category?.name || p.subcategory || 'Uncategorized',
+            supplierPrice: 0,
+            moq: p.moq || 1,
+            stock: p.stock || 0,
+            image: p.images && p.images.length > 0 ? p.images[0] : '',
+            description: p.description || '',
+            type: 'own',
+            retailPrice: p.sellingPrice || 0,
+          }));
+        
+        setMyCreatedProducts(vendorProducts);
+      } else {
+        console.error('Failed to fetch products:', data.error);
+        // Keep existing mock data as fallback
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      // Keep existing mock data as fallback
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Import type selection
   const [importType, setImportType] = useState<'my-products' | 'my-products-store'>('my-products');
@@ -178,6 +219,14 @@ export function VendorInventory() {
     metaDescription: '',
     metaKeywords: '',
   });
+
+  // Fetch products on component mount
+  useEffect(() => {
+    fetchMyProducts();
+  }, [user?.id]);
+
+  // Combine all products (update when myCreatedProducts changes)
+  const allAvailableProducts = [...supplierProducts, ...myCreatedProducts];
 
   // Filter products
   const filteredProducts = allAvailableProducts.filter(product => {
@@ -248,11 +297,22 @@ export function VendorInventory() {
     totalSuppliers: uniqueSuppliers.length,
   };
 
+  // Update unique categories when products change
+  const uniqueCategories = Array.from(new Set(allAvailableProducts.map(p => p.category)));
+
+  // Handle product creation success
+  const handleProductCreated = async () => {
+    setViewMode('list');
+    // Refresh the product list
+    await fetchMyProducts();
+    toast.success('Product created successfully!');
+  };
+
   // If in create mode, show ProductForm as full page
   if (viewMode === 'create') {
     return (
       <ProductForm 
-        onClose={() => setViewMode('list')}
+        onClose={handleProductCreated}
       />
     );
   }

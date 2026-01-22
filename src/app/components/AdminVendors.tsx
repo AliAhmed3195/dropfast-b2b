@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Store,
@@ -19,6 +19,7 @@ import {
   MoreVertical,
   Trash2,
   Building2,
+  Plus,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -28,6 +29,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
+import { UserForm } from './UserForm';
 
 // Mock vendor data
 const mockVendors = [
@@ -99,6 +101,34 @@ export function AdminVendors() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [editingVendor, setEditingVendor] = useState<any>(null);
   const [viewingVendor, setViewingVendor] = useState<any>(null);
+  const [showAddVendorForm, setShowAddVendorForm] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch vendors from API
+  const fetchVendors = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/users?role=vendor');
+      const data = await response.json();
+
+      if (response.ok && data.vendors) {
+        setVendors(data.vendors);
+      } else {
+        console.error('Failed to fetch vendors:', data.error);
+        // Keep mock data as fallback
+      }
+    } catch (error) {
+      console.error('Error fetching vendors:', error);
+      // Keep mock data as fallback
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch vendors on component mount
+  useEffect(() => {
+    fetchVendors();
+  }, []);
 
   const filteredVendors = vendors.filter(vendor => {
     const matchesSearch = vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -132,21 +162,51 @@ export function AdminVendors() {
     toast.success('Vendor updated successfully!');
   };
 
-  const handleDeleteVendor = (vendorId: string) => {
+  const handleDeleteVendor = async (vendorId: string) => {
+    // TODO: Add API call to delete vendor
     setVendors(prev => prev.filter(v => v.id !== vendorId));
     toast.success('Vendor deleted successfully!');
+    // Refresh vendor list
+    await fetchVendors();
   };
+
+  const handleAddVendorSuccess = async () => {
+    setShowAddVendorForm(false);
+    toast.success('Vendor added successfully!');
+    // Refresh vendor list from API
+    await fetchVendors();
+  };
+
+  // If showing add vendor form, render UserForm
+  if (showAddVendorForm) {
+    return (
+      <UserForm
+        preSelectedRole="vendor"
+        onCancel={() => setShowAddVendorForm(false)}
+        onSuccess={handleAddVendorSuccess}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 bg-clip-text text-transparent">
-          Vendor Management
-        </h2>
-        <p className="text-muted-foreground mt-1">
-          Manage all vendors and their stores on the platform
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 bg-clip-text text-transparent">
+            Vendor Management
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            Manage all vendors and their stores on the platform
+          </p>
+        </div>
+        <Button
+          onClick={() => setShowAddVendorForm(true)}
+          className="bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white font-semibold shadow-lg shadow-purple-500/30 hover:from-purple-700 hover:via-indigo-700 hover:to-cyan-700"
+        >
+          <Plus className="w-5 h-5 mr-2" />
+          Add Vendor
+        </Button>
       </div>
 
       {/* Stats */}
@@ -242,21 +302,48 @@ export function AdminVendors() {
 
       {/* Vendors Table */}
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 dark:bg-slate-800/50 border-b">
-              <tr>
-                <th className="text-left p-4 font-semibold">Vendor</th>
-                <th className="text-left p-4 font-semibold">Store</th>
-                <th className="text-left p-4 font-semibold">Contact</th>
-                <th className="text-left p-4 font-semibold">Products</th>
-                <th className="text-left p-4 font-semibold">Revenue</th>
-                <th className="text-left p-4 font-semibold">Status</th>
-                <th className="text-left p-4 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredVendors.map((vendor, index) => (
+        {isLoading ? (
+          <div className="p-12 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-muted-foreground">Loading vendors...</p>
+            </div>
+          </div>
+        ) : filteredVendors.length === 0 ? (
+          <div className="p-12 text-center">
+            <Store className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+            <h3 className="text-lg font-semibold mb-2">No vendors found</h3>
+            <p className="text-muted-foreground mb-4">
+              {searchQuery || statusFilter !== 'all'
+                ? 'Try adjusting your filters'
+                : 'Get started by adding your first vendor'}
+            </p>
+            {(!searchQuery && statusFilter === 'all') && (
+              <Button
+                onClick={() => setShowAddVendorForm(true)}
+                className="bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Vendor
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 dark:bg-slate-800/50 border-b">
+                <tr>
+                  <th className="text-left p-4 font-semibold">Vendor</th>
+                  <th className="text-left p-4 font-semibold">Store</th>
+                  <th className="text-left p-4 font-semibold">Contact</th>
+                  <th className="text-left p-4 font-semibold">Products</th>
+                  <th className="text-left p-4 font-semibold">Revenue</th>
+                  <th className="text-left p-4 font-semibold">Status</th>
+                  <th className="text-left p-4 font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredVendors.map((vendor, index) => (
                 <motion.tr
                   key={vendor.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -328,10 +415,11 @@ export function AdminVendors() {
                     </div>
                   </td>
                 </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {/* Edit Vendor Modal */}

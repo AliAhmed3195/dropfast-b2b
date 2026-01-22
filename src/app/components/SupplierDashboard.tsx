@@ -36,67 +36,19 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-const performanceData = [
-  { month: 'Jan', orders: 156, revenue: 23400 },
-  { month: 'Feb', orders: 178, revenue: 28900 },
-  { month: 'Mar', orders: 165, revenue: 25600 },
-  { month: 'Apr', orders: 203, revenue: 34200 },
-  { month: 'May', orders: 189, revenue: 31800 },
-  { month: 'Jun', orders: 234, revenue: 42100 },
-];
+// Datasets start empty – to be filled by real supplier data later
+const performanceData: Array<{ month: string; orders: number; revenue: number }> = [];
 
-const products = [
-  {
-    id: 1,
-    name: 'Wireless Bluetooth Headphones',
-    sku: 'WBH-2024-001',
-    category: 'Electronics',
-    stock: 245,
-    price: 79.99,
-    status: 'active',
-    orders: 156,
-  },
-  {
-    id: 2,
-    name: 'Smart Watch Pro',
-    sku: 'SWP-2024-002',
-    category: 'Wearables',
-    stock: 89,
-    price: 199.99,
-    status: 'active',
-    orders: 98,
-  },
-  {
-    id: 3,
-    name: 'USB-C Fast Charger',
-    sku: 'UFC-2024-003',
-    category: 'Accessories',
-    stock: 12,
-    price: 29.99,
-    status: 'low-stock',
-    orders: 234,
-  },
-  {
-    id: 4,
-    name: 'Laptop Stand Adjustable',
-    sku: 'LSA-2024-004',
-    category: 'Office',
-    stock: 0,
-    price: 45.99,
-    status: 'out-of-stock',
-    orders: 67,
-  },
-  {
-    id: 5,
-    name: 'Portable SSD 1TB',
-    sku: 'PSS-2024-005',
-    category: 'Storage',
-    stock: 156,
-    price: 129.99,
-    status: 'active',
-    orders: 89,
-  },
-];
+const products: Array<{
+  id: string | number;
+  name: string;
+  sku: string;
+  category: string;
+  stock: number;
+  price: number;
+  status: string;
+  orders: number;
+}> = [];
 
 export function SupplierDashboard() {
   const router = useRouter();
@@ -105,29 +57,29 @@ export function SupplierDashboard() {
   const stats = [
     {
       title: 'Total Products',
-      value: '247',
-      change: '+12',
+      value: '0',
+      change: 'No data yet',
       icon: Package,
       color: 'from-blue-500 to-cyan-500',
     },
     {
       title: 'Total Orders',
-      value: '1,125',
-      change: '+18.2%',
+      value: '0',
+      change: 'No data yet',
       icon: TrendingUp,
       color: 'from-green-500 to-emerald-500',
     },
     {
       title: 'Low Stock Items',
-      value: '8',
-      change: 'Urgent',
+      value: '0',
+      change: 'No data yet',
       icon: AlertTriangle,
       color: 'from-orange-500 to-red-500',
     },
     {
       title: 'Pending Orders',
-      value: '23',
-      change: 'Today',
+      value: '0',
+      change: 'No data yet',
       icon: Clock,
       color: 'from-purple-500 to-pink-500',
     },

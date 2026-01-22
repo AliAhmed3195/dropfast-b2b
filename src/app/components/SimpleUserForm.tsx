@@ -16,7 +16,7 @@ export function SimpleUserForm({ onCancel, onSuccess }: SimpleUserFormProps) {
     fullName: '',
     email: '',
     password: '',
-    role: 'customer',
+    role: 'supplier',
     phoneNumber: '',
     dateOfBirth: '',
   });
@@ -63,7 +63,8 @@ export function SimpleUserForm({ onCancel, onSuccess }: SimpleUserFormProps) {
 
   const roles = [
     { value: 'admin', label: 'Admin', color: 'from-purple-500 to-purple-600' },
-    { value: 'customer', label: 'Customer', color: 'from-green-500 to-green-600' },
+    { value: 'supplier', label: 'Supplier', color: 'from-blue-500 to-blue-600' },
+    { value: 'vendor', label: 'Vendor', color: 'from-cyan-500 to-cyan-600' },
   ];
 
   return (

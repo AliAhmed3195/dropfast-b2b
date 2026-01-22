@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Slider from 'react-slick';
 import {
@@ -38,6 +38,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
 import { ProductForm } from './ProductForm';
+import { useAuth } from '../contexts/AuthContext';
 
 // Mock products data
 const mockProducts = [
@@ -138,6 +139,7 @@ const mockProducts = [
 ];
 
 export function SupplierProducts() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [showDetailView, setShowDetailView] = useState(false);
@@ -147,8 +149,58 @@ export function SupplierProducts() {
   const [sortBy, setSortBy] = useState('name');
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'add' | 'edit'>('list');
+  const [products, setProducts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const filteredProducts = mockProducts.filter(
+  // Fetch products from API
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        setIsLoading(true);
+        const supplierId = user?.id;
+        const url = supplierId 
+          ? `/api/products?supplierId=${supplierId}`
+          : '/api/products';
+        
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (response.ok) {
+          // Transform API data to match component format
+          const transformedProducts = data.products.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            sku: p.sku,
+            category: p.category?.name || p.subcategory || 'Uncategorized',
+            subcategory: p.subcategory,
+            stock: p.stock,
+            price: p.sellingPrice,
+            status: p.status.toLowerCase().replace('_', '-'),
+            orders: 0, // This would come from orders count
+            description: p.description,
+            moq: p.moq,
+            image: p.images && p.images.length > 0 ? p.images[0] : '',
+            images: p.images || [],
+          }));
+          setProducts(transformedProducts);
+        } else {
+          console.error('Failed to fetch products:', data.error);
+          // Fallback to mock data if API fails
+          setProducts(mockProducts);
+        }
+      } catch (error) {
+        console.error('Error fetching products:', error);
+        // Fallback to mock data on error
+        setProducts(mockProducts);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, [user?.id]);
+
+  const filteredProducts = products.filter(
     product =>
       (product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.sku.toLowerCase().includes(searchQuery.toLowerCase())) &&
@@ -204,6 +256,40 @@ export function SupplierProducts() {
   const handleBackToList = () => {
     setViewMode('list');
     setEditingProduct(null);
+    // Refresh products list
+    const fetchProducts = async () => {
+      try {
+        const supplierId = user?.id;
+        const url = supplierId 
+          ? `/api/products?supplierId=${supplierId}`
+          : '/api/products';
+        
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (response.ok) {
+          const transformedProducts = data.products.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            sku: p.sku,
+            category: p.category?.name || p.subcategory || 'Uncategorized',
+            subcategory: p.subcategory,
+            stock: p.stock,
+            price: p.sellingPrice,
+            status: p.status.toLowerCase().replace('_', '-'),
+            orders: 0,
+            description: p.description,
+            moq: p.moq,
+            image: p.images && p.images.length > 0 ? p.images[0] : '',
+            images: p.images || [],
+          }));
+          setProducts(transformedProducts);
+        }
+      } catch (error) {
+        console.error('Error refreshing products:', error);
+      }
+    };
+    fetchProducts();
   };
 
   // If in add/edit mode, show ProductForm as full page
@@ -324,9 +410,20 @@ export function SupplierProducts() {
         )}
       </Card>
 
+      {/* Loading State */}
+      {isLoading && (
+        <Card className="p-12 text-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-muted-foreground">Loading products...</p>
+          </div>
+        </Card>
+      )}
+
       {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProducts.map((product, index) => (
+      {!isLoading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProducts.map((product, index) => (
           <motion.div
             key={product.id}
             initial={{ opacity: 0, y: 20 }}
@@ -430,7 +527,27 @@ export function SupplierProducts() {
             </Card>
           </motion.div>
         ))}
-      </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && filteredProducts.length === 0 && (
+        <Card className="p-12 text-center">
+          <Package className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+          <h3 className="text-lg font-semibold mb-2">No products found</h3>
+          <p className="text-muted-foreground mb-4">
+            {searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'
+              ? 'Try adjusting your filters'
+              : 'Get started by adding your first product'}
+          </p>
+          {(!searchQuery && statusFilter === 'all' && categoryFilter === 'all') && (
+            <Button onClick={handleAddProduct} className="bg-indigo-600 hover:bg-indigo-700">
+              <Plus className="w-4 h-4 mr-2" />
+              Add New Product
+            </Button>
+          )}
+        </Card>
+      )}
 
       {/* Product Detail Modal */}
       <AnimatePresence>

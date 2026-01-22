@@ -32,90 +32,27 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-// Mock data for sales trend (last 30 days)
-const salesTrendData = [
-  { date: 'Dec 1', revenue: 850 },
-  { date: 'Dec 2', revenue: 920 },
-  { date: 'Dec 3', revenue: 780 },
-  { date: 'Dec 4', revenue: 1100 },
-  { date: 'Dec 5', revenue: 1250 },
-  { date: 'Dec 6', revenue: 950 },
-  { date: 'Dec 7', revenue: 1350 },
-  { date: 'Dec 8', revenue: 1200 },
-  { date: 'Dec 9', revenue: 1450 },
-  { date: 'Dec 10', revenue: 1300 },
-  { date: 'Dec 11', revenue: 1550 },
-  { date: 'Dec 12', revenue: 1400 },
-  { date: 'Dec 13', revenue: 1650 },
-  { date: 'Dec 14', revenue: 1500 },
-  { date: 'Dec 15', revenue: 1750 },
-  { date: 'Dec 16', revenue: 1600 },
-  { date: 'Dec 17', revenue: 1850 },
-  { date: 'Dec 18', revenue: 1700 },
-  { date: 'Dec 19', revenue: 1950 },
-  { date: 'Dec 20', revenue: 1800 },
-  { date: 'Dec 21', revenue: 2050 },
-  { date: 'Dec 22', revenue: 1900 },
-  { date: 'Dec 23', revenue: 2150 },
-  { date: 'Dec 24', revenue: 2000 },
-];
+// Analytics datasets – start empty, to be filled with real supplier data
+const salesTrendData: Array<{ date: string; revenue: number }> = [];
 
-// Mock data for order volume trend
-const orderVolumeTrendData = [
-  { date: 'Dec 1', orders: 12 },
-  { date: 'Dec 2', orders: 15 },
-  { date: 'Dec 3', orders: 11 },
-  { date: 'Dec 4', orders: 18 },
-  { date: 'Dec 5', orders: 21 },
-  { date: 'Dec 6', orders: 16 },
-  { date: 'Dec 7', orders: 23 },
-  { date: 'Dec 8', orders: 19 },
-  { date: 'Dec 9', orders: 25 },
-  { date: 'Dec 10', orders: 22 },
-  { date: 'Dec 11', orders: 27 },
-  { date: 'Dec 12', orders: 24 },
-  { date: 'Dec 13', orders: 29 },
-  { date: 'Dec 14', orders: 26 },
-  { date: 'Dec 15', orders: 31 },
-  { date: 'Dec 16', orders: 28 },
-  { date: 'Dec 17', orders: 33 },
-  { date: 'Dec 18', orders: 30 },
-  { date: 'Dec 19', orders: 35 },
-  { date: 'Dec 20', orders: 32 },
-  { date: 'Dec 21', orders: 37 },
-  { date: 'Dec 22', orders: 34 },
-  { date: 'Dec 23', orders: 39 },
-  { date: 'Dec 24', orders: 36 },
-];
+const orderVolumeTrendData: Array<{ date: string; orders: number }> = [];
 
-// Mock data for top 5 products
-const topProductsData = [
-  { id: 1, name: 'Wireless Headphones', orders: 156, revenue: 12480 },
-  { id: 2, name: 'Smart Watch', orders: 98, revenue: 19600 },
-  { id: 3, name: 'USB-C Cable', orders: 234, revenue: 3042 },
-  { id: 4, name: 'Portable SSD', orders: 89, revenue: 11570 },
-  { id: 5, name: 'Phone Case', orders: 187, revenue: 3740 },
-];
+const topProductsData: Array<{ id: number; name: string; orders: number; revenue: number }> = [];
 
-// Mock data for product status distribution
-const productStatusData = [
-  { name: 'Active', value: 189, color: '#10b981' },
-  { name: 'Low Stock', value: 34, color: '#f59e0b' },
-  { name: 'Out of Stock', value: 24, color: '#ef4444' },
-];
+const productStatusData: Array<{ name: string; value: number; color: string }> = [];
 
 export function SupplierAnalytics() {
   const [dateRange, setDateRange] = useState('30');
 
   const stats = {
-    totalRevenue: 42350,
-    revenueChange: 15.3,
-    avgOrderValue: 178.5,
-    avgChange: 7.2,
-    totalOrders: 764,
-    ordersChange: 12.8,
-    totalProducts: 247,
-    activeProducts: 189,
+    totalRevenue: 0,
+    revenueChange: 0,
+    avgOrderValue: 0,
+    avgChange: 0,
+    totalOrders: 0,
+    ordersChange: 0,
+    totalProducts: 0,
+    activeProducts: 0,
   };
 
   return (

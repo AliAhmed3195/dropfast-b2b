@@ -5,9 +5,10 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { cn } from './ui/utils';
+import { toast } from 'sonner';
 
 interface UserFormProps {
-  preSelectedRole?: 'supplier' | 'vendor' | 'customer';
+  preSelectedRole?: 'supplier' | 'vendor';
   onCancel: () => void;
   onSuccess: () => void;
 }
@@ -17,7 +18,7 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
     fullName: '',
     email: '',
     password: '',
-    role: preSelectedRole || 'customer',
+    role: preSelectedRole || 'supplier',
     includeBusinessDetails: false,
     businessName: '',
     businessType: 'individual',
@@ -80,11 +81,60 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
 
     setIsSubmitting(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setIsSubmitting(false);
-    onSuccess();
+    try {
+      // Prepare user data
+      const userData = {
+        fullName: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        phoneNumber: formData.phoneNumber || null,
+        dateOfBirth: formData.dateOfBirth || null,
+        businessName: formData.includeBusinessDetails ? formData.businessName : null,
+        businessType: formData.includeBusinessDetails ? formData.businessType : null,
+        registrationNumber: formData.includeBusinessDetails ? formData.registrationNumber : null,
+        vatNumber: formData.includeBusinessDetails ? formData.vatNumber : null,
+        taxId: formData.includeBusinessDetails ? formData.vatNumber : null,
+        country: formData.includeBusinessDetails ? formData.country : null,
+        currency: formData.includeBusinessDetails ? formData.currency : null,
+        baseCurrency: formData.includeBusinessDetails ? formData.currency : null,
+        streetAddress: formData.includeBusinessDetails ? formData.streetAddress : null,
+        city: formData.includeBusinessDetails ? formData.city : null,
+        stateProvince: formData.includeBusinessDetails ? formData.stateProvince : null,
+        zipCode: formData.includeBusinessDetails ? formData.zipCode : null,
+        addressCountry: formData.includeBusinessDetails ? formData.addressCountry : null,
+        productCategories: formData.role === 'supplier' && formData.includeBusinessDetails ? formData.productCategories : null,
+        shippingLocations: formData.role === 'supplier' && formData.includeBusinessDetails ? formData.shippingLocations : null,
+        minimumOrderValue: formData.role === 'supplier' && formData.includeBusinessDetails ? formData.minimumOrderValue : null,
+        storeName: formData.role === 'vendor' && formData.includeBusinessDetails ? formData.storeName : null,
+        storeType: formData.role === 'vendor' && formData.includeBusinessDetails ? formData.storeType : null,
+        commissionRate: formData.role === 'vendor' && formData.includeBusinessDetails ? formData.commissionRate : null,
+      };
+
+      // Call API to create user
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create user');
+      }
+
+      console.log('User created:', data.user);
+      toast.success('User created successfully!');
+      setIsSubmitting(false);
+      onSuccess();
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      toast.error(error.message || 'Failed to create user. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   const businessTypes = [
@@ -112,7 +162,6 @@ export function UserForm({ preSelectedRole, onCancel, onSuccess }: UserFormProps
   const roles = [
     { value: 'supplier', label: 'Supplier', color: 'from-blue-500 to-blue-600' },
     { value: 'vendor', label: 'Vendor', color: 'from-cyan-500 to-cyan-600' },
-    { value: 'customer', label: 'Customer', color: 'from-green-500 to-green-600' },
   ];
 
   return (

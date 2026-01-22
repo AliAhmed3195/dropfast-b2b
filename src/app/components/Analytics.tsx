@@ -40,147 +40,37 @@ import {
 } from 'recharts';
 import { cn } from './ui/utils';
 
-// Mock data for revenue trend (last 30 days)
-const revenueTrendData = [
-  { date: 'Dec 1', revenue: 1200 },
-  { date: 'Dec 2', revenue: 1450 },
-  { date: 'Dec 3', revenue: 1300 },
-  { date: 'Dec 4', revenue: 1600 },
-  { date: 'Dec 5', revenue: 1800 },
-  { date: 'Dec 6', revenue: 1550 },
-  { date: 'Dec 7', revenue: 1900 },
-  { date: 'Dec 8', revenue: 1700 },
-  { date: 'Dec 9', revenue: 2100 },
-  { date: 'Dec 10', revenue: 1950 },
-  { date: 'Dec 11', revenue: 2200 },
-  { date: 'Dec 12', revenue: 2050 },
-  { date: 'Dec 13', revenue: 2300 },
-  { date: 'Dec 14', revenue: 2150 },
-  { date: 'Dec 15', revenue: 2400 },
-  { date: 'Dec 16', revenue: 2250 },
-  { date: 'Dec 17', revenue: 2500 },
-  { date: 'Dec 18', revenue: 2350 },
-  { date: 'Dec 19', revenue: 2600 },
-  { date: 'Dec 20', revenue: 2450 },
-  { date: 'Dec 21', revenue: 2700 },
-  { date: 'Dec 22', revenue: 2550 },
-  { date: 'Dec 23', revenue: 2800 },
-  { date: 'Dec 24', revenue: 2650 },
-];
+// Analytics datasets – start empty, ready for real platform data
+const revenueTrendData: Array<{ date: string; revenue: number }> = [];
 
-// Mock data for order status distribution
-const orderStatusData = [
-  { name: 'Delivered', value: 145, color: '#10b981' },
-  { name: 'Shipped', value: 48, color: '#6366f1' },
-  { name: 'Processing', value: 32, color: '#06b6d4' },
-  { name: 'Pending', value: 25, color: '#f59e0b' },
-  { name: 'Cancelled', value: 12, color: '#ef4444' },
-];
+const orderStatusData: Array<{ name: string; value: number; color: string }> = [];
 
-// Mock data for order volume trend
-const orderVolumeTrendData = [
-  { date: 'Dec 1', orders: 8 },
-  { date: 'Dec 2', orders: 10 },
-  { date: 'Dec 3', orders: 9 },
-  { date: 'Dec 4', orders: 12 },
-  { date: 'Dec 5', orders: 14 },
-  { date: 'Dec 6', orders: 11 },
-  { date: 'Dec 7', orders: 15 },
-  { date: 'Dec 8', orders: 13 },
-  { date: 'Dec 9', orders: 16 },
-  { date: 'Dec 10', orders: 14 },
-  { date: 'Dec 11', orders: 17 },
-  { date: 'Dec 12', orders: 15 },
-  { date: 'Dec 13', orders: 18 },
-  { date: 'Dec 14', orders: 16 },
-  { date: 'Dec 15', orders: 19 },
-  { date: 'Dec 16', orders: 17 },
-  { date: 'Dec 17', orders: 20 },
-  { date: 'Dec 18', orders: 18 },
-  { date: 'Dec 19', orders: 21 },
-  { date: 'Dec 20', orders: 19 },
-  { date: 'Dec 21', orders: 22 },
-  { date: 'Dec 22', orders: 20 },
-  { date: 'Dec 23', orders: 23 },
-  { date: 'Dec 24', orders: 21 },
-];
+const orderVolumeTrendData: Array<{ date: string; orders: number }> = [];
 
-// Mock data for top vendors
-const topVendorsData = [
-  { name: 'Tech Haven', revenue: 15750 },
-  { name: 'Smart Gadgets', revenue: 12340 },
-  { name: 'Digital Store', revenue: 9850 },
-  { name: 'Gadget World', revenue: 7560 },
-  { name: 'Tech Plaza', revenue: 6420 },
-];
+const topVendorsData: Array<{ name: string; revenue: number }> = [];
 
-// Mock data for top suppliers
-const topSuppliersData = [
-  { name: 'Global Electronics', orders: 145 },
-  { name: 'Tech Supply Co.', orders: 132 },
-  { name: 'Digital Imports', orders: 98 },
-  { name: 'Smart Tech Ltd.', orders: 76 },
-  { name: 'Gadget Wholesale', orders: 54 },
-];
+const topSuppliersData: Array<{ name: string; orders: number }> = [];
 
-// Mock data for top products
-const topProductsData = [
-  { id: 1, name: 'Wireless Headphones', units: 234, revenue: 18720 },
-  { id: 2, name: 'Smart Watch', units: 189, revenue: 56700 },
-  { id: 3, name: 'Phone Case', units: 456, revenue: 9120 },
-  { id: 4, name: 'USB-C Cable', units: 678, revenue: 8814 },
-  { id: 5, name: 'Power Bank', units: 321, revenue: 16050 },
-];
+const topProductsData: Array<{ id: number; name: string; units: number; revenue: number }> = [];
 
-// Mock data for user registration trend
-const userRegistrationData = [
-  { date: 'Dec 1', users: 5 },
-  { date: 'Dec 2', users: 7 },
-  { date: 'Dec 3', users: 6 },
-  { date: 'Dec 4', users: 9 },
-  { date: 'Dec 5', users: 11 },
-  { date: 'Dec 6', users: 8 },
-  { date: 'Dec 7', users: 12 },
-  { date: 'Dec 8', users: 10 },
-  { date: 'Dec 9', users: 14 },
-  { date: 'Dec 10', users: 12 },
-  { date: 'Dec 11', users: 15 },
-  { date: 'Dec 12', users: 13 },
-  { date: 'Dec 13', users: 16 },
-  { date: 'Dec 14', users: 14 },
-  { date: 'Dec 15', users: 18 },
-  { date: 'Dec 16', users: 16 },
-  { date: 'Dec 17', users: 19 },
-  { date: 'Dec 18', users: 17 },
-  { date: 'Dec 19', users: 21 },
-  { date: 'Dec 20', users: 19 },
-  { date: 'Dec 21', users: 22 },
-  { date: 'Dec 22', users: 20 },
-  { date: 'Dec 23', users: 24 },
-  { date: 'Dec 24', users: 22 },
-];
+const userRegistrationData: Array<{ date: string; users: number }> = [];
 
-// Mock data for user type distribution
-const userTypeData = [
-  { name: 'Customers', value: 845, color: '#6366f1' },
-  { name: 'Vendors', value: 28, color: '#06b6d4' },
-  { name: 'Suppliers', value: 15, color: '#10b981' },
-];
+const userTypeData: Array<{ name: string; value: number; color: string }> = [];
 
 export function Analytics() {
   const [dateRange, setDateRange] = useState('30');
 
   const stats = {
-    totalRevenue: 65230,
-    revenueChange: 12.5,
-    avgOrderValue: 234.5,
-    avgChange: 5.2,
-    totalOrders: 262,
-    ordersChange: 8.3,
-    totalUsers: 888,
-    newUsers: 45,
-    activeVendors: 23,
-    activeSuppliers: 12,
+    totalRevenue: 0,
+    revenueChange: 0,
+    avgOrderValue: 0,
+    avgChange: 0,
+    totalOrders: 0,
+    ordersChange: 0,
+    totalUsers: 0,
+    newUsers: 0,
+    activeVendors: 0,
+    activeSuppliers: 0,
   };
 
   return (

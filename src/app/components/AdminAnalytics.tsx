@@ -27,28 +27,10 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-const revenueData = [
-  { month: 'Jan', revenue: 45000, orders: 234 },
-  { month: 'Feb', revenue: 52000, orders: 289 },
-  { month: 'Mar', revenue: 48000, orders: 256 },
-  { month: 'Apr', revenue: 61000, orders: 312 },
-  { month: 'May', revenue: 55000, orders: 298 },
-  { month: 'Jun', revenue: 67000, orders: 345 },
-  { month: 'Jul', revenue: 72000, orders: 378 },
-  { month: 'Aug', revenue: 68000, orders: 354 },
-  { month: 'Sep', revenue: 79000, orders: 412 },
-  { month: 'Oct', revenue: 85000, orders: 445 },
-  { month: 'Nov', revenue: 92000, orders: 478 },
-  { month: 'Dec', revenue: 98000, orders: 512 },
-];
+// Analytics datasets – start empty, to be filled with real metrics later
+const revenueData: Array<{ month: string; revenue: number; orders: number }> = [];
 
-const categoryData = [
-  { name: 'Electronics', value: 35 },
-  { name: 'Accessories', value: 25 },
-  { name: 'Clothing', value: 20 },
-  { name: 'Home & Garden', value: 15 },
-  { name: 'Other', value: 5 },
-];
+const categoryData: Array<{ name: string; value: number }> = [];
 
 const COLORS = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -71,8 +53,8 @@ export function AdminAnalytics() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Revenue</p>
-              <p className="text-2xl font-bold">$847K</p>
-              <p className="text-xs text-green-600 font-medium">+12.5% from last month</p>
+              <p className="text-2xl font-bold">$0</p>
+              <p className="text-xs text-muted-foreground font-medium">No data yet</p>
             </div>
           </div>
         </Card>
@@ -83,8 +65,8 @@ export function AdminAnalytics() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Orders</p>
-              <p className="text-2xl font-bold">4.2K</p>
-              <p className="text-xs text-green-600 font-medium">+8.3% from last month</p>
+              <p className="text-2xl font-bold">0</p>
+              <p className="text-xs text-muted-foreground font-medium">No data yet</p>
             </div>
           </div>
         </Card>
@@ -95,8 +77,8 @@ export function AdminAnalytics() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Active Users</p>
-              <p className="text-2xl font-bold">2.1K</p>
-              <p className="text-xs text-green-600 font-medium">+15.7% from last month</p>
+              <p className="text-2xl font-bold">0</p>
+              <p className="text-xs text-muted-foreground font-medium">No data yet</p>
             </div>
           </div>
         </Card>
@@ -107,8 +89,8 @@ export function AdminAnalytics() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Products Listed</p>
-              <p className="text-2xl font-bold">12.5K</p>
-              <p className="text-xs text-green-600 font-medium">+6.2% from last month</p>
+              <p className="text-2xl font-bold">0</p>
+              <p className="text-xs text-muted-foreground font-medium">No data yet</p>
             </div>
           </div>
         </Card>

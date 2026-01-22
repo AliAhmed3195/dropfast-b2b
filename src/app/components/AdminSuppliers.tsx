@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Package,
@@ -19,6 +19,7 @@ import {
   Building2,
   Star,
   Box,
+  Plus,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -28,6 +29,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
+import { UserForm } from './UserForm';
 
 // Mock supplier data
 const mockSuppliers = [
@@ -103,6 +105,51 @@ export function AdminSuppliers() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [editingSupplier, setEditingSupplier] = useState<any>(null);
   const [viewingSupplier, setViewingSupplier] = useState<any>(null);
+  const [showAddSupplierForm, setShowAddSupplierForm] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch suppliers from API
+  const fetchSuppliers = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/users?role=supplier');
+      const data = await response.json();
+
+      if (response.ok && data.vendors) {
+        // Transform API data to match component format
+        const transformedSuppliers = data.vendors.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          companyName: s.businessName || s.storeName || '',
+          email: s.email,
+          phone: s.phone || '',
+          address: s.address || '',
+          joinDate: s.joinDate || new Date().toISOString().split('T')[0],
+          status: s.status || 'active',
+          totalProducts: s.totalProducts || 0,
+          totalOrders: s.totalOrders || 0,
+          revenue: s.revenue || 0,
+          rating: s.rating || 0,
+          verified: s.verified || false,
+          categories: s.categories || [],
+        }));
+        setSuppliers(transformedSuppliers);
+      } else {
+        console.error('Failed to fetch suppliers:', data.error);
+        // Keep mock data as fallback
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+      // Keep mock data as fallback
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch suppliers on component mount
+  useEffect(() => {
+    fetchSuppliers();
+  }, []);
 
   const filteredSuppliers = suppliers.filter(supplier => {
     const matchesSearch = supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -136,21 +183,51 @@ export function AdminSuppliers() {
     toast.success('Supplier updated successfully!');
   };
 
-  const handleDeleteSupplier = (supplierId: string) => {
+  const handleDeleteSupplier = async (supplierId: string) => {
+    // TODO: Add API call to delete supplier
     setSuppliers(prev => prev.filter(s => s.id !== supplierId));
     toast.success('Supplier deleted successfully!');
+    // Refresh supplier list
+    await fetchSuppliers();
   };
+
+  const handleAddSupplierSuccess = async () => {
+    setShowAddSupplierForm(false);
+    toast.success('Supplier added successfully!');
+    // Refresh supplier list from API
+    await fetchSuppliers();
+  };
+
+  // If showing add supplier form, render UserForm
+  if (showAddSupplierForm) {
+    return (
+      <UserForm
+        preSelectedRole="supplier"
+        onCancel={() => setShowAddSupplierForm(false)}
+        onSuccess={handleAddSupplierSuccess}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 bg-clip-text text-transparent">
-          Supplier Management
-        </h2>
-        <p className="text-muted-foreground mt-1">
-          Manage all suppliers and their product catalog
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 bg-clip-text text-transparent">
+            Supplier Management
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            Manage all suppliers and their product catalog
+          </p>
+        </div>
+        <Button
+          onClick={() => setShowAddSupplierForm(true)}
+          className="bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 text-white font-semibold shadow-lg shadow-blue-500/30 hover:from-blue-700 hover:via-indigo-700 hover:to-cyan-700"
+        >
+          <Plus className="w-5 h-5 mr-2" />
+          Add Supplier
+        </Button>
       </div>
 
       {/* Stats */}
@@ -344,10 +421,11 @@ export function AdminSuppliers() {
                     </div>
                   </td>
                 </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {/* Edit Supplier Modal */}

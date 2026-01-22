@@ -14,6 +14,8 @@ import {
   Building,
   Save,
   Shield,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from './ThemeProvider';
@@ -82,6 +84,11 @@ export function Settings() {
     newPassword: '',
     confirmPassword: '',
   });
+
+  // Password visibility states
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Validation Functions
   const validatePassword = (password: string): boolean => {
@@ -1040,15 +1047,26 @@ export function Settings() {
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="currentPassword"
-                    type="password"
+                    type={showCurrentPassword ? "text" : "password"}
                     value={passwordData.currentPassword}
                     onChange={(e) => {
                       setPasswordData({ ...passwordData, currentPassword: e.target.value });
                       if (errors.currentPassword) setErrors({ ...errors, currentPassword: '' });
                     }}
                     placeholder="Enter current password"
-                    className={`pl-10 ${errors.currentPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    className={`pl-10 pr-10 ${errors.currentPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showCurrentPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
                 </div>
                 {errors.currentPassword && (
                   <p className="text-sm text-red-500 mt-1">{errors.currentPassword}</p>
@@ -1063,15 +1081,26 @@ export function Settings() {
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="newPassword"
-                    type="password"
+                    type={showNewPassword ? "text" : "password"}
                     value={passwordData.newPassword}
                     onChange={(e) => {
                       setPasswordData({ ...passwordData, newPassword: e.target.value });
                       if (errors.newPassword) setErrors({ ...errors, newPassword: '' });
                     }}
                     placeholder="Enter new password"
-                    className={`pl-10 ${errors.newPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    className={`pl-10 pr-10 ${errors.newPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showNewPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
                 </div>
                 {errors.newPassword && (
                   <p className="text-sm text-red-500 mt-1">{errors.newPassword}</p>
@@ -1089,15 +1118,26 @@ export function Settings() {
                   <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="confirmPassword"
-                    type="password"
+                    type={showConfirmPassword ? "text" : "password"}
                     value={passwordData.confirmPassword}
                     onChange={(e) => {
                       setPasswordData({ ...passwordData, confirmPassword: e.target.value });
                       if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
                     }}
                     placeholder="Confirm new password"
-                    className={`pl-10 ${errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    className={`pl-10 pr-10 ${errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
                 </div>
                 {errors.confirmPassword && (
                   <p className="text-sm text-red-500 mt-1">{errors.confirmPassword}</p>
