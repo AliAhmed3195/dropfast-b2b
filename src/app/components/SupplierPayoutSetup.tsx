@@ -40,6 +40,7 @@ export function SupplierPayoutSetup() {
   const [payouts, setPayouts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const fetchingRef = useRef(false);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [onboardingUrl, setOnboardingUrl] = useState('');
   const [showBankForm, setShowBankForm] = useState(false);
@@ -56,32 +57,58 @@ export function SupplierPayoutSetup() {
 
   // Fetch payout data
   useEffect(() => {
-    if (!user?.id || fetchingRef.current) return;
+    // Prevent duplicate calls
+    if (!user?.id || fetchingRef.current) {
+      return;
+    }
 
+    // Abort previous request if any
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
     fetchingRef.current = true;
-    setLoading(true);
 
     const fetchPayouts = async () => {
+      if (!isMounted) return;
+
       try {
-        const response = await fetch(`/api/supplier/payouts?supplierId=${user.id}`);
+        setLoading(true);
+        const response = await fetch(`/api/supplier/payouts?supplierId=${user.id}`, {
+          signal: abortController.signal,
+        });
         const data = await response.json();
 
-        if (response.ok) {
+        if (isMounted && response.ok) {
           setStripeAccount(data.stripeAccount);
           setPayouts(data.payouts || []);
-        } else {
+        } else if (isMounted && !response.ok) {
           showToast.error(data.error || 'Failed to fetch payout data');
         }
-      } catch (error) {
-        console.error('Fetch payouts error:', error);
-        showToast.error('Failed to fetch payout data');
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch payouts error:', error);
+          showToast.error('Failed to fetch payout data');
+        }
       } finally {
-        setLoading(false);
-        fetchingRef.current = false;
+        if (isMounted) {
+          setLoading(false);
+          fetchingRef.current = false;
+        }
       }
     };
 
     fetchPayouts();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      currentAbortControllerRef.current = null;
+      fetchingRef.current = false;
+    };
   }, [user?.id]);
 
   const handleGenerateOnboardingLink = async () => {

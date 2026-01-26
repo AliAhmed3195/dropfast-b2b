@@ -46,34 +46,61 @@ export function SupplierDashboard() {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const fetchingRef = useRef(false);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
 
   // Fetch dashboard data
   useEffect(() => {
-    if (!user?.id || fetchingRef.current) return;
+    // Prevent duplicate calls
+    if (!user?.id || fetchingRef.current) {
+      return;
+    }
 
+    // Abort previous request if any
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
     fetchingRef.current = true;
-    setLoading(true);
 
     const fetchDashboard = async () => {
+      if (!isMounted) return;
+
       try {
-        const response = await fetch(`/api/supplier/dashboard?supplierId=${user.id}`);
+        setLoading(true);
+        const response = await fetch(`/api/supplier/dashboard?supplierId=${user.id}`, {
+          signal: abortController.signal,
+        });
         const data = await response.json();
 
-        if (response.ok) {
+        if (isMounted && response.ok) {
           setDashboardData(data);
-        } else {
+        } else if (isMounted && !response.ok) {
           showToast.error(data.error || 'Failed to fetch dashboard data');
         }
-      } catch (error) {
-        console.error('Fetch dashboard error:', error);
-        showToast.error('Failed to fetch dashboard data');
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch dashboard error:', error);
+          showToast.error('Failed to fetch dashboard data');
+        }
       } finally {
-        setLoading(false);
-        fetchingRef.current = false;
+        if (isMounted) {
+          setLoading(false);
+          fetchingRef.current = false;
+        }
       }
     };
 
     fetchDashboard();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      currentAbortControllerRef.current = null;
+      fetchingRef.current = false;
+    };
   }, [user?.id]);
 
   const stats = dashboardData?.stats ? [

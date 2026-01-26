@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Enable standalone output for optimized Docker builds
+  output: 'standalone',
   images: {
     domains: ['images.unsplash.com'],
     remotePatterns: [
@@ -18,7 +20,7 @@ const nextConfig = {
   swcMinify: true,
   // Ensure CSS is properly extracted and optimized
   compiler: {
-    removeConsole: false, // Keep console for debugging
+    removeConsole: process.env.NODE_ENV === 'production', // Remove console in production
   },
 }
 

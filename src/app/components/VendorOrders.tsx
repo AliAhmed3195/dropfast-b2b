@@ -63,40 +63,67 @@ export function VendorOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const fetchingRef = useRef(false);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
   // Fetch orders
   useEffect(() => {
-    if (!user?.id || fetchingRef.current) return;
+    // Prevent duplicate calls
+    if (!user?.id || fetchingRef.current) {
+      return;
+    }
 
+    // Abort previous request if any
+    if (currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    let isMounted = true;
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
     fetchingRef.current = true;
-    setLoading(true);
 
     const fetchOrders = async () => {
+      if (!isMounted) return;
+
       try {
+        setLoading(true);
         const params = new URLSearchParams();
         params.append('vendorId', user.id);
         if (statusFilter !== 'all') params.append('status', statusFilter);
 
-        const response = await fetch(`/api/vendor/orders?${params.toString()}`);
+        const response = await fetch(`/api/vendor/orders?${params.toString()}`, {
+          signal: abortController.signal,
+        });
         const data = await response.json();
 
-        if (response.ok) {
+        if (isMounted && response.ok) {
           setOrders(data.orders || []);
-        } else {
+        } else if (isMounted && !response.ok) {
           showToast.error(data.error || 'Failed to fetch orders');
         }
-      } catch (error) {
-        console.error('Fetch orders error:', error);
-        showToast.error('Failed to fetch orders');
+      } catch (error: any) {
+        if (error.name !== 'AbortError' && isMounted) {
+          console.error('Fetch orders error:', error);
+          showToast.error('Failed to fetch orders');
+        }
       } finally {
-        setLoading(false);
-        fetchingRef.current = false;
+        if (isMounted) {
+          setLoading(false);
+          fetchingRef.current = false;
+        }
       }
     };
 
     fetchOrders();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      currentAbortControllerRef.current = null;
+      fetchingRef.current = false;
+    };
   }, [user?.id, statusFilter]);
 
   const filteredOrders = orders.filter(order => {

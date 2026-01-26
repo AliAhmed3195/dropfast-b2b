@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   DollarSign,
@@ -159,16 +159,34 @@ export function AdminPayouts() {
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [activeTab, setActiveTab] = useState('pending');
   const fetchingPayoutsRef = useRef(false);
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
 
-  const fetchPayouts = async () => {
-    if (fetchingPayoutsRef.current) return;
+  // Refetch function that can be called from anywhere
+  const fetchPayouts = useCallback(async (signal?: AbortSignal) => {
+    // Prevent duplicate calls
+    if (fetchingPayoutsRef.current) {
+      return;
+    }
+
+    // Abort previous request if any (only if not using provided signal)
+    if (!signal && currentAbortControllerRef.current) {
+      currentAbortControllerRef.current.abort();
+    }
+
+    // Create abort controller only if signal not provided (for manual calls)
+    const abortController = signal ? null : new AbortController();
+    if (abortController) {
+      currentAbortControllerRef.current = abortController;
+    }
     fetchingPayoutsRef.current = true;
-    
+
     try {
       setLoading(true);
       const status = activeTab === 'pending' ? 'pending' : activeTab === 'completed' ? 'completed' : '';
       const url = status ? `/api/admin/payouts?status=${status}` : '/api/admin/payouts';
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        signal: signal || abortController?.signal,
+      });
       const data = await response.json();
       
       if (response.ok) {
@@ -176,19 +194,34 @@ export function AdminPayouts() {
       } else {
         toast.error(data.error || 'Failed to fetch payouts');
       }
-    } catch (error) {
-      console.error('Fetch payouts error:', error);
-      toast.error('Failed to fetch payouts');
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Fetch payouts error:', error);
+        toast.error('Failed to fetch payouts');
+      }
     } finally {
       setLoading(false);
       fetchingPayoutsRef.current = false;
+      if (abortController) {
+        currentAbortControllerRef.current = null;
+      }
     }
-  };
+  }, [activeTab]);
 
   useEffect(() => {
-    if (fetchingPayoutsRef.current) return;
-    fetchPayouts();
-  }, [typeFilter, activeTab]);
+    let isMounted = true;
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
+
+    fetchPayouts(abortController.signal);
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      currentAbortControllerRef.current = null;
+      fetchingPayoutsRef.current = false;
+    };
+  }, [typeFilter, activeTab, fetchPayouts]);
 
   const filteredPayouts = payouts.filter(payout => {
     const matchesSearch =
