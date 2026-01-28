@@ -118,6 +118,13 @@ export async function GET(request: NextRequest) {
             businessName: true,
           },
         },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            businessName: true,
+          },
+        },
         category: {
           select: {
             id: true,
@@ -157,8 +164,12 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Format response
-    const formattedProducts = products.map(product => ({
+    // Format response: "added by" = creator (createdByUserId), fallback to supplier for old data
+    const formattedProducts = products.map(product => {
+      const creator = product.createdBy
+      const creatorName = creator ? (creator.businessName || creator.name) : (product.supplier ? (product.supplier.businessName || product.supplier.name) : '')
+      const creatorType = (product.createdByUserType ?? '').toLowerCase() || (product.supplier ? 'supplier' : '')
+      return {
       id: product.id,
       name: product.name,
       sku: product.sku,
@@ -168,19 +179,25 @@ export async function GET(request: NextRequest) {
       moq: product.moq,
       stock: product.stock,
       status: product.status.toLowerCase(),
-      addedBy: product.supplier.businessName || product.supplier.name,
-      addedByType: 'supplier',
-      image: product.images[0] || '',
+      addedBy: creatorName,
+      addedByType: creatorType || 'supplier',
+      image: Array.isArray(product.images) ? product.images[0] || '' : '',
       description: product.description || '',
-      tags: product.tags.map(pt => pt.tag.name), // Extract tag names
+      tags: product.tags?.map(pt => pt.tag?.name).filter(Boolean) || [],
       createdAt: product.createdAt.toISOString(),
-    }))
+    }
+    })
 
     return NextResponse.json({ products: formattedProducts })
-  } catch (error) {
+  } catch (error: any) {
+    const message = error?.message ?? String(error)
     console.error('Get products error:', error)
+    const showDetail = process.env.NODE_ENV !== 'production' || request.headers.get('x-debug') === '1'
     return NextResponse.json(
-      { error: 'Failed to fetch products' },
+      {
+        error: 'Failed to fetch products',
+        ...(showDetail && { detail: message }),
+      },
       { status: 500 }
     )
   }
