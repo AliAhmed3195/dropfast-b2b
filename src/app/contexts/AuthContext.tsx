@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 export type UserType = 'admin' | 'supplier' | 'vendor' | 'customer';
 
@@ -68,6 +68,26 @@ const MOCK_USERS: Record<string, { password: string; user: User }> = {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [initialized, setInitialized] = useState(false);
+
+  // Restore user from localStorage on first load
+  useEffect(() => {
+    try {
+      const stored = typeof window !== 'undefined'
+        ? window.localStorage.getItem('fastdrop-auth-user')
+        : null;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.id && parsed.email && parsed.role) {
+          setUser(parsed);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to restore auth user from storage:', error);
+    } finally {
+      setInitialized(true);
+    }
+  }, []);
 
   const login = async (email: string, password: string): Promise<User | null> => {
     try {
@@ -97,6 +117,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       setUser(loggedInUser);
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('fastdrop-auth-user', JSON.stringify(loggedInUser));
+        }
+      } catch (error) {
+        console.error('Failed to persist auth user to storage:', error);
+      }
       return loggedInUser;
     } catch (error) {
       console.error('Login error:', error);
@@ -106,15 +133,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('fastdrop-auth-user');
+      }
+    } catch (error) {
+      console.error('Failed to clear auth storage on logout:', error);
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
-        user,
+        user: initialized ? user : null,
         login,
         logout,
-        isAuthenticated: !!user,
+        isAuthenticated: initialized && !!user,
       }}
     >
       {children}

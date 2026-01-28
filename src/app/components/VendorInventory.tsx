@@ -19,6 +19,7 @@ import {
   User,
   ShoppingBag,
   Loader2,
+  MoreVertical,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -38,6 +39,12 @@ import { ProductForm } from './ProductForm';
 import { UnifiedImportModal } from './UnifiedImportModal';
 import { useAuth } from '../contexts/AuthContext';
 import { showToast } from '../../lib/toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 
 export function VendorInventory() {
   const { user } = useAuth();
@@ -50,9 +57,11 @@ export function VendorInventory() {
   const [supplierFilter, setSupplierFilter] = useState('all');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'create'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'create' | 'edit'>('list');
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Fetch inventory products
   useEffect(() => {
@@ -92,7 +101,7 @@ export function VendorInventory() {
     };
 
     fetchInventory();
-  }, [user?.id, productTypeFilter, categoryFilter, supplierFilter, searchQuery]);
+  }, [user?.id, productTypeFilter, categoryFilter, supplierFilter, searchQuery, refreshKey]);
 
   // Filter products (client-side filtering for search since API already filters by category/supplier)
   const filteredProducts = products.filter(product => {
@@ -109,6 +118,57 @@ export function VendorInventory() {
     setImportModalOpen(true);
   };
 
+  const handleEditOwnProduct = async (product: any) => {
+    if (product.type !== 'own') {
+      showToast.info('You can only edit your own products.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/admin/products/${product.id}`);
+      const data = await response.json();
+
+      if (response.ok && data.product) {
+        setEditingProduct(data.product);
+        setViewMode('edit');
+      } else {
+        showToast.error(data.error || 'Failed to load product details');
+      }
+    } catch (error) {
+      console.error('Fetch product error:', error);
+      showToast.error('Failed to load product details');
+    }
+  };
+
+  const handleDeleteFromStore = async (product: any) => {
+    if (!product?.id || product.type !== 'own') {
+      showToast.info('You can only delete your own products.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Are you sure you want to remove this product from your store?'
+    );
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/admin/products/${product.id}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success('Product deleted successfully');
+        setProducts(prev => prev.filter(p => p.id !== product.id));
+      } else {
+        showToast.error(data.error || 'Failed to delete product');
+      }
+    } catch (error) {
+      console.error('Delete product error:', error);
+      showToast.error('Failed to delete product');
+    }
+  };
+
   const stats = {
     totalAvailable: products.length,
     supplierProducts: products.filter(p => p.type === 'supplier').length,
@@ -116,11 +176,17 @@ export function VendorInventory() {
     totalSuppliers: availableSuppliers.length,
   };
 
-  // If in create mode, show ProductForm as full page
-  if (viewMode === 'create') {
+  // If in create/edit mode, show ProductForm as full page
+  if (viewMode === 'create' || viewMode === 'edit') {
     return (
       <ProductForm 
-        onClose={() => setViewMode('list')}
+        product={viewMode === 'edit' ? editingProduct : undefined}
+        onClose={() => {
+          setViewMode('list');
+          setEditingProduct(null);
+          // Trigger inventory refresh so edited/created product reflects in cards
+          setRefreshKey(prev => prev + 1);
+        }}
       />
     );
   }
@@ -338,13 +404,39 @@ export function VendorInventory() {
                     </Badge>
                   )}
                 </div>
-                {product.type === 'supplier' && (
-                  <div className="absolute top-3 right-3">
+                <div className="absolute top-3 right-3 flex items-center gap-2">
+                  {product.type === 'supplier' && (
                     <Badge className="bg-white/90 text-slate-900 backdrop-blur-sm">
                       MOQ: {product.moq}
                     </Badge>
-                  </div>
-                )}
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-full bg-white/90 hover:bg-white shadow-sm"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {product.type === 'own' && (
+                        <>
+                          <DropdownMenuItem onClick={() => handleEditOwnProduct(product)}>
+                            Edit Product
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-red-600"
+                            onClick={() => handleDeleteFromStore(product)}
+                          >
+                            Delete from Store
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
 
               {/* Product Info */}

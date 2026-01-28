@@ -27,10 +27,14 @@ import { Switch } from './ui/switch';
 import { Separator } from './ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { showToast } from '../../lib/toast';
+import { useSearchParams } from 'next/navigation';
 
 export function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'profile';
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [isSaving, setIsSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const savingProfileRef = useRef(false);
@@ -42,6 +46,11 @@ export function Settings() {
     newPassword: '',
     confirmPassword: '',
   });
+  const [passwordErrors, setPasswordErrors] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
 
   // Profile Settings
   const [profileData, setProfileData] = useState({
@@ -49,6 +58,15 @@ export function Settings() {
     email: '',
     phone: '',
     company: '',
+    address: '',
+    city: '',
+    country: '',
+  });
+
+  const [profileErrors, setProfileErrors] = useState({
+    name: '',
+    email: '',
+    phone: '',
     address: '',
     city: '',
     country: '',
@@ -103,17 +121,63 @@ export function Settings() {
 
   const handleSaveProfile = async () => {
     if (savingProfileRef.current || !user) return;
-    
+
     // Validation
-    if (!profileData.name || !profileData.email) {
-      showToast.error('Name and email are required');
+    const errors = {
+      name: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      country: '',
+    };
+
+    if (!profileData.name.trim()) {
+      errors.name = 'Full name is required';
+    }
+
+    if (!profileData.email.trim()) {
+      errors.email = 'Email address is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileData.email.trim())) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    if (profileData.phone.trim()) {
+      // Basic phone validation: digits, +, -, spaces, parentheses, min 6 digits
+      const digitsOnly = profileData.phone.replace(/\D/g, '');
+      if (digitsOnly.length < 6) {
+        errors.phone = 'Please enter a valid phone number';
+      }
+    }
+
+    if (!profileData.address.trim()) {
+      errors.address = 'Address is required';
+    }
+
+    if (!profileData.city.trim()) {
+      errors.city = 'City is required';
+    }
+
+    if (!profileData.country.trim()) {
+      errors.country = 'Country is required';
+    }
+
+    const hasErrors = Object.values(errors).some(msg => msg);
+    if (hasErrors) {
+      setProfileErrors(errors);
+      showToast.error('Please fix the highlighted fields');
       return;
     }
 
-    if (profileData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileData.email)) {
-      showToast.error('Please enter a valid email address');
-      return;
-    }
+    // clear previous errors if any
+    setProfileErrors({
+      name: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      country: '',
+    });
     
     savingProfileRef.current = true;
     setIsSaving(true);
@@ -191,20 +255,40 @@ export function Settings() {
   const handleUpdatePassword = async () => {
     if (savingPasswordRef.current || !user) return;
 
-    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
-      showToast.error('Please fill all password fields');
+    const errors = {
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+    };
+
+    if (!passwordData.currentPassword) {
+      errors.currentPassword = 'Current password is required';
+    }
+
+    if (!passwordData.newPassword) {
+      errors.newPassword = 'New password is required';
+    } else if (passwordData.newPassword.length < 6) {
+      errors.newPassword = 'Password must be at least 6 characters long';
+    }
+
+    if (!passwordData.confirmPassword) {
+      errors.confirmPassword = 'Please confirm your new password';
+    } else if (passwordData.newPassword !== passwordData.confirmPassword) {
+      errors.confirmPassword = 'New passwords do not match';
+    }
+
+    const hasErrors = Object.values(errors).some(msg => msg);
+    if (hasErrors) {
+      setPasswordErrors(errors);
+      showToast.error('Please fix the highlighted password fields');
       return;
     }
 
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      showToast.error('New passwords do not match');
-      return;
-    }
-
-    if (passwordData.newPassword.length < 6) {
-      showToast.error('Password must be at least 6 characters long');
-      return;
-    }
+    setPasswordErrors({
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+    });
 
     savingPasswordRef.current = true;
     setIsSaving(true);
@@ -260,7 +344,7 @@ export function Settings() {
         </p>
       </div>
 
-      <Tabs defaultValue="profile" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4 lg:w-auto">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
@@ -292,10 +376,18 @@ export function Settings() {
                     <Input
                       id="name"
                       value={profileData.name}
-                      onChange={e => setProfileData({ ...profileData, name: e.target.value })}
-                      className="pl-10"
+                      onChange={e => {
+                        setProfileData({ ...profileData, name: e.target.value });
+                        if (profileErrors.name) {
+                          setProfileErrors({ ...profileErrors, name: '' });
+                        }
+                      }}
+                      className={`pl-10 ${profileErrors.name ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                     />
                   </div>
+                  {profileErrors.name && (
+                    <p className="mt-1 text-xs text-red-500">{profileErrors.name}</p>
+                  )}
                 </div>
 
                 <div>
@@ -306,10 +398,18 @@ export function Settings() {
                       id="email"
                       type="email"
                       value={profileData.email}
-                      onChange={e => setProfileData({ ...profileData, email: e.target.value })}
-                      className="pl-10"
+                      onChange={e => {
+                        setProfileData({ ...profileData, email: e.target.value });
+                        if (profileErrors.email) {
+                          setProfileErrors({ ...profileErrors, email: '' });
+                        }
+                      }}
+                      className={`pl-10 ${profileErrors.email ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                     />
                   </div>
+                  {profileErrors.email && (
+                    <p className="mt-1 text-xs text-red-500">{profileErrors.email}</p>
+                  )}
                 </div>
               </div>
 
@@ -321,10 +421,18 @@ export function Settings() {
                     <Input
                       id="phone"
                       value={profileData.phone}
-                      onChange={e => setProfileData({ ...profileData, phone: e.target.value })}
-                      className="pl-10"
+                      onChange={e => {
+                        setProfileData({ ...profileData, phone: e.target.value });
+                        if (profileErrors.phone) {
+                          setProfileErrors({ ...profileErrors, phone: '' });
+                        }
+                      }}
+                      className={`pl-10 ${profileErrors.phone ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                     />
                   </div>
+                  {profileErrors.phone && (
+                    <p className="mt-1 text-xs text-red-500">{profileErrors.phone}</p>
+                  )}
                 </div>
 
                 <div>
@@ -348,10 +456,18 @@ export function Settings() {
                   <Input
                     id="address"
                     value={profileData.address}
-                    onChange={e => setProfileData({ ...profileData, address: e.target.value })}
-                    className="pl-10"
+                      onChange={e => {
+                        setProfileData({ ...profileData, address: e.target.value });
+                        if (profileErrors.address) {
+                          setProfileErrors({ ...profileErrors, address: '' });
+                        }
+                      }}
+                      className={`pl-10 ${profileErrors.address ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                   />
                 </div>
+                  {profileErrors.address && (
+                    <p className="mt-1 text-xs text-red-500">{profileErrors.address}</p>
+                  )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -360,8 +476,17 @@ export function Settings() {
                   <Input
                     id="city"
                     value={profileData.city}
-                    onChange={e => setProfileData({ ...profileData, city: e.target.value })}
+                    onChange={e => {
+                      setProfileData({ ...profileData, city: e.target.value });
+                      if (profileErrors.city) {
+                        setProfileErrors({ ...profileErrors, city: '' });
+                      }
+                    }}
+                    className={profileErrors.city ? 'border-red-500 focus-visible:ring-red-500' : ''}
                   />
+                  {profileErrors.city && (
+                    <p className="mt-1 text-xs text-red-500">{profileErrors.city}</p>
+                  )}
                 </div>
 
                 <div>
@@ -371,10 +496,18 @@ export function Settings() {
                     <Input
                       id="country"
                       value={profileData.country}
-                      onChange={e => setProfileData({ ...profileData, country: e.target.value })}
-                      className="pl-10"
+                      onChange={e => {
+                        setProfileData({ ...profileData, country: e.target.value });
+                        if (profileErrors.country) {
+                          setProfileErrors({ ...profileErrors, country: '' });
+                        }
+                      }}
+                      className={`pl-10 ${profileErrors.country ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                     />
                   </div>
+                  {profileErrors.country && (
+                    <p className="mt-1 text-xs text-red-500">{profileErrors.country}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -549,11 +682,19 @@ export function Settings() {
                     id="currentPassword"
                     type="password"
                     placeholder="Enter current password"
-                    className="pl-10"
+                    className={`pl-10 ${passwordErrors.currentPassword ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                     value={passwordData.currentPassword}
-                    onChange={e => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                    onChange={e => {
+                      setPasswordData({ ...passwordData, currentPassword: e.target.value });
+                      if (passwordErrors.currentPassword) {
+                        setPasswordErrors({ ...passwordErrors, currentPassword: '' });
+                      }
+                    }}
                   />
                 </div>
+                {passwordErrors.currentPassword && (
+                  <p className="mt-1 text-xs text-red-500">{passwordErrors.currentPassword}</p>
+                )}
               </div>
 
               <div>
@@ -566,11 +707,19 @@ export function Settings() {
                     id="newPassword"
                     type="password"
                     placeholder="Enter new password"
-                    className="pl-10"
+                    className={`pl-10 ${passwordErrors.newPassword ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                     value={passwordData.newPassword}
-                    onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                    onChange={e => {
+                      setPasswordData({ ...passwordData, newPassword: e.target.value });
+                      if (passwordErrors.newPassword) {
+                        setPasswordErrors({ ...passwordErrors, newPassword: '' });
+                      }
+                    }}
                   />
                 </div>
+                {passwordErrors.newPassword && (
+                  <p className="mt-1 text-xs text-red-500">{passwordErrors.newPassword}</p>
+                )}
               </div>
 
               <div>
@@ -583,11 +732,19 @@ export function Settings() {
                     id="confirmPassword"
                     type="password"
                     placeholder="Confirm new password"
-                    className="pl-10"
+                    className={`pl-10 ${passwordErrors.confirmPassword ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                     value={passwordData.confirmPassword}
-                    onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                    onChange={e => {
+                      setPasswordData({ ...passwordData, confirmPassword: e.target.value });
+                      if (passwordErrors.confirmPassword) {
+                        setPasswordErrors({ ...passwordErrors, confirmPassword: '' });
+                      }
+                    }}
                   />
                 </div>
+                {passwordErrors.confirmPassword && (
+                  <p className="mt-1 text-xs text-red-500">{passwordErrors.confirmPassword}</p>
+                )}
               </div>
             </div>
 

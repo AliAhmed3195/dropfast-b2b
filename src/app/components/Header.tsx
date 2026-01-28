@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Badge } from './ui/badge';
+import { getRoute } from '../../lib/routeMap';
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -49,6 +50,22 @@ export function Header() {
         return 'bg-green-600 text-white border-0';
       default:
         return 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400';
+    }
+  };
+
+  const handleGoToSettings = () => {
+    if (!user?.role) return;
+    const route = getRoute(user.role, 'settings');
+    if (route) {
+      router.push(route);
+    }
+  };
+
+  const handleOpenNotifications = () => {
+    if (!user?.role) return;
+    const baseRoute = getRoute(user.role, 'settings');
+    if (baseRoute) {
+      router.push(`${baseRoute}?tab=notifications`);
     }
   };
 
@@ -118,6 +135,7 @@ export function Header() {
               variant="ghost" 
               size="sm" 
               className="relative h-11 w-11 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all group"
+              onClick={handleOpenNotifications}
             >
               <Bell className="w-5 h-5 group-hover:scale-110 transition-transform" />
               <motion.span 
@@ -189,11 +207,17 @@ export function Header() {
                   <p className="text-xs text-muted-foreground mt-1 font-medium">{user?.company}</p>
                 </div>
                 <DropdownMenuSeparator className="my-2" />
-                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20">
+                <DropdownMenuItem
+                  className="rounded-lg py-2.5 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                  onClick={handleGoToSettings}
+                >
                   <User className="w-4 h-4 mr-3 text-purple-600" />
                   <span className="font-medium">Profile</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-900/20">
+                <DropdownMenuItem
+                  className="rounded-lg py-2.5 cursor-pointer hover:bg-cyan-50 dark:hover:bg-cyan-900/20"
+                  onClick={handleGoToSettings}
+                >
                   <Settings className="w-4 h-4 mr-3 text-cyan-600" />
                   <span className="font-medium">Settings</span>
                 </DropdownMenuItem>

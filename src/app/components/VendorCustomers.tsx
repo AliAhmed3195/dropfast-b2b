@@ -99,6 +99,52 @@ export function VendorCustomers() {
   const totalOrders = customers.reduce((sum, c) => sum + (c.orderCount || 0), 0);
   const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
+  const handleExportData = () => {
+    if (filteredCustomers.length === 0) {
+      showToast.info('No customers to export');
+      return;
+    }
+
+    const header = [
+      'Name',
+      'Email',
+      'Phone',
+      'Status',
+      'Total Orders',
+      'Total Spent',
+      'Last Order',
+      'Location',
+      'Rating',
+    ];
+
+    const rows = filteredCustomers.map((c) => [
+      `"${c.name}"`,
+      `"${c.email || ''}"`,
+      `"${c.phone || ''}"`,
+      c.status,
+      c.totalOrders ?? c.orderCount ?? 0,
+      c.totalSpent ?? 0,
+      c.lastOrder ? new Date(c.lastOrder).toISOString() : '',
+      `"${c.location || ''}"`,
+      c.rating ?? '',
+    ]);
+
+    const csvContent =
+      [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'customers-export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast.success('Customer data exported');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -123,7 +169,10 @@ export function VendorCustomers() {
             Manage your registered customers and view their activity
           </p>
         </div>
-        <Button className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white">
+        <Button
+          className="bg-gradient-to-r from-purple-600 to-cyan-600 text-white"
+          onClick={handleExportData}
+        >
           <Download className="w-4 h-4 mr-2" />
           Export Data
         </Button>

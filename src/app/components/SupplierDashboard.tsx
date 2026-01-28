@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
+import { useRouter } from 'next/navigation';
 import {
   Package,
   TrendingUp,
@@ -41,6 +42,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { showToast } from '../../lib/toast';
 
 export function SupplierDashboard() {
+  const router = useRouter();
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -155,6 +157,58 @@ export function SupplierDashboard() {
     product.sku?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleViewOrEditProduct = (productId: string) => {
+    // Navigate to supplier products page where full CRUD (view/edit) is available
+    router.push('/dashboard/supplier/products');
+  };
+
+  const handleDeleteProduct = async (product: any) => {
+    if (!product?.id) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete product "${product.name}"? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/admin/products/${product.id}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success('Product deleted successfully!');
+
+        // Optimistically update dashboard data (products + totalProducts count)
+        setDashboardData((prev: any) => {
+          if (!prev) return prev;
+          const remainingProducts = (prev.products || []).filter(
+            (p: any) => p.id !== product.id
+          );
+
+          return {
+            ...prev,
+            products: remainingProducts,
+            stats: prev.stats
+              ? {
+                  ...prev.stats,
+                  totalProducts: Math.max(
+                    0,
+                    (prev.stats.totalProducts || 0) - 1
+                  ),
+                }
+              : prev.stats,
+          };
+        });
+      } else {
+        showToast.error(data.error || 'Failed to delete product');
+      }
+    } catch (error) {
+      console.error('Delete product error:', error);
+      showToast.error('Failed to delete product');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -187,7 +241,10 @@ export function SupplierDashboard() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
-          <Button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm">
+          <Button
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
+            onClick={() => router.push('/dashboard/supplier/products')}
+          >
             <Plus className="w-5 h-5 mr-2" />
             Add Product
           </Button>
@@ -395,7 +452,17 @@ export function SupplierDashboard() {
                               <Edit className="w-4 h-4 mr-3 text-cyan-600" />
                               Edit Product
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium">
+                            <DropdownMenuItem
+                              className="rounded-lg py-2.5 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 font-medium"
+                              onClick={() => handleViewOrEditProduct(product.id)}
+                            >
+                              <Edit className="w-4 h-4 mr-3 text-cyan-600" />
+                              Open in Products
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="rounded-lg py-2.5 cursor-pointer text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium"
+                              onClick={() => handleDeleteProduct(product)}
+                            >
                               <Trash2 className="w-4 h-4 mr-3" />
                               Delete
                             </DropdownMenuItem>

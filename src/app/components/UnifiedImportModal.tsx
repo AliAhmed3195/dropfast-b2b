@@ -84,10 +84,34 @@ export function UnifiedImportModal({ product, onClose }: UnifiedImportModalProps
   }, [user?.id]);
 
   useEffect(() => {
-    const defaultPrice = product.type === 'supplier' 
-      ? (product.supplierPrice! * 1.5).toFixed(2) 
-      : product.retailPrice!.toFixed(2);
-    
+    let basePrice: number | null = null;
+
+    if (product.type === 'supplier') {
+      const rawSupplier =
+        typeof product.supplierPrice === 'number'
+          ? product.supplierPrice
+          : product.supplierPrice !== undefined
+          ? parseFloat(String(product.supplierPrice))
+          : NaN;
+
+      if (!Number.isNaN(rawSupplier) && rawSupplier > 0) {
+        basePrice = rawSupplier * 1.5;
+      }
+    } else {
+      const rawRetail =
+        typeof product.retailPrice === 'number'
+          ? product.retailPrice
+          : product.retailPrice !== undefined
+          ? parseFloat(String(product.retailPrice))
+          : NaN;
+
+      if (!Number.isNaN(rawRetail) && rawRetail > 0) {
+        basePrice = rawRetail;
+      }
+    }
+
+    const defaultPrice = basePrice !== null ? basePrice.toFixed(2) : '';
+
     setImportForm({
       storeId: '',
       sellingPrice: defaultPrice,

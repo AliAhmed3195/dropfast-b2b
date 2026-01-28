@@ -111,16 +111,21 @@ export async function GET(request: NextRequest) {
     // Format products
     const formattedProducts = products.map(product => {
       const hasSupplierId = product.supplierId !== null
-      
+
       return {
         id: product.id,
         name: product.name,
         sku: product.sku,
-        supplier: product.supplier?.businessName || product.supplier?.name || (hasSupplierId ? 'Unknown' : 'Self Created'),
+        supplier:
+          product.supplier?.businessName ||
+          product.supplier?.name ||
+          (hasSupplierId ? 'Unknown' : 'Self Created'),
         supplierId: product.supplierId,
         category: product.category?.name || 'Uncategorized',
         categoryId: product.categoryId,
+        // Cost and retail prices (in platform currency, typically USD)
         supplierPrice: product.costPrice, // Cost price from supplier
+        retailPrice: product.sellingPrice, // Selling price for own products
         moq: product.moq,
         stock: product.stock,
         image: product.images?.[0] || '',

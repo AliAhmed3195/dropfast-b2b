@@ -276,3 +276,51 @@ export async function PUT(
   }
 }
 
+// DELETE /api/admin/products/[id] - Delete product
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const productId = params.id
+
+    if (!productId) {
+      return NextResponse.json(
+        { error: 'Product ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if product exists
+    const existingProduct = await prisma.product.findUnique({
+      where: { id: productId },
+    })
+
+    if (!existingProduct) {
+      return NextResponse.json(
+        { error: 'Product not found' },
+        { status: 404 }
+      )
+    }
+
+    // Detach order items (keep historical orders but remove FK to product)
+    await prisma.orderItem.updateMany({
+      where: { productId },
+      data: { productId: null },
+    })
+
+    // Delete the product (related ProductTag / StoreProduct / Wishlist rows
+    // will be removed via onDelete: Cascade where defined in the schema)
+    await prisma.product.delete({
+      where: { id: productId },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('Delete product error:', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to delete product' },
+      { status: 500 }
+    )
+  }
+}

@@ -159,6 +159,38 @@ export function SupplierProducts() {
     }
   };
 
+  const handleDeleteProduct = async (product: any) => {
+    if (!product?.id) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete product "${product.name}"? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/admin/products/${product.id}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success('Product deleted successfully!');
+
+        // Remove product from local state
+        setProducts(prev => prev.filter(p => p.id !== product.id));
+
+        // Close detail view if open
+        setShowDetailView(false);
+        setSelectedProduct(null);
+      } else {
+        showToast.error(data.error || 'Failed to delete product');
+      }
+    } catch (error) {
+      console.error('Delete product error:', error);
+      showToast.error('Failed to delete product');
+    }
+  };
+
   const handleBackToList = () => {
     setViewMode('list');
     setEditingProduct(null);
@@ -401,9 +433,9 @@ export function SupplierProducts() {
                           <Edit className="w-4 h-4 mr-2" />
                           Edit Product
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-red-600"
-                          onClick={() => showToast.success('Product deleted successfully!')}
+                          onClick={() => handleDeleteProduct(product)}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           Delete
@@ -486,6 +518,8 @@ export function SupplierProducts() {
                   setShowDetailView(false);
                   setSelectedProduct(null);
                 }}
+                onEdit={() => handleEditProduct(selectedProduct)}
+                onDelete={() => handleDeleteProduct(selectedProduct)}
               />
             </motion.div>
           </>
@@ -498,12 +532,16 @@ export function SupplierProducts() {
 // Product Detail View Component
 function ProductDetailView(
   {
-  product,
-  onClose,
-}: {
-  product: any;
-  onClose: () => void;
-}) {
+    product,
+    onClose,
+    onEdit,
+    onDelete,
+  }: {
+    product: any;
+    onClose: () => void;
+    onEdit: () => void;
+    onDelete: () => void;
+  }) {
   const sliderSettings = {
     dots: true,
     infinite: true,
@@ -795,7 +833,7 @@ function ProductDetailView(
         <div className="flex gap-3 pt-4 border-t">
           <Button 
             className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
-            onClick={onClose}
+            onClick={onEdit}
           >
             <Edit className="w-4 h-4 mr-2" />
             Edit Product
@@ -803,6 +841,7 @@ function ProductDetailView(
           <Button
             variant="outline"
             className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+            onClick={onDelete}
           >
             <Trash2 className="w-4 h-4 mr-2" />
             Delete
