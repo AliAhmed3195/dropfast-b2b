@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { PublicStore } from '../../../src/app/components/public-store/PublicStore'
 import { Loader2 } from 'lucide-react'
@@ -11,43 +11,43 @@ export default function StorePage() {
   const [storeData, setStoreData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const inFlightSlugRef = useRef<string | null>(null)
+  const mountedRef = useRef(false)
 
   useEffect(() => {
-    let isMounted = true
-    
-    const fetchStore = async () => {
-      if (!slug) {
-        if (isMounted) {
-          setError('Store slug is required')
-          setLoading(false)
-        }
-        return
-      }
+    mountedRef.current = true
+    if (!slug) {
+      setError('Store slug is required')
+      setLoading(false)
+      return () => { mountedRef.current = false }
+    }
 
+    // Strict Mode: avoid duplicate request – if a fetch for this slug is already in progress, skip
+    if (inFlightSlugRef.current === slug) {
+      return () => { mountedRef.current = false }
+    }
+    inFlightSlugRef.current = slug
+
+    let isMounted = true
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+
+    const fetchStore = async () => {
       try {
         setLoading(true)
         setError(null)
-        
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
-        
+
         const response = await fetch(`/api/public/store/${slug}`, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
         })
-        
+
         clearTimeout(timeoutId)
-        
-        // Log response for debugging
-        console.log('Store fetch response:', {
-          status: response.status,
-          ok: response.ok,
-          statusText: response.statusText,
-        })
-        
+        // Don't clear inFlightSlugRef here – second mount (Strict Mode) will skip duplicate request
+
+        if (!mountedRef.current) return
+
         if (!response.ok) {
           let errorData: any = {}
           try {
@@ -62,61 +62,47 @@ export default function StorePage() {
             errorData,
           })
           
-          if (isMounted) {
-            if (response.status === 404) {
-              setError(errorData.error || `Store "${slug}" not found. Please check the URL and try again.`)
-            } else if (response.status === 403) {
-              setError(errorData.error || 'Store is not available. Please publish the store first by clicking "Publish" in the store builder.')
-            } else {
-              setError(errorData.error || `Failed to load store (${response.status}). Please try again later.`)
-            }
-            setLoading(false)
+          if (response.status === 404) {
+            setError(errorData.error || `Store "${slug}" not found. Please check the URL and try again.`)
+          } else if (response.status === 403) {
+            setError(errorData.error || 'Store is not available. Please publish the store first by clicking "Publish" in the store builder.')
+          } else {
+            setError(errorData.error || `Failed to load store (${response.status}). Please try again later.`)
           }
+          setLoading(false)
           return
         }
 
         const data = await response.json()
-        console.log('Store data received:', data)
-        
-        if (!isMounted) return
-        
-        if (!data) {
-          setError('No data received from server')
+        if (!mountedRef.current) return
+        if (!data?.store) {
+          setError(!data ? 'No data received from server' : 'Invalid store data: store object not found in response')
           setLoading(false)
           return
         }
 
-        if (!data.store) {
-          setError('Invalid store data: store object not found in response')
-          setLoading(false)
-          return
-        }
-
-        setStoreData({
-          ...data.store,
-          slug: slug,
-        })
+        setStoreData({ ...data.store, slug })
         setError(null)
       } catch (err: any) {
-        console.error('Fetch store error:', err)
-        if (isMounted) {
-          if (err.name === 'AbortError') {
-            setError('Request timed out. Please check your connection and try again.')
-          } else {
-            setError(err.message || 'Failed to load store. Please check your connection and try again.')
-          }
+        inFlightSlugRef.current = null // Allow retry on error
+        if (!mountedRef.current) return
+        if (err.name === 'AbortError') {
+          setError('Request timed out. Please check your connection and try again.')
+        } else {
+          setError(err.message || 'Failed to load store. Please check your connection and try again.')
         }
       } finally {
-        if (isMounted) {
-          setLoading(false)
-        }
+        if (mountedRef.current) setLoading(false)
       }
     }
 
     fetchStore()
-    
+
     return () => {
       isMounted = false
+      mountedRef.current = false
+      clearTimeout(timeoutId)
+      // Don't abort – let the single request complete so Strict Mode doesn't trigger a second call
     }
   }, [slug])
 

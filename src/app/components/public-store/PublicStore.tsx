@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { StoreLandingPage } from './StoreLandingPage';
 import { ProductDetailPage } from './ProductDetailPage';
@@ -71,7 +71,9 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<any>(storeData);
-  
+  const inFlightProductsSlugRef = useRef<string | null>(null);
+  const mountedRef = useRef(false);
+
   // Save cart to localStorage whenever it changes
   useEffect(() => {
     if (typeof window !== 'undefined' && slug) {
@@ -79,38 +81,50 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
     }
   }, [storeCart, slug]);
 
-  // Fetch store and products from API
+  // Sync store from props (parent already fetched store – no duplicate store API call)
   useEffect(() => {
-    const fetchStoreData = async () => {
-      if (!storeData.slug) {
-        setLoading(false);
-        return;
-      }
+    setStore(storeData);
+  }, [storeData]);
 
+  // Fetch only products (store already provided by parent). Single request in Strict Mode.
+  useEffect(() => {
+    mountedRef.current = true;
+    const slugForProducts = storeData?.slug;
+    if (!slugForProducts) {
+      setLoading(false);
+      return () => { mountedRef.current = false; };
+    }
+
+    // Strict Mode: if a fetch for this slug is already in progress, skip duplicate
+    if (inFlightProductsSlugRef.current === slugForProducts) {
+      return () => { mountedRef.current = false; };
+    }
+    inFlightProductsSlugRef.current = slugForProducts;
+
+    const fetchProducts = async () => {
       try {
-        // Fetch store data
-        const storeResponse = await fetch(`/api/public/store/${storeData.slug}`);
-        if (storeResponse.ok) {
-          const storeData = await storeResponse.json();
-          setStore(storeData.store);
-        }
-
-        // Fetch products
-        const productsResponse = await fetch(`/api/public/store/${storeData.slug}/products`);
+        const productsResponse = await fetch(`/api/public/store/${slugForProducts}/products`);
+        // Don't clear inFlightProductsSlugRef here – Strict Mode second mount will skip duplicate
+        if (!mountedRef.current) return;
         if (productsResponse.ok) {
           const productsData = await productsResponse.json();
           setProducts(productsData.products || []);
         }
-      } catch (error) {
-        console.error('Fetch store data error:', error);
+      } catch (err: any) {
+        inFlightProductsSlugRef.current = null; // Allow retry on error
+        if (!mountedRef.current) return;
+        console.error('Fetch store products error:', err);
         showToast.error('Failed to load store data');
       } finally {
-        setLoading(false);
+        if (mountedRef.current) setLoading(false);
       }
     };
 
-    fetchStoreData();
-  }, [storeData.slug]);
+    fetchProducts();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [storeData?.slug]);
 
   // Get store theme
   const storeTheme = store?.theme || storeData.theme || {
