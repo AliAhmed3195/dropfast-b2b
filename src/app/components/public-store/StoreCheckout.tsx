@@ -1,7 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft,
   CreditCard,
@@ -78,9 +77,9 @@ export function StoreCheckout({
   const tax = subtotal * 0.1;
   const total = subtotal + shipping + tax;
 
-  const handleInputChange = (field: keyof CheckoutFormData, value: string) => {
-    setFormData({ ...formData, [field]: value });
-  };
+  const handleInputChange = useCallback((field: keyof CheckoutFormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  }, []);
 
   const steps = [
     { number: 1, title: 'Shipping', icon: Truck },
@@ -296,17 +295,17 @@ export function StoreCheckout({
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Checkout</h1>
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8">Checkout</h1>
 
         {/* Progress Steps */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between max-w-2xl mx-auto">
             {steps.map((step, index) => (
               <React.Fragment key={step.number}>
-                <div className="flex flex-col items-center flex-1">
+                <div className="flex flex-col items-center flex-1 min-w-0">
                   <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-colors ${
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center mb-2 transition-colors flex-shrink-0 ${
                       currentStep >= step.number ? 'text-white' : 'bg-gray-200 text-gray-400'
                     }`}
                     style={{
@@ -314,10 +313,10 @@ export function StoreCheckout({
                         currentStep >= step.number ? storeTheme.primaryColor : undefined,
                     }}
                   >
-                    <step.icon className="w-6 h-6" />
+                    <step.icon className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
                   <span
-                    className={`text-sm font-medium ${
+                    className={`text-xs sm:text-sm font-medium text-center ${
                       currentStep >= step.number ? '' : 'text-gray-400'
                     }`}
                     style={{
@@ -328,7 +327,7 @@ export function StoreCheckout({
                   </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className="flex-1 h-0.5 bg-gray-200 mx-4 mb-8">
+                  <div className="flex-1 h-0.5 bg-gray-200 mx-2 sm:mx-4 mb-6 sm:mb-8 min-w-[20px]">
                     <div
                       className="h-full transition-all duration-300"
                       style={{
@@ -343,15 +342,12 @@ export function StoreCheckout({
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           {/* Checkout Form */}
           <div className="lg:col-span-2">
             {/* Step 1: Shipping Information */}
             {currentStep === 1 && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >
+              <div>
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -359,103 +355,110 @@ export function StoreCheckout({
                       Shipping Information
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4">
+                  <CardContent className="space-y-6">
+                    {/* Full Name and Email - Side by side on larger screens */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="fullName">
+                        <Label htmlFor="fullName" className="text-sm font-medium">
                           Full Name <span className="text-red-500">*</span>
                         </Label>
                         <div className="relative">
-                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                           <Input
                             id="fullName"
                             placeholder="John Doe"
                             value={formData.fullName}
                             onChange={(e) => handleInputChange('fullName', e.target.value)}
-                            className="pl-10"
+                            className="pl-10 h-11"
                           />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="email">
+                        <Label htmlFor="email" className="text-sm font-medium">
                           Email <span className="text-red-500">*</span>
                         </Label>
                         <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                           <Input
                             id="email"
                             type="email"
                             placeholder="john@example.com"
                             value={formData.email}
                             onChange={(e) => handleInputChange('email', e.target.value)}
-                            className="pl-10"
+                            className="pl-10 h-11"
                           />
                         </div>
                       </div>
                     </div>
 
+                    {/* Phone Number - Full width */}
                     <div className="space-y-2">
-                      <Label htmlFor="phone">
+                      <Label htmlFor="phone" className="text-sm font-medium">
                         Phone Number <span className="text-red-500">*</span>
                       </Label>
                       <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                         <Input
                           id="phone"
+                          type="tel"
                           placeholder="+1 (555) 000-0000"
                           value={formData.phone}
                           onChange={(e) => handleInputChange('phone', e.target.value)}
-                          className="pl-10"
+                          className="pl-10 h-11"
                         />
                       </div>
                     </div>
 
+                    {/* Street Address - Full width */}
                     <div className="space-y-2">
-                      <Label htmlFor="address">
+                      <Label htmlFor="address" className="text-sm font-medium">
                         Street Address <span className="text-red-500">*</span>
                       </Label>
                       <div className="relative">
-                        <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                         <Input
                           id="address"
                           placeholder="123 Main Street"
                           value={formData.address}
                           onChange={(e) => handleInputChange('address', e.target.value)}
-                          className="pl-10"
+                          className="pl-10 h-11"
                         />
                       </div>
                     </div>
 
-                    <div className="grid md:grid-cols-3 gap-4">
+                    {/* City, State, ZIP - Three columns on larger screens */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="city">City</Label>
+                        <Label htmlFor="city" className="text-sm font-medium">City</Label>
                         <div className="relative">
-                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none z-10" />
                           <Input
                             id="city"
                             placeholder="New York"
                             value={formData.city}
                             onChange={(e) => handleInputChange('city', e.target.value)}
-                            className="pl-10"
+                            className="pl-10 h-11"
                           />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="state">State</Label>
+                        <Label htmlFor="state" className="text-sm font-medium">State</Label>
                         <Input
                           id="state"
                           placeholder="NY"
                           value={formData.state}
                           onChange={(e) => handleInputChange('state', e.target.value)}
+                          className="h-11"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="zipCode">ZIP Code</Label>
+                        <Label htmlFor="zipCode" className="text-sm font-medium">ZIP Code</Label>
                         <Input
                           id="zipCode"
                           placeholder="10001"
                           value={formData.zipCode}
                           onChange={(e) => handleInputChange('zipCode', e.target.value)}
+                          className="h-11"
                         />
                       </div>
                     </div>
@@ -469,15 +472,12 @@ export function StoreCheckout({
                     </Button>
                   </CardContent>
                 </Card>
-              </motion.div>
+              </div>
             )}
 
             {/* Step 2: Payment Method */}
             {currentStep === 2 && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >
+              <div>
                 <PaymentStepComponent
                   formData={formData}
                   clientSecret={clientSecret}
@@ -486,16 +486,12 @@ export function StoreCheckout({
                   onBack={() => setCurrentStep(1)}
                   onSuccess={() => setCurrentStep(3)}
                 />
-              </motion.div>
+              </div>
             )}
 
             {/* Step 3: Review & Place Order */}
             {currentStep === 3 && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="space-y-6"
-              >
+              <div className="space-y-6">
                 {/* Shipping Address Card */}
                 <Card>
                   <CardHeader>
@@ -586,7 +582,7 @@ export function StoreCheckout({
                 <p className="text-sm text-gray-600 text-center">
                   By placing this order, you agree to our Terms of Service and Privacy Policy
                 </p>
-              </motion.div>
+              </div>
             )}
           </div>
 
