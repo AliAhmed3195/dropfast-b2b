@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
   ArrowLeft,
@@ -25,9 +25,6 @@ import { showToast } from '../../../lib/toast';
 import { CartItem } from '../../contexts/AppContext';
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-
-// Initialize Stripe
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
 
 interface CheckoutFormData {
   fullName: string;
@@ -58,6 +55,21 @@ export function StoreCheckout({
   onBack,
   onPlaceOrder,
 }: StoreCheckoutProps) {
+  // Key from server at runtime – restart pe .env.staging pick hoti hai (no rebuild)
+  const [stripePublishableKey, setStripePublishableKey] = useState<string | null>(null);
+  useEffect(() => {
+    let c = false;
+    fetch('/api/public/stripe-config')
+      .then((r) => r.json())
+      .then((d) => { if (!c && d?.publishableKey) setStripePublishableKey(d.publishableKey); })
+      .finally(() => { c = true; });
+    return () => { c = true; };
+  }, []);
+  const stripePromise = useMemo(
+    () => (stripePublishableKey ? loadStripe(stripePublishableKey) : Promise.resolve(null)),
+    [stripePublishableKey]
+  );
+
   const [currentStep, setCurrentStep] = useState(1);
   const [paymentIntentId, setPaymentIntentId] = useState<string | undefined>();
   const [clientSecret, setClientSecret] = useState<string | undefined>();
@@ -231,7 +243,9 @@ export function StoreCheckout({
                 <div className="space-y-2">
                   <Label>Card Details</Label>
                   <div className="p-3 border rounded-md">
-                    {clientSecret ? (
+                    {!stripe ? (
+                      <div className="text-sm text-amber-600">Credit card not configured. Use another payment method.</div>
+                    ) : clientSecret ? (
                       <PaymentElement />
                     ) : (
                       <div className="text-sm text-gray-500">Loading payment form...</div>
@@ -264,10 +278,10 @@ export function StoreCheckout({
                 <Button
                   className="flex-1 text-white"
                   onClick={handlePayment}
-                  disabled={isProcessing}
+                  disabled={isProcessing || !stripe}
                   style={{ backgroundColor: storeTheme.primaryColor }}
                 >
-                  {isProcessing ? 'Processing...' : 'Process Payment'}
+                  {isProcessing ? 'Processing...' : stripe ? 'Process Payment' : 'Payment not configured'}
                 </Button>
               ) : (
                 <Button
@@ -655,16 +669,14 @@ export function StoreCheckout({
     );
   };
 
-  if (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
-    return (
-      <Elements 
-        stripe={stripePromise} 
-        options={getElementsOptions()}
-        key={clientSecret || 'initial'}
-      >
-        <CheckoutForm />
-      </Elements>
-    );
-  }
-  return <CheckoutForm />;
+  // Always Elements – key from /api/public/stripe-config (server .env at runtime, restart = .env.staging)
+  return (
+    <Elements
+      stripe={stripePromise}
+      options={getElementsOptions()}
+      key={`${stripePublishableKey ?? 'n'}-${clientSecret || 'i'}`}
+    >
+      <CheckoutForm />
+    </Elements>
+  );
 }
