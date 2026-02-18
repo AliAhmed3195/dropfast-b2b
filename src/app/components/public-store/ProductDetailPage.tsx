@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { showToast } from '../../../lib/toast'
+import { useStoreBasePath } from '../../../lib/store-subdomain'
 
 interface ProductDetailPageProps {
   product: any
@@ -38,6 +39,7 @@ export function ProductDetailPage({
   storeSlug,
 }: ProductDetailPageProps) {
   const router = useRouter()
+  const basePath = useStoreBasePath(storeSlug || '')
   const [selectedImage, setSelectedImage] = useState(0)
   const [quantity, setQuantity] = useState(1)
   const [isWishlisted, setIsWishlisted] = useState(false)
@@ -104,7 +106,7 @@ export function ProductDetailPage({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center gap-2 text-sm">
               <button
-                onClick={() => router.push(`/store/${storeSlug}`)}
+                onClick={() => router.push(basePath || '/')}
                 className="text-gray-600 hover:underline transition"
                 style={{ '--hover-color': storeTheme.primaryColor } as React.CSSProperties}
                 onMouseEnter={(e) => (e.currentTarget.style.color = storeTheme.primaryColor)}
@@ -114,7 +116,7 @@ export function ProductDetailPage({
               </button>
               <span className="text-gray-400">/</span>
               <button
-                onClick={() => router.push(`/store/${storeSlug}`)}
+                onClick={() => router.push(basePath || '/')}
                 className="text-gray-600 hover:underline transition"
                 onMouseEnter={(e) => (e.currentTarget.style.color = storeTheme.primaryColor)}
                 onMouseLeave={(e) => (e.currentTarget.style.color = '#4b5563')}
@@ -125,7 +127,7 @@ export function ProductDetailPage({
                 <>
                   <span className="text-gray-400">/</span>
                   <button
-                    onClick={() => router.push(`/store/${storeSlug}?category=${product.category.toLowerCase()}`)}
+                    onClick={() => router.push(`${basePath}?category=${product.category.toLowerCase()}`)}
                     className="text-gray-600 hover:underline transition"
                     onMouseEnter={(e) => (e.currentTarget.style.color = storeTheme.primaryColor)}
                     onMouseLeave={(e) => (e.currentTarget.style.color = '#4b5563')}
@@ -263,7 +265,7 @@ export function ProductDetailPage({
                   <span className="text-gray-400">|</span>
                   <span className="text-gray-600">Category:</span>
                   <button
-                    onClick={() => storeSlug && router.push(`/store/${storeSlug}?category=${product.category.toLowerCase()}`)}
+                    onClick={() => storeSlug && router.push(`${basePath}?category=${product.category.toLowerCase()}`)}
                     className="font-medium hover:underline transition"
                     style={{ color: storeTheme.primaryColor }}
                   >
@@ -489,7 +491,7 @@ export function ProductDetailPage({
               {relatedProducts.slice(0, 4).map((relatedProduct: any) => (
                 <button
                   key={relatedProduct.id}
-                  onClick={() => storeSlug && router.push(`/store/${storeSlug}/product/${relatedProduct.id}`)}
+                  onClick={() => storeSlug && router.push(`${basePath}/product/${relatedProduct.id}`)}
                   className="group bg-white rounded-xl overflow-hidden border border-gray-200 hover:shadow-lg transition text-left"
                 >
                   <div className="relative aspect-square overflow-hidden bg-gray-100">

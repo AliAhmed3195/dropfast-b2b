@@ -65,11 +65,13 @@ export async function GET(request: NextRequest) {
       const ordersCount = store.orders.length
       const revenue = store.orders.reduce((sum, order) => sum + order.total, 0)
 
+      const storeDomain = process.env.NEXT_PUBLIC_STORE_DOMAIN || 'dropsified.com'
       return {
         id: store.id,
         name: store.name,
         slug: store.slug,
-        url: `/store/${store.slug}`, // Public URL
+        url: `/store/${store.slug}`,
+        subdomainUrl: `https://${store.slug}.${storeDomain}`,
         storeType: store.storeType.toLowerCase(),
         template: store.template.toLowerCase(),
         templateId: getTemplateIdFromEnum(store.template, store.storeType), // For UI
@@ -197,6 +199,7 @@ export async function POST(request: NextRequest) {
       parsedSections = initialSections
     }
 
+    const storeDomain = process.env.NEXT_PUBLIC_STORE_DOMAIN || 'dropsified.com'
     return NextResponse.json(
       {
         store: {
@@ -204,6 +207,7 @@ export async function POST(request: NextRequest) {
           name: newStore.name,
           slug: newStore.slug,
           url: `/store/${newStore.slug}`,
+          subdomainUrl: `https://${newStore.slug}.${storeDomain}`,
           storeType: newStore.storeType.toLowerCase(),
           template: newStore.template.toLowerCase(),
           templateId: getTemplateIdFromEnum(newStore.template, newStore.storeType),

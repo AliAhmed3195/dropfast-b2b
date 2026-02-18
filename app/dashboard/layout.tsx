@@ -18,7 +18,12 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/')
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+      if (baseUrl) {
+        window.location.href = baseUrl.replace(/\/$/, '') + '/'
+      } else {
+        router.push('/')
+      }
       return
     }
 

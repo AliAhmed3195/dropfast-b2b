@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useStoreBasePath } from '../../../../../src/lib/store-subdomain'
 import { PublicStore } from '../../../../../src/app/components/public-store/PublicStore'
 import { Loader2 } from 'lucide-react'
 
@@ -10,6 +11,7 @@ export default function ProductPage() {
   const router = useRouter()
   const slug = params.slug as string
   const productId = params.productId as string
+  const basePath = useStoreBasePath(slug)
   const [storeData, setStoreData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -98,7 +100,7 @@ export default function ProductPage() {
           <h1 className="text-2xl font-bold mb-2">Error</h1>
           <p className="text-muted-foreground mb-4">{error || 'Store not found'}</p>
           <button
-            onClick={() => router.push(`/store/${slug}`)}
+            onClick={() => router.push(basePath || '/')}
             className="text-indigo-600 hover:text-indigo-700 underline"
           >
             Back to Store
@@ -112,7 +114,7 @@ export default function ProductPage() {
     <PublicStore
       storeData={storeData}
       initialView={{ type: 'product', productId }}
-      onClose={() => router.push(`/store/${slug}`)}
+      onClose={() => router.push(basePath || '/')}
     />
   )
 }

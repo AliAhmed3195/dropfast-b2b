@@ -63,12 +63,14 @@ export async function GET(
       }
     }
 
+    const storeDomain = process.env.NEXT_PUBLIC_STORE_DOMAIN || 'dropsified.com'
     return NextResponse.json({
       store: {
         id: store.id,
         name: store.name,
         slug: store.slug,
         url: `/store/${store.slug}`,
+        subdomainUrl: `https://${store.slug}.${storeDomain}`,
         description: store.description,
         industry: store.industry,
         storeType: store.storeType.toLowerCase(),

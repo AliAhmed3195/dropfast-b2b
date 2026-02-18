@@ -272,7 +272,8 @@ export function VendorStores() {
 
   const filteredStores = stores.filter(store =>
     store.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    store.url.toLowerCase().includes(searchQuery.toLowerCase())
+    store.url.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    ((store as any).subdomainUrl || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const totalStats = {
@@ -451,11 +452,11 @@ export function VendorStores() {
                         <Eye className="w-4 h-4 mr-2" />
                         Preview Store
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => window.open(store.url.startsWith('http') ? store.url : `${window.location.origin}${store.url}`, '_blank')}>
+                      <DropdownMenuItem onClick={() => window.open((store as any).subdomainUrl || (store.url.startsWith('http') ? store.url : `${window.location.origin}${store.url}`), '_blank')}>
                         <ExternalLink className="w-4 h-4 mr-2" />
                         View Live
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleCopyUrl(store.url)}>
+                      <DropdownMenuItem onClick={() => handleCopyUrl((store as any).subdomainUrl || store.url)}>
                         <Copy className="w-4 h-4 mr-2" />
                         Copy URL
                       </DropdownMenuItem>
@@ -490,7 +491,7 @@ export function VendorStores() {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-white mb-1">{store.name}</h3>
-                  <p className="text-sm text-white/80 font-mono">{store.url}</p>
+                  <p className="text-sm text-white/80 font-mono">{(store as any).subdomainUrl || store.url}</p>
                 </div>
               </div>
 

@@ -7,6 +7,7 @@ import { ProductDetailPage } from './ProductDetailPage';
 import { StoreCart } from './StoreCart';
 import { StoreCheckout } from './StoreCheckout';
 import { showToast } from '../../../lib/toast';
+import { useStoreBasePath } from '../../../lib/store-subdomain';
 import { Loader2 } from 'lucide-react';
 
 interface PublicStoreProps {
@@ -57,6 +58,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
   const router = useRouter();
   const params = useParams();
   const slug = params.slug as string || storeData.slug;
+  const basePath = useStoreBasePath(slug);
   const [currentView, setCurrentView] = useState<PublicStoreView>(initialView || { type: 'landing' });
   
   // Load cart from localStorage on mount
@@ -239,7 +241,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
 
       const data = await response.json();
       setStoreCart([]);
-      router.push(`/store/${slug}`);
+      router.push(basePath || '/');
       showToast.success(`Order placed successfully! Order #${data.order.orderNumber}`);
     } catch (error: any) {
       console.error('Place order error:', error);
@@ -261,7 +263,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
               sections: store?.sections || storeData.sections || storeData.template?.sections || [],
             }}
             products={storeProducts}
-            onProductClick={(productId) => router.push(`/store/${slug}/product/${productId}`)}
+            onProductClick={(productId) => router.push(`${basePath}/product/${productId}`)}
           />
         );
 
@@ -281,7 +283,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
             storeTheme={storeTheme}
             relatedProducts={relatedProducts}
             onAddToCart={handleAddToCart}
-            onBack={() => router.push(`/store/${slug}`)}
+            onBack={() => router.push(basePath || '/')}
             storeSlug={slug}
           />
         );
@@ -293,8 +295,8 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
             storeTheme={storeTheme}
             onUpdateQuantity={handleUpdateCartQuantity}
             onRemoveItem={handleRemoveFromCart}
-            onContinueShopping={() => router.push(`/store/${slug}`)}
-            onProceedToCheckout={() => router.push(`/store/${slug}/checkout`)}
+            onContinueShopping={() => router.push(basePath || '/')}
+            onProceedToCheckout={() => router.push(`${basePath}/checkout`)}
             storeSlug={slug}
           />
         );
@@ -304,7 +306,7 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
           <StoreCheckout
             cartItems={storeCart}
             storeTheme={storeTheme}
-            onBack={() => router.push(`/store/${slug}/cart`)}
+            onBack={() => router.push(`${basePath}/cart`)}
             onPlaceOrder={handlePlaceOrder}
           />
         );
@@ -341,13 +343,13 @@ export function PublicStore({ storeData, onClose, initialView }: PublicStoreProp
             {/* Navigation */}
             <div className="flex items-center gap-4">
               <button
-                onClick={() => router.push(`/store/${slug}`)}
+                onClick={() => router.push(basePath || '/')}
                 className="text-sm font-medium hover:opacity-70 transition-opacity"
               >
                 Home
               </button>
               <button
-                onClick={() => router.push(`/store/${slug}/cart`)}
+                onClick={() => router.push(`${basePath}/cart`)}
                 className="relative text-sm font-medium hover:opacity-70 transition-opacity"
               >
                 Cart

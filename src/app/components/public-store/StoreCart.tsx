@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import { useStoreBasePath } from '../../../lib/store-subdomain'
 import {
   ShoppingBag,
   Plus,
@@ -34,6 +35,7 @@ export function StoreCart({
   storeSlug,
 }: StoreCartProps) {
   const router = useRouter()
+  const basePath = useStoreBasePath(storeSlug || '')
   const totalPrice = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
   const shipping = totalPrice >= 50 ? 0 : 9.99
@@ -48,7 +50,7 @@ export function StoreCart({
 
   const handleProductClick = (productId: string) => {
     if (storeSlug) {
-      router.push(`/store/${storeSlug}/product/${productId}`)
+      router.push(`${basePath}/product/${productId}`)
     }
   }
 
