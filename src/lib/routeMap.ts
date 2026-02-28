@@ -50,6 +50,14 @@ export const routeMap: Record<string, Record<string, string>> = {
     'cart': '/dashboard/customer/cart',
     'checkout': '/dashboard/customer/checkout',
   },
+  product_hunter: {
+    'dashboard': '/dashboard/product-hunter/overview',
+    'suppliers': '/dashboard/product-hunter/suppliers',
+    'commissions': '/dashboard/product-hunter/commissions',
+    'payouts': '/dashboard/product-hunter/payouts',
+    'invite': '/dashboard/product-hunter/invite',
+    'settings': '/dashboard/product-hunter/settings',
+  },
 }
 
 export function getRoute(role: string, view: string): string {

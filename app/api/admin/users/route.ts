@@ -31,26 +31,45 @@ export async function GET(request: NextRequest) {
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        referredByHunterId: true,
       },
       orderBy: {
         createdAt: 'desc',
       },
     })
 
+    // Load hunter details for users that have referredByHunterId (separate query to avoid relation)
+    const hunterIds = [...new Set(users.map((u) => (u as any).referredByHunterId).filter(Boolean))] as string[]
+    const hunters =
+      hunterIds.length > 0
+        ? await prisma.user.findMany({
+            where: { id: { in: hunterIds } },
+            select: { id: true, name: true, email: true },
+          })
+        : []
+    const hunterMap = Object.fromEntries(hunters.map((h) => [h.id, h]))
+
     // Format response to match UI expectations
-    const formattedUsers = users.map(user => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role.toLowerCase(),
-      userType: user.role.toLowerCase(),
-      status: user.isActive ? 'active' : 'inactive',
-      isActive: user.isActive,
-      joinedDate: user.createdAt.toISOString().split('T')[0],
-      lastActive: user.updatedAt.toISOString().split('T')[0],
-      createdBy: 'System', // Default (can be enhanced later)
-      organization: user.businessName || 'N/A',
-    }))
+    const formattedUsers = users.map((user) => {
+      const hunterId = (user as any).referredByHunterId ?? null
+      const hunter = hunterId ? hunterMap[hunterId] : null
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role.toLowerCase(),
+        userType: user.role.toLowerCase(),
+        status: user.isActive ? 'active' : 'inactive',
+        isActive: user.isActive,
+        joinedDate: user.createdAt.toISOString().split('T')[0],
+        lastActive: user.updatedAt.toISOString().split('T')[0],
+        createdBy: 'System',
+        organization: user.businessName || 'N/A',
+        hunterId: hunter?.id ?? null,
+        hunterName: hunter?.name ?? null,
+        hunterEmail: hunter?.email ?? null,
+      }
+    })
 
     return NextResponse.json({ users: formattedUsers })
   } catch (error) {
@@ -150,6 +169,15 @@ export async function POST(request: NextRequest) {
         createdAt: true,
       },
     })
+
+    // Product Hunter: auto-generate unique referral code so they can invite suppliers
+    if (user.role === 'PRODUCT_HUNTER') {
+      const code = 'HUNTER-' + user.id.slice(-8).toUpperCase()
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { hunterReferralCode: code },
+      })
+    }
 
     return NextResponse.json({
       user: {

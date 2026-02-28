@@ -51,6 +51,9 @@ model User {
   // Vendor Specific
   commissionRate Float? @default(15.0)
 
+  // Product Hunter: unique code for inviting suppliers (e.g. HUNTER-ABC12)
+  hunterReferralCode String? @unique
+
   // Stripe Connect (for payouts)
   stripeAccountId          String?
   stripeKycStatus          String? // pending, verified, rejected
@@ -64,16 +67,23 @@ model User {
   // Account Status
   isActive Boolean @default(true) // Account active/inactive status
 
-  // Relations
-  productsAsSupplier Product[]  @relation("SupplierProducts")
-  productsAsCreator  Product[]  @relation("ProductCreator")
-  storesAsVendor     Store[]    @relation("VendorStores")
-  ordersAsCustomer   Order[]    @relation("CustomerOrders")
-  invoices           Invoice[]
-  payouts            Payout[]
-  wishlist           Wishlist[]
-  reports            Report[]
+  // Product Hunter: supplier referred by this hunter (supplier side)
+  referredByHunterId String?
+  referredByHunter   User?   @relation("ReferredSuppliers", fields: [referredByHunterId], references: [id])
+  referredSuppliers  User[]  @relation("ReferredSuppliers") // hunters: suppliers they referred
 
+  // Relations
+  productsAsSupplier  Product[]         @relation("SupplierProducts")
+  productsAsCreator    Product[]         @relation("ProductCreator")
+  storesAsVendor       Store[]          @relation("VendorStores")
+  ordersAsCustomer     Order[]          @relation("CustomerOrders")
+  invoices             Invoice[]
+  payouts              Payout[]
+  wishlist             Wishlist[]
+  reports              Report[]
+  hunterCommissions    HunterCommission[]
+
+  @@index([referredByHunterId])
   @@map("users")
 }
 
@@ -82,6 +92,7 @@ enum UserType {
   SUPPLIER
   VENDOR
   CUSTOMER
+  PRODUCT_HUNTER
 }
 
 // ============================================
@@ -450,6 +461,40 @@ model OrderItem {
 }
 
 // ============================================
+// PRODUCT HUNTER COMMISSIONS
+// ============================================
+
+model HunterCommission {
+  id              String   @id @default(cuid())
+  hunterId        String
+  hunter          User     @relation(fields: [hunterId], references: [id], onDelete: Cascade)
+  orderItemId     String   @unique // One commission per order item (idempotent)
+  orderId         String
+  supplierId      String   // Denormalized for display/reporting
+  commissionBase  Float    // Amount on which % was applied (e.g. vendorPrice * qty) USD
+  commissionRate  Float    // Percentage at time of order (e.g. 5.0)
+  amount          Float    // Commission amount USD
+  status          HunterCommissionStatus @default(PENDING)
+  paidAt          DateTime?
+  payoutId        String?
+  payout          Payout?  @relation(fields: [payoutId], references: [id])
+
+  createdAt       DateTime @default(now())
+
+  @@index([hunterId])
+  @@index([orderId])
+  @@index([status])
+  @@index([payoutId])
+  @@map("hunter_commissions")
+}
+
+enum HunterCommissionStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+// ============================================
 // INVOICES
 // ============================================
 
@@ -514,15 +559,19 @@ model Payout {
 
   // Display Fields (denormalized for performance)
   recipientName String? // Denormalized from User
-  recipientType String? // supplier, vendor
+  recipientType String? // supplier, vendor, hunter
+
+  // Hunter payouts: commission IDs included in this payout
+  hunterCommissionIds String[] @default([])
 
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
+  userId            String
+  user              User              @relation(fields: [userId], references: [id])
+  hunterCommissions HunterCommission[]
 
   @@index([userId])
   @@index([status])
@@ -541,11 +590,12 @@ enum PayoutStatus {
 // ============================================
 
 model PlatformConfig {
-  id                    String   @id @default(cuid())
-  platformFeePercentage Float    @default(2.5) // e.g., 2.5%
-  stripeFeePercentage   Float    @default(2.9) // Stripe fee percentage (2.9%)
-  updatedAt             DateTime @updatedAt
-  createdAt             DateTime @default(now())
+  id                       String   @id @default(cuid())
+  platformFeePercentage    Float    @default(2.5) // e.g., 2.5%
+  stripeFeePercentage     Float    @default(2.9) // Stripe fee percentage (2.9%)
+  hunterCommissionPercentage Float  @default(5.0) // Product Hunter commission % on referred supplier sales
+  updatedAt                DateTime @updatedAt
+  createdAt                DateTime @default(now())
 
   @@map("platform_config")
 }

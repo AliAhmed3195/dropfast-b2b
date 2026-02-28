@@ -214,7 +214,7 @@ export function AdminUsers() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'admin' | 'supplier' | 'vendor'>('all');
+  const [userTypeFilter, setUserTypeFilter] = useState<'all' | 'admin' | 'supplier' | 'vendor' | 'product_hunter'>('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
@@ -352,6 +352,8 @@ export function AdminUsers() {
         return Package;
       case 'vendor':
         return Store;
+      case 'product_hunter':
+        return Briefcase;
       default:
         return Users;
     }
@@ -365,6 +367,8 @@ export function AdminUsers() {
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400';
       case 'vendor':
         return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-400';
+      case 'product_hunter':
+        return 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400';
       default:
         return 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400';
     }
@@ -375,6 +379,7 @@ export function AdminUsers() {
     admin: users.filter(u => u.userType === 'admin').length,
     supplier: users.filter(u => u.userType === 'supplier').length,
     vendor: users.filter(u => u.userType === 'vendor').length,
+    productHunter: users.filter(u => u.userType === 'product_hunter').length,
   };
 
   // If form is showing, render it instead of the list
@@ -479,6 +484,26 @@ export function AdminUsers() {
             </div>
           </div>
         </Card>
+
+        <Card 
+          className={cn(
+            'p-6 cursor-pointer transition-all border-2',
+            userTypeFilter === 'product_hunter' 
+              ? 'border-amber-500 shadow-lg shadow-amber-500/20' 
+              : 'hover:border-amber-300'
+          )}
+          onClick={() => setUserTypeFilter(userTypeFilter === 'product_hunter' ? 'all' : 'product_hunter')}
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500">
+              <Briefcase className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Product Hunters</p>
+              <p className="text-2xl font-bold">{stats.productHunter}</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Active Filter Info */}
@@ -539,6 +564,12 @@ export function AdminUsers() {
                 <div className="flex items-center gap-2">
                   <Store className="w-4 h-4 text-cyan-600" />
                   Vendor Users
+                </div>
+              </SelectItem>
+              <SelectItem value="product_hunter">
+                <div className="flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-amber-600" />
+                  Product Hunters
                 </div>
               </SelectItem>
             </SelectContent>
@@ -803,6 +834,8 @@ function UserDetailModal({ userId, onClose }: { userId: string; onClose: () => v
         return Package;
       case 'vendor':
         return Store;
+      case 'product_hunter':
+        return Briefcase;
       default:
         return Users;
     }
@@ -881,6 +914,23 @@ function UserDetailModal({ userId, onClose }: { userId: string; onClose: () => v
                 </div>
               </div>
             </div>
+
+            {/* Supplier → Hunter relationship */}
+            {(user.userType === 'supplier' || user.role === 'supplier') && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-muted-foreground">Referred By (Product Hunter)</Label>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                  {user.hunter ? (
+                    <div>
+                      <p className="font-medium">{user.hunter.name}</p>
+                      <p className="text-xs text-muted-foreground">{user.hunter.email}</p>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">No hunter assigned</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-3 pt-4 border-t">

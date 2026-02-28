@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyWebhookSignature } from '../../../../src/lib/stripe'
 import { prisma } from '../../../../src/lib/prisma'
+import { createHunterCommissionsForOrder } from '../../../../src/lib/hunter-commission'
 import { PaymentStatus, PayoutStatus } from '@prisma/client'
 
 // POST /api/webhooks/stripe - Handle Stripe webhooks
@@ -53,6 +54,12 @@ export async function POST(request: NextRequest) {
               paymentStatus: PaymentStatus.PAID,
             },
           })
+          // Create Product Hunter commissions for referred suppliers' items
+          try {
+            await createHunterCommissionsForOrder(orderId)
+          } catch (err) {
+            console.error('Hunter commission creation failed:', err)
+          }
         }
         break
       }

@@ -31,6 +31,8 @@ export default function DashboardLayout({
     if (pathname === '/dashboard' && user?.role) {
       if (user.role === 'customer') {
         router.push('/dashboard/customer/browse')
+      } else if (user.role === 'product_hunter') {
+        router.push('/dashboard/product-hunter/overview')
       } else {
         router.push(`/dashboard/${user.role}/overview`)
       }

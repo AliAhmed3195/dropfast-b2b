@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../src/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { getHunterIdByReferralCode } from '../../../src/lib/hunter-commission';
 
 // GET - Fetch users by role (vendors, suppliers, etc.)
 export async function GET(request: NextRequest) {
@@ -116,6 +117,8 @@ export async function POST(request: NextRequest) {
       storeName,
       storeType,
       commissionRate,
+      referralCode,
+      ref,
     } = body;
 
     // Validate required fields
@@ -143,14 +146,18 @@ export async function POST(request: NextRequest) {
 
     // Convert role to uppercase for database
     const userRole = role.toUpperCase();
+    const refCode = referralCode ?? ref;
+    const referredByHunterId =
+      userRole === 'SUPPLIER' && refCode
+        ? await getHunterIdByReferralCode(refCode)
+        : null;
 
-    // Create user
     const user = await prisma.user.create({
       data: {
         name: fullName,
         email: email.toLowerCase(),
         password: hashedPassword,
-        role: userRole as any, // ADMIN, SUPPLIER, VENDOR, CUSTOMER
+        role: userRole as any,
         phone: phoneNumber || null,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         businessName: businessName || null,
@@ -170,6 +177,7 @@ export async function POST(request: NextRequest) {
         shippingLocations: shippingLocations || null,
         minimumOrderValue: minimumOrderValue ? parseFloat(minimumOrderValue) : null,
         commissionRate: commissionRate ? parseFloat(commissionRate) : null,
+        referredByHunterId: referredByHunterId ?? undefined,
       },
     });
 

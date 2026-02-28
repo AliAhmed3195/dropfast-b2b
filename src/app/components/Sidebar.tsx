@@ -25,6 +25,8 @@ import {
   CreditCard,
   ChevronLeft,
   ChevronRight,
+  Target,
+  Link2,
 } from 'lucide-react';
 import { useAuth, UserType } from '../contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
@@ -76,6 +78,14 @@ const navigationByRole: Record<UserType, NavItem[]> = {
     { label: 'Browse Stores', icon: ShoppingBag, view: 'browse' },
     { label: 'My Orders', icon: ShoppingCart, view: 'my-orders' },
     { label: 'Wishlist', icon: Heart, view: 'wishlist' },
+    { label: 'Settings', icon: Settings, view: 'settings' },
+  ],
+  product_hunter: [
+    { label: 'Overview', icon: LayoutDashboard, view: 'dashboard' },
+    { label: 'Referred Suppliers', icon: Users, view: 'suppliers' },
+    { label: 'Commissions', icon: DollarSign, view: 'commissions' },
+    { label: 'Payouts', icon: Wallet, view: 'payouts' },
+    { label: 'Invite Suppliers', icon: Link2, view: 'invite' },
     { label: 'Settings', icon: Settings, view: 'settings' },
   ],
 };

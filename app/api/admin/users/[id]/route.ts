@@ -38,6 +38,7 @@ export async function GET(
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        referredByHunterId: true,
       },
     })
 
@@ -48,6 +49,16 @@ export async function GET(
       )
     }
 
+    const hunterId = (user as any).referredByHunterId ?? null
+    let hunter: { id: string; name: string; email: string } | null = null
+    if (hunterId) {
+      const h = await prisma.user.findUnique({
+        where: { id: hunterId },
+        select: { id: true, name: true, email: true },
+      })
+      if (h) hunter = h
+    }
+
     return NextResponse.json({
       user: {
         ...user,
@@ -55,6 +66,7 @@ export async function GET(
         userType: user.role.toLowerCase(),
         status: user.isActive ? 'active' : 'inactive',
         isActive: user.isActive,
+        hunter,
       },
     })
   } catch (error) {
@@ -94,6 +106,7 @@ export async function PUT(
       commissionRate,
       isActive,
       status, // Support both isActive and status for backward compatibility
+      referredByHunterId,
     } = body
 
     // Check if user exists
@@ -141,6 +154,7 @@ export async function PUT(
     if (shippingLocations !== undefined) updateData.shippingLocations = shippingLocations || null
     if (minimumOrderValue !== undefined) updateData.minimumOrderValue = minimumOrderValue ? parseFloat(minimumOrderValue) : null
     if (commissionRate !== undefined) updateData.commissionRate = commissionRate ? parseFloat(commissionRate) : null
+    if (referredByHunterId !== undefined) updateData.referredByHunterId = referredByHunterId || null
     if (role) updateData.role = role.toUpperCase() as UserType
     
     // Handle status (support both isActive boolean and status string)

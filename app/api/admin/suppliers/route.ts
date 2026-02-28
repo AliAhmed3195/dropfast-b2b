@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../src/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { UserType } from '@prisma/client'
+import { getHunterIdByReferralCode } from '../../../../src/lib/hunter-commission'
 
 // GET /api/admin/suppliers - List all suppliers
 export async function GET(request: NextRequest) {
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
       productCategories,
       shippingLocations,
       minimumOrderValue,
+      referralCode,
     } = body
 
     // Validate required fields
@@ -98,10 +100,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
+    const referredByHunterId = referralCode ? await getHunterIdByReferralCode(referralCode) : null
 
-    // Create supplier
     const supplier = await prisma.user.create({
       data: {
         name,
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest) {
         productCategories: productCategories || null,
         shippingLocations: shippingLocations || null,
         minimumOrderValue: minimumOrderValue ? parseFloat(minimumOrderValue) : null,
+        referredByHunterId: referredByHunterId ?? undefined,
       },
       select: {
         id: true,

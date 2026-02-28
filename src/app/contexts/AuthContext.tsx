@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
-export type UserType = 'admin' | 'supplier' | 'vendor' | 'customer';
+export type UserType = 'admin' | 'supplier' | 'vendor' | 'customer' | 'product_hunter';
 
 export interface User {
   id: string;

@@ -88,6 +88,7 @@ export function SimpleUserForm({ onCancel, onSuccess }: SimpleUserFormProps) {
     { value: 'admin', label: 'Admin', color: 'from-purple-500 to-purple-600' },
     { value: 'supplier', label: 'Supplier', color: 'from-blue-500 to-blue-600' },
     { value: 'vendor', label: 'Vendor', color: 'from-cyan-500 to-cyan-600' },
+    { value: 'product_hunter', label: 'Product Hunter', color: 'from-amber-500 to-orange-600' },
   ];
 
   return (
