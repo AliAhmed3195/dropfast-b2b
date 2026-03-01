@@ -8,7 +8,7 @@ import 'slick-carousel/slick/slick-theme.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'FastDrop - Enterprise Platform',
+  title: 'Dropsified - Enterprise Platform',
   description: 'Enterprise Dropshipping Platform',
 }
 

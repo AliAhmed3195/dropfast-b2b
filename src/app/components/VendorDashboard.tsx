@@ -191,7 +191,7 @@ export function VendorDashboard() {
                 <Store className="w-12 h-12 text-indigo-600" />
               </motion.div>
               <h2 className="text-2xl font-bold mb-2 text-slate-900 dark:text-white">
-                Welcome to FastDrop!
+                Welcome to Dropsified!
               </h2>
               <p className="text-muted-foreground mb-6">
                 Create your first store to start selling products. Our wizard will guide you through the process in just a few minutes.

@@ -736,7 +736,7 @@ function ProductDetailView(
               </div>
               <div className="flex justify-between py-2 border-b">
                 <span className="text-sm text-muted-foreground">Brand</span>
-                <span className="text-sm font-medium">FastDrop</span>
+                <span className="text-sm font-medium">Dropsified</span>
               </div>
             </div>
           </div>

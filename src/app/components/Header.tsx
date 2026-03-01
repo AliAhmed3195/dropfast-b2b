@@ -32,6 +32,7 @@ export function Header() {
   const { cart } = useApp();
   const router = useRouter();
   const [isDark, setIsDark] = React.useState(false);
+  const [logoError, setLogoError] = React.useState(false);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -77,23 +78,23 @@ export function Header() {
       className="sticky top-0 z-50 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm"
     >
       <div className="container mx-auto px-6 h-20 flex items-center justify-between">
-        {/* Logo - Clean and minimal */}
+        {/* Logo - Dropsified */}
         <motion.div 
           className="flex items-center gap-3"
           whileHover={{ scale: 1.02 }}
           transition={{ type: "spring", stiffness: 400 }}
         >
-          <div className="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center shadow-sm">
-            <Zap className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              FastDrop
-            </h1>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              Enterprise Platform
-            </p>
-          </div>
+          {!logoError ? (
+            <img src="/dropsified-logo.png" alt="Dropsified" className="h-16 w-auto max-w-[340px] object-contain" onError={() => setLogoError(true)} />
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="w-16 h-16 rounded-lg bg-indigo-600 flex items-center justify-center shadow-sm"><Zap className="w-8 h-8 text-white" /></div>
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Dropsified</h1>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Enterprise Platform</p>
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Right side with enhanced spacing and animations */}

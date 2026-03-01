@@ -1,4 +1,4 @@
-# FastDrop - Enterprise Dropshipping Platform
+# Dropsified - Enterprise Dropshipping Platform
 
 A modern, AI-inspired B2B e-commerce platform connecting Suppliers, Vendors, and Customers in an intelligent multi-vendor marketplace.
 
@@ -56,10 +56,10 @@ Use the quick access buttons on the login page or enter credentials manually:
 
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | admin@fastdrop.com | admin123 |
-| Supplier | supplier@fastdrop.com | supplier123 |
-| Vendor | vendor@fastdrop.com | vendor123 |
-| Customer | customer@fastdrop.com | customer123 |
+| Admin | admin@dropsified.com | admin123 |
+| Supplier | supplier@dropsified.com | supplier123 |
+| Vendor | vendor@dropsified.com | vendor123 |
+| Customer | customer@dropsified.com | customer123 |
 
 ## 🛠️ Technology Stack
 

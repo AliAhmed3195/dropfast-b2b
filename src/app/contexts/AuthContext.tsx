@@ -24,41 +24,41 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Mock user database
 const MOCK_USERS: Record<string, { password: string; user: User }> = {
-  'admin@fastdrop.com': {
+  'admin@dropsified.com': {
     password: 'admin123',
     user: {
       id: '1',
-      email: 'admin@fastdrop.com',
+      email: 'admin@dropsified.com',
       name: 'Sarah Chen',
       role: 'admin',
-      company: 'FastDrop Platform',
+      company: 'Dropsified Platform',
     },
   },
-  'supplier@fastdrop.com': {
+  'supplier@dropsified.com': {
     password: 'supplier123',
     user: {
       id: '2',
-      email: 'supplier@fastdrop.com',
+      email: 'supplier@dropsified.com',
       name: 'Michael Rodriguez',
       role: 'supplier',
       company: 'TechSupply Co.',
     },
   },
-  'vendor@fastdrop.com': {
+  'vendor@dropsified.com': {
     password: 'vendor123',
     user: {
       id: '3',
-      email: 'vendor@fastdrop.com',
+      email: 'vendor@dropsified.com',
       name: 'Emma Thompson',
       role: 'vendor',
       company: 'Digital Marketplace',
     },
   },
-  'customer@fastdrop.com': {
+  'customer@dropsified.com': {
     password: 'customer123',
     user: {
       id: '4',
-      email: 'customer@fastdrop.com',
+      email: 'customer@dropsified.com',
       name: 'James Wilson',
       role: 'customer',
       company: 'Personal',

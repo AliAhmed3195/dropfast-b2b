@@ -161,7 +161,7 @@ export function SimpleUserForm({ onCancel, onSuccess }: SimpleUserFormProps) {
                     "h-11 bg-slate-50 dark:bg-slate-800/50 border-2",
                     errors.email ? "border-red-500" : "border-slate-200 dark:border-slate-700"
                   )}
-                  placeholder="user@fastdrop.com"
+                  placeholder="user@dropsified.com"
                 />
                 {errors.email && (
                   <p className="text-sm text-red-500 flex items-center gap-1">

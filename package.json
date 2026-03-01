@@ -2,7 +2,6 @@
   "name": "dropfast-nextjs",
   "private": true,
   "version": "0.0.1",
-  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",

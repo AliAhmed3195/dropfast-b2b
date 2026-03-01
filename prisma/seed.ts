@@ -14,24 +14,24 @@ async function main() {
 
   // Create Admin User
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@fastdrop.com' },
+    where: { email: 'admin@dropsified.com' },
     update: {},
     create: {
-      email: 'admin@fastdrop.com',
+      email: 'admin@dropsified.com',
       password: adminPassword,
       name: 'Sarah Chen',
       role: UserType.ADMIN,
-      businessName: 'FastDrop Platform',
+      businessName: 'Dropsified Platform',
       phone: '+1 (555) 100-0001',
     },
   })
 
   // Create Supplier User
   const supplier = await prisma.user.upsert({
-    where: { email: 'supplier@fastdrop.com' },
+    where: { email: 'supplier@dropsified.com' },
     update: {},
     create: {
-      email: 'supplier@fastdrop.com',
+      email: 'supplier@dropsified.com',
       password: supplierPassword,
       name: 'Michael Rodriguez',
       role: UserType.SUPPLIER,
@@ -45,10 +45,10 @@ async function main() {
 
   // Create Vendor User
   const vendor = await prisma.user.upsert({
-    where: { email: 'vendor@fastdrop.com' },
+    where: { email: 'vendor@dropsified.com' },
     update: {},
     create: {
-      email: 'vendor@fastdrop.com',
+      email: 'vendor@dropsified.com',
       password: vendorPassword,
       name: 'Emma Thompson',
       role: UserType.VENDOR,
@@ -60,10 +60,10 @@ async function main() {
 
   // Create Customer User
   const customer = await prisma.user.upsert({
-    where: { email: 'customer@fastdrop.com' },
+    where: { email: 'customer@dropsified.com' },
     update: {},
     create: {
-      email: 'customer@fastdrop.com',
+      email: 'customer@dropsified.com',
       password: customerPassword,
       name: 'James Wilson',
       role: UserType.CUSTOMER,

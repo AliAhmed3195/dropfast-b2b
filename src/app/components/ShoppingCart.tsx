@@ -234,7 +234,7 @@ export function ShoppingCartComponent() {
             </Button>
             <div className="mt-4 p-3 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
               <p className="text-xs text-center text-muted-foreground">
-                Secure checkout powered by FastDrop
+                Secure checkout powered by Dropsified
               </p>
             </div>
           </Card>

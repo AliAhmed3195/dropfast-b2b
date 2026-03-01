@@ -119,5 +119,5 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode < 500 ? 0 : 1)})"
 
-# Start the application using standalone server
-CMD ["node", "server.js"]
+# Start via shell so env_file vars reach Node
+CMD ["sh", "-c", "exec node server.js"]

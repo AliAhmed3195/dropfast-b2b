@@ -384,7 +384,7 @@ export function UserForm({ preSelectedRole, editUser, onCancel, onSuccess }: Use
                     "h-11 bg-slate-50 dark:bg-slate-800/50 border-2",
                     errors.email ? "border-red-500" : "border-slate-200 dark:border-slate-700"
                   )}
-                  placeholder="admin@fastdrop.com"
+                  placeholder="admin@dropsified.com"
                 />
                 {errors.email && (
                   <p className="text-sm text-red-500 flex items-center gap-1">

@@ -15,6 +15,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   useEffect(() => {
     // If already authenticated, redirect to dashboard
@@ -49,10 +50,10 @@ export function Login() {
 
   const quickLogin = async (role: string) => {
     const credentials = {
-      admin: { email: 'admin@fastdrop.com', password: 'admin123' },
-      supplier: { email: 'supplier@fastdrop.com', password: 'supplier123' },
-      vendor: { email: 'vendor@fastdrop.com', password: 'vendor123' },
-      customer: { email: 'customer@fastdrop.com', password: 'customer123' },
+      admin: { email: 'admin@dropsified.com', password: 'admin123' },
+      supplier: { email: 'supplier@dropsified.com', password: 'supplier123' },
+      vendor: { email: 'vendor@dropsified.com', password: 'vendor123' },
+      customer: { email: 'customer@dropsified.com', password: 'customer123' },
     };
 
     const cred = credentials[role as keyof typeof credentials];
@@ -104,11 +105,9 @@ export function Login() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg">
-              <Zap className="w-7 h-7 text-white" />
-            </div>
+            {!logoError ? <img src="/dropsified-logo.png" alt="Dropsified" className="h-32 w-auto max-w-[440px] object-contain" onError={() => setLogoError(true)} /> : <div className="w-32 h-32 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg"><Zap className="w-16 h-16 text-white" /></div>}
             <div>
-              <h1 className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">FastDrop</h1>
+              <h1 className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">Dropsified</h1>
               <div className="flex items-center gap-1 mt-1">
                 <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Enterprise Platform</span>
               </div>
@@ -186,20 +185,14 @@ export function Login() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-purple-500/10 to-cyan-500/10 rounded-full filter blur-3xl -z-10" />
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-indigo-500/10 to-pink-500/10 rounded-full filter blur-3xl -z-10" />
             
-            {/* Mobile logo */}
+            {/* Logo above Welcome Back - visible on all screens */}
             <motion.div 
-              className="lg:hidden flex items-center justify-center gap-3 mb-8"
+              className="flex items-center justify-center mb-6"
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.2 }}
             >
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">FastDrop</h1>
-                <span className="text-xs text-muted-foreground">Enterprise Platform</span>
-              </div>
+              {!logoError ? <img src="/dropsified-logo.png" alt="Dropsified" className="h-16 w-auto max-w-[240px] sm:h-20 sm:max-w-[300px] object-contain" onError={() => setLogoError(true)} /> : <div className="flex items-center gap-3"><div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg"><Zap className="w-8 h-8 sm:w-10 sm:h-10 text-white" /></div><div><h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Dropsified</h1><span className="text-xs text-muted-foreground">Enterprise Platform</span></div></div>}
             </motion.div>
 
             <motion.div 

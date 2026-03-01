@@ -792,7 +792,7 @@ export function Settings() {
               <div>
                 <h3 className="text-xl font-bold">Appearance</h3>
                 <p className="text-sm text-muted-foreground">
-                  Customize how FastDrop looks for you
+                  Customize how Dropsified looks for you
                 </p>
               </div>
             </div>
