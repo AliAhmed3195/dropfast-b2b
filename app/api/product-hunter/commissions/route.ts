@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       take: 200,
     })
 
-    const supplierIds = [...new Set(commissions.map((c) => c.supplierId))]
+    const supplierIds = Array.from(new Set(commissions.map((c) => c.supplierId)))
     const suppliers = await prisma.user.findMany({
       where: { id: { in: supplierIds } },
       select: { id: true, name: true, email: true },

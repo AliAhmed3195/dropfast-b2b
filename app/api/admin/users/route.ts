@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Load hunter details for users that have referredByHunterId (separate query to avoid relation)
-    const hunterIds = [...new Set(users.map((u) => (u as any).referredByHunterId).filter(Boolean))] as string[]
+    const hunterIds = Array.from(new Set(users.map((u) => (u as any).referredByHunterId).filter(Boolean))) as string[]
     const hunters =
       hunterIds.length > 0
         ? await prisma.user.findMany({
