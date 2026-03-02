@@ -135,12 +135,15 @@ export function StoreCheckout({
     if (clientSecret) {
       return {
         clientSecret,
+        // Only show card – avoids Stripe.js warnings for link/cashapp/amazon_pay/apple_pay
+        paymentMethodOrder: ['card'],
       };
     }
     return {
       mode: 'payment',
       amount: Math.round(total * 100),
       currency: 'usd',
+      paymentMethodOrder: ['card'],
     };
   };
 
