@@ -133,17 +133,12 @@ export function StoreCheckout({
 
   const getElementsOptions = (): StripeElementsOptions => {
     if (clientSecret) {
-      return {
-        clientSecret,
-        // Only show card – avoids Stripe.js warnings for link/cashapp/amazon_pay/apple_pay
-        paymentMethodOrder: ['card'],
-      };
+      return { clientSecret };
     }
     return {
       mode: 'payment',
       amount: Math.round(total * 100),
       currency: 'usd',
-      paymentMethodOrder: ['card'],
     };
   };
 
@@ -165,33 +160,35 @@ export function StoreCheckout({
       const elements = useElements();
       const [isProcessing, setIsProcessing] = useState(false);
 
-      const handlePayment = async () => {
+      const handlePayment = () => {
         if (!stripe || !elements || !clientSecret) {
           showToast.error('Payment not ready. Please wait...');
           return;
         }
 
         setIsProcessing(true);
-        try {
-          const { error: confirmError } = await stripe.confirmPayment({
-            elements,
-            clientSecret,
-            confirmParams: {
-              return_url: window.location.href,
-            },
-            redirect: 'if_required',
-          });
-
-          if (confirmError) {
-            throw new Error(confirmError.message || 'Payment failed');
-          }
-          onSuccess();
-        } catch (error: any) {
-          console.error('Payment error:', error);
-          showToast.error(error.message || 'Payment failed. Please try again.');
-        } finally {
-          setIsProcessing(false);
-        }
+        // Stripe: confirmPayment() must run in same tick after submit() resolves (no await in between)
+        elements
+          .submit()
+          .then(({ error: submitError }) => {
+            if (submitError) throw new Error(submitError.message || 'Please complete the form');
+            return stripe.confirmPayment({
+              elements,
+              clientSecret,
+              confirmParams: { return_url: window.location.href },
+              redirect: 'if_required',
+            });
+          })
+          .then(({ error: confirmError }) => {
+            if (confirmError) throw new Error(confirmError.message || 'Payment failed');
+            onSuccess();
+          })
+          .catch((error: any) => {
+            console.error('Payment error:', error);
+            const message = error?.message ?? (typeof error === 'string' ? error : 'Payment failed. Please try again.');
+            showToast.error(message);
+          })
+          .finally(() => setIsProcessing(false));
       };
 
       return (
@@ -502,9 +499,7 @@ export function StoreCheckout({
                     <div className="flex items-center gap-3">
                       <CreditCard className="w-6 h-6 text-gray-600" />
                       <span className="text-gray-700 capitalize">
-                        {formData.paymentMethod === 'credit_card' 
-                          ? 'Credit/Debit Card' 
-                          : formData.paymentMethod.replace('_', ' ')}
+                        Credit/Debit Card
                       </span>
                     </div>
                     <button

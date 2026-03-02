@@ -4,7 +4,7 @@ import { OrderStatus, PaymentStatus } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { convertToUSD, getExchangeRate } from '../../../../src/lib/currency'
 import { calculatePlatformFee, calculateStripeFee, getPlatformConfig } from '../../../../src/lib/platform-config'
-import { updatePaymentIntentMetadata } from '../../../../src/lib/stripe'
+import { updatePaymentIntentMetadata, getPaymentIntent } from '../../../../src/lib/stripe'
 
 // POST /api/public/orders - Create order from public store
 export async function POST(request: NextRequest) {
@@ -290,6 +290,14 @@ export async function POST(request: NextRequest) {
           customerEmail: customerEmail,
           customerName: customerName || '',
         })
+        // If customer already paid (confirmPayment ran before Place Order), mark order PAID
+        const pi = await getPaymentIntent(paymentIntentId)
+        if (pi.status === 'succeeded') {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { paymentStatus: PaymentStatus.PAID },
+          })
+        }
       } catch (error) {
         // Log error but don't fail order creation
         console.error('Failed to update PaymentIntent metadata:', error)
