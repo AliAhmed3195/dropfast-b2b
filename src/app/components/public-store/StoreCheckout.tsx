@@ -20,7 +20,6 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
-import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { showToast } from '../../../lib/toast';
 import { CartItem } from '../../contexts/AppContext';
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
@@ -35,7 +34,7 @@ interface CheckoutFormData {
   state: string;
   zipCode: string;
   country: string;
-  paymentMethod: 'credit_card' | 'paypal' | 'bank_transfer';
+  paymentMethod: 'credit_card';
 }
 
 interface StoreCheckoutProps {
@@ -150,14 +149,12 @@ export function StoreCheckout({
       formData,
       clientSecret,
       storeTheme,
-      onPaymentMethodChange,
       onBack,
       onSuccess,
     }: {
       formData: CheckoutFormData;
       clientSecret: string | undefined;
       storeTheme: { primaryColor: string; secondaryColor: string; fontFamily: string };
-      onPaymentMethodChange: (method: CheckoutFormData['paymentMethod']) => void;
       onBack: () => void;
       onSuccess: () => void;
     }) => {
@@ -203,42 +200,12 @@ export function StoreCheckout({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <RadioGroup
-              value={formData.paymentMethod}
-              onValueChange={(value) =>
-                onPaymentMethodChange(value as CheckoutFormData['paymentMethod'])
-              }
-            >
-              <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:border-current transition-colors">
-                <RadioGroupItem value="credit_card" id="credit_card" />
-                <Label htmlFor="credit_card" className="flex-1 cursor-pointer">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Credit/Debit Card</span>
-                    <CreditCard className="w-5 h-5 text-gray-400" />
-                  </div>
-                </Label>
-              </div>
-              <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:border-current transition-colors">
-                <RadioGroupItem value="paypal" id="paypal" />
-                <Label htmlFor="paypal" className="flex-1 cursor-pointer">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">PayPal</span>
-                    <span className="text-sm text-gray-500">Pay with PayPal</span>
-                  </div>
-                </Label>
-              </div>
-              <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:border-current transition-colors">
-                <RadioGroupItem value="bank_transfer" id="bank_transfer" />
-                <Label htmlFor="bank_transfer" className="flex-1 cursor-pointer">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Bank Transfer</span>
-                    <span className="text-sm text-gray-500">Direct bank transfer</span>
-                  </div>
-                </Label>
-              </div>
-            </RadioGroup>
+            <div className="flex items-center space-x-3 p-4 border rounded-lg bg-gray-50/50">
+              <CreditCard className="w-5 h-5" style={{ color: storeTheme.primaryColor }} />
+              <span className="font-medium">Credit/Debit Card</span>
+            </div>
 
-            {formData.paymentMethod === 'credit_card' && (
+            {
               <div className="space-y-4 pt-4 border-t">
                 <div className="space-y-2">
                   <Label>Card Details</Label>
@@ -268,30 +235,20 @@ export function StoreCheckout({
                   <span className="text-sm text-gray-700">Save card for future purchases</span>
                 </label>
               </div>
-            )}
+            }
 
             <div className="flex gap-3">
               <Button variant="outline" onClick={onBack} className="flex-1">
                 Back
               </Button>
-              {formData.paymentMethod === 'credit_card' ? (
-                <Button
-                  className="flex-1 text-white"
-                  onClick={handlePayment}
-                  disabled={isProcessing || !stripe}
-                  style={{ backgroundColor: storeTheme.primaryColor }}
-                >
-                  {isProcessing ? 'Processing...' : stripe ? 'Process Payment' : 'Payment not configured'}
-                </Button>
-              ) : (
-                <Button
-                  className="flex-1 text-white"
-                  onClick={onSuccess}
-                  style={{ backgroundColor: storeTheme.primaryColor }}
-                >
-                  Review Order
-                </Button>
-              )}
+              <Button
+                className="flex-1 text-white"
+                onClick={handlePayment}
+                disabled={isProcessing || !stripe}
+                style={{ backgroundColor: storeTheme.primaryColor }}
+              >
+                {isProcessing ? 'Processing...' : stripe ? 'Process Payment' : 'Payment not configured'}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -496,7 +453,6 @@ export function StoreCheckout({
                   formData={formData}
                   clientSecret={clientSecret}
                   storeTheme={storeTheme}
-                  onPaymentMethodChange={(method) => handleInputChange('paymentMethod', method)}
                   onBack={() => setCurrentStep(1)}
                   onSuccess={() => setCurrentStep(3)}
                 />

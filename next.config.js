@@ -14,7 +14,7 @@ const nextConfig = {
   },
   // Preserve CSS imports and ensure proper CSS generation
   experimental: {
-    // For Tailwind CSS 4 compatibility
+    instrumentationHook: true, // required for instrumentation.ts (Stripe key at startup)
   },
   // Optimize CSS output (works for both staging and production)
   swcMinify: true,

@@ -119,5 +119,7 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode < 500 ? 0 : 1)})"
 
-# Start via shell so env_file vars reach Node
-CMD ["sh", "-c", "exec node server.js"]
+# Override base image entrypoint
+ENTRYPOINT []
+# Write STRIPE_PUBLISHABLE_KEY to file (so API can read it), then start Node (no external script file needed)
+CMD ["sh", "-c", "if [ -n \"$STRIPE_PUBLISHABLE_KEY\" ]; then echo -n \"$STRIPE_PUBLISHABLE_KEY\" > /app/.stripe-publishable-key; echo -n \"$STRIPE_PUBLISHABLE_KEY\" > /app/.next/.stripe-publishable-key 2>/dev/null; fi; exec node server.js"]
